@@ -1,0 +1,22 @@
+{
+  "name": "@naia/scheduling",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@date-fns/tz": "^1.2.0",
+    "@naia/schemas": "workspace:*"
+  },
+  "devDependencies": {
+    "@naia/config": "workspace:*",
+    "bun-types": "latest",
+    "typescript": "^5"
+  }
+}

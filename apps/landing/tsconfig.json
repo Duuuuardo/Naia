@@ -1,0 +1,8 @@
+{
+  "extends": "@naia/config/tsconfig/react.json",
+  "compilerOptions": {
+    "rootDir": "app",
+    "paths": { "~/*": ["./app/*"] }
+  },
+  "include": ["app"]
+}

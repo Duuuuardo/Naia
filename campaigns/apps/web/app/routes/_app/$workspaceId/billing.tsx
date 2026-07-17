@@ -1,0 +1,740 @@
+import { createFileRoute, useLoaderData, useRouter } from '@tanstack/react-router'
+import { useCallback, useEffect, useState } from 'react'
+import {
+  ArrowRight,
+  CalendarClock,
+  CheckCircle2,
+  Crown,
+  ExternalLink,
+  Link2,
+  MessageSquareText,
+  Minus,
+  PackagePlus,
+  Plus,
+  Send,
+  ShieldAlert,
+  ShieldCheck,
+  Sparkles,
+  Undo2,
+  Users,
+} from 'lucide-react'
+import { fetchPlans, fetchManageBillingUrl } from '../../../lib/actions'
+
+export const Route = createFileRoute('/_app/$workspaceId/billing')({
+  loader: () => fetchPlans(),
+  component: BillingPage,
+})
+
+const VIANOVA_API_URL = () => import.meta.env.VITE_VIANOVA_API_URL ?? 'http://localhost:5000'
+
+const tierLabels: Record<string, string> = {
+  free: 'Grátis',
+  starter: 'Starter',
+  pro: 'Pro',
+  scale: 'Scale',
+}
+
+type SubscriptionState = {
+  id: string
+  status: string
+  cancelAtPeriodEnd: boolean
+  currentPeriodEnd: string | null
+  hasStripeSubscription: boolean
+  isOwner: boolean
+  plan: { id: string; tier: string; name: string; priceCents: number } | null
+  addons: {
+    addonTypeId: string
+    quantity: number
+    key: string
+    name: string
+    unitLabel: string | null
+    priceCents: number
+    limitsPerUnit: Record<string, number>
+  }[]
+}
+
+function formatPrice(cents: number): string {
+  return `R$ ${(cents / 100).toFixed(2).replace('.', ',')}`
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+}
+
+function formatLimitItem(key: string, value: number) {
+  if (key === 'messagesPerMonth') {
+    const formatted = value >= 1000 ? `${(value / 1000).toLocaleString('pt-BR')}k` : value
+    return {
+      icon: <MessageSquareText size={15} className="text-brand-500 shrink-0 mt-0.5" />,
+      label: 'Disparos:',
+      valueText: `${formatted} mensagens/mês`,
+    }
+  }
+  if (key === 'campaignsPerMonth') {
+    return {
+      icon: <Send size={15} className="text-brand-500 shrink-0 mt-0.5" />,
+      label: 'Campanhas:',
+      valueText: `${value} ${value === 1 ? 'envio/mês' : 'envios/mês'}`,
+    }
+  }
+  if (key === 'connections') {
+    return {
+      icon: <Link2 size={15} className="text-brand-500 shrink-0 mt-0.5" />,
+      label: 'Conexões:',
+      valueText: `${value} ${value === 1 ? 'canal conectado' : 'canais conectados'}`,
+    }
+  }
+  if (key === 'seats') {
+    return {
+      icon: <Users size={15} className="text-brand-500 shrink-0 mt-0.5" />,
+      label: 'Equipe:',
+      valueText: `${value} ${value === 1 ? 'membro no workspace' : 'membros no workspace'}`,
+    }
+  }
+  return {
+    icon: <CheckCircle2 size={15} className="text-brand-500 shrink-0 mt-0.5" />,
+    label: `${key}:`,
+    valueText: String(value),
+  }
+}
+
+const LIMIT_ORDER = ['messagesPerMonth', 'campaignsPerMonth', 'connections', 'seats']
+
+// Chamadas de billing vão direto ao Vianova (cross-origin, cookie de sessão
+// do Vianova) — única exceção documentada ao Eden Treaty; ver
+// docs/architecture.md, "Portal de billing".
+async function vianovaBilling(path: string, init?: RequestInit) {
+  const res = await fetch(`${VIANOVA_API_URL()}${path}`, {
+    credentials: 'include',
+    headers: { 'content-type': 'application/json' },
+    ...init,
+  })
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+  return { ok: res.ok, data }
+}
+
+function BillingPage() {
+  const plans = Route.useLoaderData()
+  const { workspace, entitlements, role } = useLoaderData({ from: '/_app/$workspaceId' })
+  const { workspaceId } = Route.useParams()
+  const router = useRouter()
+
+  const [subscription, setSubscription] = useState<SubscriptionState | null>(null)
+  const [subLoaded, setSubLoaded] = useState(false)
+  const [busyAction, setBusyAction] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState<string | null>(null)
+
+  const isOwner = role === 'owner'
+  const checkoutSuccess =
+    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('success') === 'true'
+
+  const loadSubscription = useCallback(async () => {
+    const { ok, data } = await vianovaBilling(
+      `/billing/subscription?product_slug=naia&workspace_id=${workspaceId}`,
+    )
+    if (ok) setSubscription((data.subscription as SubscriptionState | null) ?? null)
+    setSubLoaded(true)
+  }, [workspaceId])
+
+  useEffect(() => {
+    loadSubscription()
+  }, [loadSubscription])
+
+  // Voltando do Stripe: o webhook pode levar alguns segundos pra ativar —
+  // re-consulta algumas vezes até o estado virar.
+  useEffect(() => {
+    if (!checkoutSuccess) return
+    let attempts = 0
+    const timer = setInterval(async () => {
+      attempts += 1
+      await loadSubscription()
+      await router.invalidate()
+      if (attempts >= 4) clearInterval(timer)
+    }, 2000)
+    return () => clearInterval(timer)
+  }, [checkoutSuccess, loadSubscription, router])
+
+  const paidActive = Boolean(
+    subscription?.hasStripeSubscription &&
+      ['active', 'trialing', 'past_due'].includes(subscription.status),
+  )
+
+  const currentPlanTier = subscription?.plan?.tier ?? entitlements.tier
+  const currentPlan = plans?.plans?.find((p) => p.tier === currentPlanTier) ?? null
+
+  // Plano pago sem subscription no Stripe: ativação antiga direto no banco.
+  // A cobrança precisa ser regularizada pelo checkout pra habilitar
+  // renovação, cancelamento e add-ons.
+  const legacyPaidPlan =
+    subLoaded &&
+    !paidActive &&
+    entitlements.status === 'active' &&
+    entitlements.tier !== 'free' &&
+    (currentPlan?.priceCents ?? 0) > 0
+
+  async function refresh() {
+    await Promise.all([loadSubscription(), router.invalidate()])
+  }
+
+  async function handleSubscribe(plan: { id: string; tier: string; priceCents: number }) {
+    setBusyAction(plan.id)
+    setError(null)
+    setNotice(null)
+    setConfirming(null)
+
+    try {
+      const { ok, data } = await vianovaBilling('/billing/checkout', {
+        method: 'POST',
+        body: JSON.stringify({
+          product_slug: 'naia',
+          workspace_id: workspaceId,
+          workspace_name: workspace.name,
+          plan_id: plan.id,
+          success_url: `${window.location.origin}/${workspaceId}/billing?success=true`,
+          cancel_url: `${window.location.origin}/${workspaceId}/billing`,
+        }),
+      })
+
+      if (!ok) {
+        setError((data.message as string) ?? 'Erro ao iniciar a mudança de plano.')
+        return
+      }
+
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl as string
+        return
+      }
+      if (data.changed) {
+        setNotice(`Plano alterado para ${tierLabels[plan.tier] ?? plan.tier}. A diferença é ajustada na próxima fatura.`)
+      } else if (data.scheduled) {
+        setNotice(
+          `Downgrade agendado. Seu plano atual continua ativo até ${formatDate(data.effectiveAt as string)}.`,
+        )
+      } else if (data.activated) {
+        setNotice(`Agora você está no plano ${tierLabels[plan.tier] ?? plan.tier}.`)
+      }
+      await refresh()
+    } catch {
+      setError('Falha de conexão com o portal de faturas.')
+    } finally {
+      setBusyAction(null)
+    }
+  }
+
+  async function handleCancel() {
+    if (!subscription) return
+    setBusyAction('cancel')
+    setError(null)
+    setNotice(null)
+    setConfirming(null)
+    const { ok, data } = await vianovaBilling(`/billing/subscriptions/${subscription.id}/cancel`, {
+      method: 'POST',
+    })
+    setBusyAction(null)
+    if (!ok) {
+      setError((data.message as string) ?? 'Erro ao cancelar.')
+      return
+    }
+    setNotice(`Cancelamento agendado. O plano continua ativo até ${formatDate(data.effectiveAt as string)}.`)
+    await refresh()
+  }
+
+  async function handleResume() {
+    if (!subscription) return
+    setBusyAction('resume')
+    setError(null)
+    setNotice(null)
+    const { ok, data } = await vianovaBilling(`/billing/subscriptions/${subscription.id}/resume`, {
+      method: 'POST',
+    })
+    setBusyAction(null)
+    if (!ok) {
+      setError((data.message as string) ?? 'Erro ao retomar a assinatura.')
+      return
+    }
+    setNotice('Assinatura retomada — a renovação automática está ativa de novo.')
+    await refresh()
+  }
+
+  async function handleAddonQuantity(addonTypeId: string, quantity: number) {
+    if (!subscription) return
+    setBusyAction(`addon:${addonTypeId}`)
+    setError(null)
+    setNotice(null)
+
+    const existing = subscription.addons.find((a) => a.addonTypeId === addonTypeId)
+    const { ok, data } = existing
+      ? await vianovaBilling(`/billing/subscriptions/${subscription.id}/addons/${addonTypeId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ quantity }),
+        })
+      : await vianovaBilling(`/billing/subscriptions/${subscription.id}/addons`, {
+          method: 'POST',
+          body: JSON.stringify({ addon_type_id: addonTypeId, quantity }),
+        })
+
+    setBusyAction(null)
+    if (!ok) {
+      setError((data.message as string) ?? 'Erro ao atualizar o add-on.')
+      return
+    }
+    const charged = (data.chargedNowCents as number | undefined) ?? 0
+    setNotice(
+      quantity === 0
+        ? 'Add-on removido. Sai da próxima renovação, o que já foi pago vale até o fim do ciclo.'
+        : charged > 0
+          ? `Add-on ativado. ${formatPrice(charged)} cobrado agora. A partir da próxima renovação, entra junto na fatura da assinatura.`
+          : 'Quantidade reduzida. A renovação já sai ajustada, o que já foi pago vale até o fim do ciclo.',
+    )
+    await refresh()
+  }
+
+  async function handleManage() {
+    const url = await fetchManageBillingUrl()
+    if (url) window.location.href = url
+  }
+
+  const currentTierName = tierLabels[entitlements.tier] ?? entitlements.tier.toUpperCase()
+
+  return (
+    <div className="max-w-5xl mx-auto py-2 font-sans">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-neutral-200">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-dark-800">Assinatura</h1>
+          <p className="text-sm text-neutral-500 mt-0.5">
+            Gerencie o plano, os add-ons e os limites do seu workspace.
+          </p>
+        </div>
+        {isOwner && (
+          <button
+            onClick={handleManage}
+            className="h-10 px-4 rounded-md border border-neutral-300 bg-white text-sm font-semibold text-dark-800 shadow-2xs hover:bg-neutral-50 transition-all active:scale-[0.98] inline-flex items-center gap-2 shrink-0"
+          >
+            <span>Portal de faturas</span>
+            <ExternalLink size={14} className="text-neutral-400" />
+          </button>
+        )}
+      </div>
+
+      {checkoutSuccess && !paidActive && subLoaded && (
+        <div className="mt-6 rounded-xl bg-brand-50 border border-brand-100 px-4 py-3 text-sm text-brand-600 font-medium flex items-center gap-2.5">
+          <span className="size-4 animate-spin rounded-full border-2 border-brand-200 border-t-brand-500 shrink-0" />
+          <span>Pagamento confirmado — ativando seu plano…</span>
+        </div>
+      )}
+
+      <div className="my-6 bg-white rounded-xl border border-neutral-200 p-5 shadow-2xs">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="size-10 rounded-lg bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 shrink-0">
+              <ShieldCheck size={20} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-neutral-400">Plano atual:</span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-dark-800 text-white">
+                  {currentTierName}
+                </span>
+              </div>
+              <p className="text-xs text-neutral-500 mt-1">
+                {subscription?.cancelAtPeriodEnd && subscription.currentPeriodEnd
+                  ? `Cancelamento agendado — ativo até ${formatDate(subscription.currentPeriodEnd)}, depois volta ao Grátis.`
+                  : paidActive && subscription?.currentPeriodEnd
+                    ? `Renova automaticamente em ${formatDate(subscription.currentPeriodEnd)}.`
+                    : entitlements.status === 'active'
+                      ? 'Assinatura ativa e sem pendências.'
+                      : 'Assinatura com restrições ou pendente.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-6 border-t md:border-t-0 md:border-l border-neutral-200 pt-3 md:pt-0 md:pl-6 text-xs text-dark-800">
+            <div>
+              <span className="text-neutral-400 block text-[11px]">Envios</span>
+              <strong className="font-bold">{entitlements.campaignsPerMonth} campanhas/mês</strong>
+            </div>
+            <div>
+              <span className="text-neutral-400 block text-[11px]">Conexões</span>
+              <strong className="font-bold">{entitlements.connections} canais</strong>
+            </div>
+            <div>
+              <span className="text-neutral-400 block text-[11px]">Equipe</span>
+              <strong className="font-bold">{entitlements.seats} membros</strong>
+            </div>
+          </div>
+        </div>
+
+        {isOwner && subscription?.cancelAtPeriodEnd && (
+          <div className="mt-4 pt-4 border-t border-neutral-100 flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-xs text-neutral-500 flex items-center gap-1.5">
+              <CalendarClock size={13} className="text-amber-500 shrink-0" />
+              Mudou de ideia? Retome antes do fim do período e nada muda.
+            </p>
+            <button
+              onClick={handleResume}
+              disabled={busyAction === 'resume'}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-dark-800 text-xs font-bold text-white hover:bg-dark-700 transition-colors disabled:opacity-60"
+            >
+              <Undo2 size={13} />
+              {busyAction === 'resume' ? 'Retomando…' : 'Retomar assinatura'}
+            </button>
+          </div>
+        )}
+
+        {isOwner && paidActive && !subscription?.cancelAtPeriodEnd && (
+          <div className="mt-4 pt-4 border-t border-neutral-100 flex items-center justify-end">
+            {confirming === 'cancel' ? (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-neutral-500">
+                  O plano continua até o fim do período pago. Confirmar?
+                </span>
+                <button
+                  onClick={handleCancel}
+                  disabled={busyAction === 'cancel'}
+                  className="h-8 px-3 rounded-md bg-error-600 text-xs font-bold text-white hover:bg-error-700 transition-colors disabled:opacity-60"
+                >
+                  {busyAction === 'cancel' ? 'Cancelando…' : 'Cancelar plano'}
+                </button>
+                <button
+                  onClick={() => setConfirming(null)}
+                  className="h-8 px-3 rounded-md text-xs font-semibold text-neutral-500 hover:bg-neutral-100 transition-colors"
+                >
+                  Voltar
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirming('cancel')}
+                className="text-xs font-medium text-neutral-400 hover:text-error-600 transition-colors"
+              >
+                Cancelar assinatura
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {!isOwner && (
+        <div className="rounded-xl bg-neutral-50 border border-neutral-200 px-4 py-3 text-sm text-neutral-600 font-medium flex items-center gap-2.5 mb-6">
+          <ShieldAlert size={15} className="text-neutral-400 shrink-0" />
+          <span>Somente o dono do workspace pode assinar, alterar ou cancelar o plano.</span>
+        </div>
+      )}
+
+      {legacyPaidPlan && (
+        <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-900 font-medium flex items-center gap-2.5 mb-6">
+          <ShieldAlert size={15} className="text-amber-600 shrink-0" />
+          <span>
+            Seu plano <strong className="font-bold capitalize">{currentTierName}</strong> está ativo
+            sem cobrança configurada. Assine pelo botão abaixo para habilitar renovação automática e
+            add-ons — os limites atuais não mudam.
+          </span>
+        </div>
+      )}
+
+      {notice && (
+        <div className="rounded-xl bg-green-50 border border-green-200 px-4 py-3 text-sm text-success-600 font-medium flex items-center gap-2.5 mb-6 shadow-2xs">
+          <CheckCircle2 size={16} className="text-success-500 shrink-0" />
+          <span>{notice}</span>
+        </div>
+      )}
+
+      {error && (
+        <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-error-600 font-medium mb-6">
+          {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-stretch mt-6">
+        {plans?.plans?.map((plan) => {
+          const isCurrent =
+            entitlements.status === 'active' &&
+            entitlements.tier === plan.tier &&
+            !subscription?.cancelAtPeriodEnd &&
+            // Plano pago só conta como "atual" com cobrança real ativa —
+            // senão o botão vira "Assinar" pra regularizar via checkout.
+            (plan.priceCents === 0 || paidActive)
+          const isPopular = plan.tier === 'pro'
+          const planTitle = tierLabels[plan.tier] ?? plan.name
+          const currentSort = currentPlan?.sortOrder ?? 0
+          const isDowngrade = paidActive && plan.sortOrder < currentSort && plan.priceCents > 0
+          const isUpgrade = paidActive && plan.sortOrder > currentSort
+
+          const sortedLimits = Object.entries(plan.limits).sort(([keyA], [keyB]) => {
+            const indexA = LIMIT_ORDER.indexOf(keyA)
+            const indexB = LIMIT_ORDER.indexOf(keyB)
+            return (indexA === -1 ? 99 : indexA) - (indexB === -1 ? 99 : indexB)
+          })
+
+          const needsConfirm = isDowngrade || (paidActive && plan.priceCents === 0)
+          const buttonLabel = isCurrent
+            ? 'Plano atual'
+            : plan.priceCents === 0
+              ? paidActive
+                ? 'Voltar para o Grátis'
+                : 'Mudar para Grátis'
+              : isUpgrade
+                ? 'Fazer upgrade'
+                : isDowngrade
+                  ? 'Fazer downgrade'
+                  : `Assinar ${planTitle}`
+
+          return (
+            <div
+              key={plan.id}
+              className={`relative rounded-xl p-6 flex flex-col justify-between transition-all duration-200 ${
+                isCurrent
+                  ? 'border-2 border-dark-800 bg-neutral-50/50 shadow-sm'
+                  : isPopular
+                    ? 'border-2 border-brand-500 bg-white shadow-md'
+                    : 'border border-neutral-200 bg-white hover:border-brand-300 shadow-2xs'
+              }`}
+            >
+              <div>
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-lg font-bold text-dark-800 flex items-center gap-1.5">
+                    {plan.tier === 'pro' && <Crown size={16} className="text-amber-500 shrink-0" />}
+                    <span>{planTitle}</span>
+                  </h3>
+
+                  {isCurrent ? (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-dark-800 text-white">
+                      Atual
+                    </span>
+                  ) : isPopular ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-brand-50 text-brand-600 border border-brand-200">
+                      <Sparkles size={11} />
+                      Popular
+                    </span>
+                  ) : null}
+                </div>
+
+                <p className="text-xs text-neutral-500 mt-1 min-h-[32px] leading-relaxed">
+                  {plan.description}
+                </p>
+
+                <div className="my-5 pb-5 border-b border-neutral-100 flex items-baseline gap-1">
+                  <span className="text-3xl font-extrabold text-dark-800 tracking-tight">
+                    {plan.priceCents === 0 ? 'Grátis' : formatPrice(plan.priceCents)}
+                  </span>
+                  {plan.priceCents > 0 && <span className="text-xs font-semibold text-neutral-400">/mês</span>}
+                </div>
+
+                <div className="space-y-3">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 block">
+                    Recursos incluídos:
+                  </span>
+                  <ul className="space-y-2.5 text-xs text-neutral-600">
+                    {sortedLimits.map(([key, value]) => {
+                      const item = formatLimitItem(key, value)
+                      return (
+                        <li key={key} className="flex items-start gap-2">
+                          {item.icon}
+                          <span className="leading-snug">
+                            {item.label} <strong className="font-semibold text-dark-800">{item.valueText}</strong>
+                          </span>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
+              </div>
+
+              <div className="mt-8 pt-4 border-t border-neutral-100">
+                {confirming === plan.id ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-neutral-500 leading-snug">
+                      {plan.priceCents === 0
+                        ? 'Seu plano pago segue até o fim do período — depois o workspace volta ao Grátis.'
+                        : 'Os limites mudam agora e o valor é ajustado proporcionalmente na próxima fatura.'}
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleSubscribe(plan)}
+                        disabled={busyAction === plan.id}
+                        className="flex-1 h-9 rounded-md bg-dark-800 text-xs font-bold text-white hover:bg-dark-700 transition-colors disabled:opacity-60"
+                      >
+                        {busyAction === plan.id ? 'Aplicando…' : 'Confirmar'}
+                      </button>
+                      <button
+                        onClick={() => setConfirming(null)}
+                        className="h-9 px-3 rounded-md text-xs font-semibold text-neutral-500 hover:bg-neutral-100 transition-colors"
+                      >
+                        Voltar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => (needsConfirm ? setConfirming(plan.id) : handleSubscribe(plan))}
+                    disabled={busyAction === plan.id || isCurrent || !isOwner}
+                    className={`w-full h-10 rounded-md text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
+                      isCurrent
+                        ? 'bg-neutral-100 text-neutral-400 cursor-default border border-neutral-200'
+                        : plan.priceCents === 0 || isDowngrade
+                          ? 'border border-neutral-300 bg-white text-dark-800 hover:bg-neutral-50 active:scale-[0.98] disabled:opacity-50'
+                          : 'bg-brand-500 text-white hover:bg-brand-600 shadow-xs active:scale-[0.98] disabled:opacity-50'
+                    }`}
+                  >
+                    {busyAction === plan.id ? (
+                      <>
+                        <span className="size-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                        <span>Processando…</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>{buttonLabel}</span>
+                        {!isCurrent && plan.priceCents > 0 && !isDowngrade && <ArrowRight size={15} />}
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {plans?.addons && plans.addons.length > 0 && (
+        <section className="mt-10">
+          <div className="flex items-center gap-2.5 pb-4 border-b border-neutral-200">
+            <PackagePlus size={18} className="text-brand-500 shrink-0" />
+            <div>
+              <h2 className="text-lg font-bold text-dark-800">Add-ons</h2>
+              <p className="text-xs text-neutral-500">
+                Amplie os limites do seu plano sem trocar de tier — cobrados mensalmente junto com a assinatura.
+              </p>
+            </div>
+          </div>
+
+          {!paidActive ? (
+            <div className="mt-4 rounded-xl bg-neutral-50 border border-dashed border-neutral-300 px-5 py-6 text-center">
+              <p className="text-sm font-medium text-neutral-600">
+                Add-ons ficam disponíveis com um plano pago ativo.
+              </p>
+              <p className="text-xs text-neutral-400 mt-1">
+                Assine o Starter ou o Pro para expandir campanhas e assentos sob demanda.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-5">
+              {plans.addons.map((addon) => {
+                const active = subscription?.addons.find((a) => a.addonTypeId === addon.id)
+                return (
+                  <AddonCard
+                    key={addon.id}
+                    addon={addon}
+                    currentQuantity={active?.quantity ?? 0}
+                    busy={busyAction === `addon:${addon.id}`}
+                    disabled={!isOwner}
+                    onApply={(quantity) => handleAddonQuantity(addon.id, quantity)}
+                  />
+                )
+              })}
+            </div>
+          )}
+        </section>
+      )}
+    </div>
+  )
+}
+
+function AddonCard({
+  addon,
+  currentQuantity,
+  busy,
+  disabled,
+  onApply,
+}: {
+  addon: {
+    id: string
+    key: string
+    name: string
+    description: string | null
+    unitLabel: string | null
+    priceCents: number
+    limitsPerUnit: Record<string, number>
+  }
+  currentQuantity: number
+  busy: boolean
+  disabled: boolean
+  onApply: (quantity: number) => void
+}) {
+  const [quantity, setQuantity] = useState(currentQuantity)
+
+  useEffect(() => {
+    setQuantity(currentQuantity)
+  }, [currentQuantity])
+
+  const dirty = quantity !== currentQuantity
+  const Icon = addon.key === 'extra_seats' ? Users : Send
+
+  return (
+    <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-2xs flex flex-col gap-4">
+      <div className="flex items-start gap-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-brand-50 border border-brand-100 text-brand-600">
+          <Icon size={16} aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-bold text-dark-800">{addon.name}</h3>
+            {currentQuantity > 0 && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-brand-50 text-brand-600 border border-brand-200 shrink-0">
+                {currentQuantity} ativo{currentQuantity > 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-neutral-500 mt-0.5 leading-relaxed">{addon.description}</p>
+          <p className="text-xs font-semibold text-dark-800 mt-1.5">
+            {formatPrice(addon.priceCents)}
+            <span className="text-neutral-400 font-normal"> /mês por {addon.unitLabel ?? 'unidade'}</span>
+          </p>
+          <p className="text-[11px] text-neutral-400 mt-1 leading-relaxed">
+            Cobrado integral na compra e renovado junto com a assinatura.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 pt-3 border-t border-neutral-100">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setQuantity((q) => Math.max(0, q - 1))}
+            disabled={disabled || quantity === 0}
+            aria-label="Diminuir quantidade"
+            className="grid size-8 place-items-center rounded-md border border-neutral-300 text-neutral-600 hover:bg-neutral-50 transition-colors disabled:opacity-40"
+          >
+            <Minus size={14} />
+          </button>
+          <span className="w-10 text-center text-sm font-bold text-dark-800 tabular-nums">{quantity}</span>
+          <button
+            type="button"
+            onClick={() => setQuantity((q) => Math.min(99, q + 1))}
+            disabled={disabled}
+            aria-label="Aumentar quantidade"
+            className="grid size-8 place-items-center rounded-md border border-neutral-300 text-neutral-600 hover:bg-neutral-50 transition-colors disabled:opacity-40"
+          >
+            <Plus size={14} />
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onApply(quantity)}
+          disabled={disabled || busy || !dirty}
+          className="h-9 px-4 rounded-md bg-dark-800 text-xs font-bold text-white hover:bg-dark-700 transition-colors disabled:opacity-40"
+        >
+          {busy
+            ? 'Aplicando…'
+            : quantity === 0 && currentQuantity > 0
+              ? 'Remover'
+              : currentQuantity > 0
+                ? 'Atualizar'
+                : 'Adicionar'}
+        </button>
+      </div>
+    </div>
+  )
+}

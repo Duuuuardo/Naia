@@ -1,0 +1,774 @@
+import { createServerFn } from '@tanstack/react-start'
+import { requireApi } from './session.server'
+
+// ─── Workspaces ──────────────────────────────────────────────────────────────
+
+export const fetchWorkspaces = createServerFn().handler(async () => {
+  const api = await requireApi()
+  const { data } = await api.workspaces.get()
+  return data?.workspaces ?? []
+})
+
+export const fetchWorkspace = createServerFn()
+  .validator((workspaceId: string) => workspaceId)
+  .handler(async ({ data: workspaceId }) => {
+    const api = await requireApi()
+    const { data, error } = await api.workspaces({ workspaceId }).get()
+    if (error || !data || !('workspace' in data)) return null
+    return data
+  })
+
+export const createWorkspace = createServerFn()
+  .validator((data: { name: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res, error } = await api.workspaces.post({ name: data.name })
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao criar workspace.' }
+    return { workspace: res?.workspace }
+  })
+
+export const updateWorkspaceSettings = createServerFn()
+  .validator((data: {
+    workspaceId: string
+    name?: string
+    description?: string
+    location?: string
+    industry?: string
+    avatarUrl?: string
+  }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { workspaceId, ...fields } = data
+    const { error } = await api.workspaces({ workspaceId }).patch(fields)
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao salvar configurações.' }
+    return { ok: true as const }
+  })
+
+export const fetchPermissions = createServerFn()
+  .validator((workspaceId: string) => workspaceId)
+  .handler(async ({ data: workspaceId }) => {
+    const api = await requireApi()
+    const { data, error } = await api.workspaces({ workspaceId }).permissions.get()
+    if (error || !data || !('permissions' in data)) return null
+    return data
+  })
+
+export const updatePermissions = createServerFn()
+  .validator((data: {
+    workspaceId: string
+    admin: Record<string, boolean>
+    member: Record<string, boolean>
+  }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).permissions.patch({
+      admin: data.admin as never,
+      member: data.member as never,
+    })
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao salvar permissões.' }
+    return res
+  })
+
+// ─── Members / Invites ───────────────────────────────────────────────────────
+
+export const fetchMembers = createServerFn()
+  .validator((workspaceId: string) => workspaceId)
+  .handler(async ({ data: workspaceId }) => {
+    const api = await requireApi()
+    const { data } = await api.workspaces({ workspaceId }).members.get()
+    return data?.members ?? []
+  })
+
+export const fetchInvites = createServerFn()
+  .validator((workspaceId: string) => workspaceId)
+  .handler(async ({ data: workspaceId }) => {
+    const api = await requireApi()
+    const { data } = await api.workspaces({ workspaceId }).invites.get()
+    return data?.invites ?? []
+  })
+
+export const createInvite = createServerFn()
+  .validator((data: { workspaceId: string; email: string; role: 'admin' | 'member' }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).invites.post({
+      email: data.email,
+      role: data.role,
+    })
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao convidar.' }
+    return { invite: res?.invite, inviteUrl: res?.inviteUrl }
+  })
+
+export const revokeInvite = createServerFn()
+  .validator((data: { workspaceId: string; inviteId: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    await api.workspaces({ workspaceId: data.workspaceId }).invites({ inviteId: data.inviteId }).delete()
+    return { ok: true }
+  })
+
+export const updateMemberRole = createServerFn()
+  .validator((data: { workspaceId: string; memberId: string; role: 'admin' | 'member' }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { error } = await api.workspaces({ workspaceId: data.workspaceId }).members({ memberId: data.memberId }).patch({
+      role: data.role,
+    })
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao alterar papel.' }
+    return { ok: true }
+  })
+
+export const removeMember = createServerFn()
+  .validator((data: { workspaceId: string; memberId: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { error } = await api.workspaces({ workspaceId: data.workspaceId }).members({ memberId: data.memberId }).delete()
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao remover membro.' }
+    return { ok: true }
+  })
+
+export const acceptInvite = createServerFn()
+  .validator((token: string) => token)
+  .handler(async ({ data: token }) => {
+    const api = await requireApi()
+    const { data, error } = await api.invites({ token }).accept.post()
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Convite inválido.' }
+    return { workspace: data?.workspace }
+  })
+
+// ─── Contacts ────────────────────────────────────────────────────────────────
+
+export const fetchContacts = createServerFn()
+  .validator((data: { workspaceId: string; search?: string; tag?: string; channel?: string; isGroup?: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res } = await api.workspaces({ workspaceId: data.workspaceId }).contacts.get({
+      query: { search: data.search, tag: data.tag, channel: data.channel, isGroup: data.isGroup },
+    })
+    return { contacts: (res?.contacts ?? []) as Array<any>, total: res?.total ?? 0 }
+  })
+
+
+export const createContact = createServerFn()
+  .validator((data: {
+    workspaceId: string
+    name: string
+    telegramChatId?: string | null
+    whatsappPhone?: string | null
+    email?: string | null
+    birthDate?: string | null
+    company?: string | null
+    notes?: string | null
+    avatarUrl?: string | null
+    tags?: string[]
+    optInStatus?: boolean
+  }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { error } = await api.workspaces({ workspaceId: data.workspaceId }).contacts.post({
+      name: data.name,
+      telegramChatId: data.telegramChatId || undefined,
+      whatsappPhone: data.whatsappPhone || undefined,
+      email: data.email,
+      birthDate: data.birthDate,
+      company: data.company,
+      notes: data.notes,
+      avatarUrl: data.avatarUrl,
+      tags: data.tags,
+      optInStatus: data.optInStatus,
+    })
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao criar contato.' }
+    return { ok: true }
+  })
+
+export const updateContact = createServerFn()
+  .validator((data: {
+    workspaceId: string
+    contactId: string
+    name?: string
+    telegramChatId?: string | null
+    whatsappPhone?: string | null
+    email?: string | null
+    birthDate?: string | null
+    company?: string | null
+    notes?: string | null
+    avatarUrl?: string | null
+    tags?: string[]
+    optInStatus?: boolean
+  }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).contacts({ contactId: data.contactId }).patch({
+      name: data.name,
+      telegramChatId: data.telegramChatId,
+      whatsappPhone: data.whatsappPhone,
+      email: data.email,
+      birthDate: data.birthDate,
+      company: data.company,
+      notes: data.notes,
+      avatarUrl: data.avatarUrl,
+      tags: data.tags,
+      optInStatus: data.optInStatus,
+    })
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao atualizar contato.' }
+    return res
+  })
+
+
+export const deleteContact = createServerFn()
+  .validator((data: { workspaceId: string; contactId: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { error } = await api.workspaces({ workspaceId: data.workspaceId }).contacts({ contactId: data.contactId }).delete()
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao apagar contato.' }
+    return { ok: true }
+  })
+
+export const importContacts = createServerFn()
+  .validator((data: { workspaceId: string; csv: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).contacts.import.post({
+      csv: data.csv,
+    })
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao importar contatos.' }
+    return res
+  })
+
+export const fetchContactTags = createServerFn()
+  .validator((data: { workspaceId: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).contacts.tags.get()
+    if (error || !res) return { tags: [], items: [] }
+    return res as { tags: string[]; items: Array<{ id: string; name: string; color: string; description: string | null; isCustom: boolean }> }
+  })
+
+export const createContactTag = createServerFn()
+  .validator((data: { workspaceId: string; name: string; color?: string; description?: string | null }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }).contacts.tags as any).post({
+      name: data.name,
+      color: data.color,
+      description: data.description,
+    })
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao criar tag.' }
+    return res
+  })
+
+export const updateContactTag = createServerFn()
+  .validator((data: { workspaceId: string; tagId: string; name?: string; color?: string; description?: string | null }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }).contacts.tags({ tagId: data.tagId }) as any).patch({
+      name: data.name,
+      color: data.color,
+      description: data.description,
+    })
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao atualizar tag.' }
+    return res
+  })
+
+export const deleteContactTag = createServerFn()
+  .validator((data: { workspaceId: string; tagId: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { error } = await (api.workspaces({ workspaceId: data.workspaceId }).contacts.tags({ tagId: data.tagId }) as any).delete()
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao deletar tag.' }
+    return { ok: true }
+  })
+
+
+export const mergeContacts = createServerFn()
+  .validator((data: { workspaceId: string; targetContactId: string; sourceContactIds: string[] }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).contacts.merge.post({
+      targetContactId: data.targetContactId,
+      sourceContactIds: data.sourceContactIds,
+    })
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao unificar contatos.' }
+    return res
+  })
+
+export const addContactIdentity = createServerFn()
+  .validator((data: { workspaceId: string; contactId: string; channelType: string; channelIdentifier: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).contacts({ contactId: data.contactId }).identities.post({
+      channelType: data.channelType as never,
+      channelIdentifier: data.channelIdentifier,
+      isPrimary: false,
+    })
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao adicionar identidade.' }
+    return res
+  })
+
+export const deleteContactIdentity = createServerFn()
+  .validator((data: { workspaceId: string; contactId: string; identityId: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    await api.workspaces({ workspaceId: data.workspaceId }).contacts({ contactId: data.contactId }).identities({ identityId: data.identityId }).delete()
+    return { ok: true }
+  })
+
+// ─── Connections ─────────────────────────────────────────────────────────────
+
+export const fetchConnections = createServerFn()
+  .validator((workspaceId: string) => workspaceId)
+  .handler(async ({ data: workspaceId }) => {
+    const api = await requireApi()
+    const { data } = await api.workspaces({ workspaceId }).connections.get()
+    return data?.connections ?? []
+  })
+
+export const createTelegramUserConnection = createServerFn()
+  .validator((data: { workspaceId: string; name: string; phone: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { error } = await (api.workspaces({ workspaceId: data.workspaceId }).connections as any)['telegram-user'].post({
+      name: data.name,
+      phone: data.phone,
+    })
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao conectar conta do Telegram.' }
+    return { ok: true }
+  })
+
+export const submitTelegramLoginCode = createServerFn()
+  .validator((data: { workspaceId: string; connectionId: string; code: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { error } = await (api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId }) as any)['telegram-code'].post({
+      code: data.code,
+    })
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao enviar código.' }
+    return { ok: true }
+  })
+
+export const submitTelegramLoginPassword = createServerFn()
+  .validator((data: { workspaceId: string; connectionId: string; password: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { error } = await (api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId }) as any)['telegram-password'].post({
+      password: data.password,
+    })
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao enviar senha.' }
+    return { ok: true }
+  })
+
+export const createWhatsAppConnection = createServerFn()
+  .validator((data: { workspaceId: string; name: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { error } = await api.workspaces({ workspaceId: data.workspaceId }).connections.whatsapp.post({
+      name: data.name,
+    })
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao criar conexão WhatsApp.' }
+    return { ok: true }
+  })
+
+export const deleteConnection = createServerFn()
+  .validator((data: { workspaceId: string; connectionId: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    await api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId }).delete()
+    return { ok: true }
+  })
+
+export const reconnectWhatsApp = createServerFn()
+  .validator((data: { workspaceId: string; connectionId: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    await api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId }).reconnect.post()
+    return { ok: true }
+  })
+
+export const fetchConnectionContactsSync = createServerFn()
+  .validator((data: { workspaceId: string; connectionId: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId }) as any)['contacts-sync'].get()
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao buscar contatos da conexão.' }
+    return { contacts: res?.contacts ?? [] }
+  })
+
+export const fetchConnectionGroupsSync = createServerFn()
+  .validator((data: { workspaceId: string; connectionId: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId }) as any)['groups-sync'].get()
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao buscar grupos da conexão.' }
+    return { groups: res?.groups ?? [] }
+  })
+
+export const importConnectionContacts = createServerFn()
+  .validator((data: { workspaceId: string; connectionId: string; contacts: Array<{ name: string; phoneOrId: string; avatarUrl?: string | null }>; tags?: string[] }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId }) as any)['import-contacts'].post({
+      contacts: data.contacts,
+      tags: data.tags,
+    })
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao importar contatos.' }
+    return res
+  })
+
+export const importConnectionGroups = createServerFn()
+  .validator((data: {
+    workspaceId: string
+    connectionId: string
+    groups: Array<{
+      id: string
+      subject: string
+      size?: number
+      desc?: string
+      participants?: Array<{ id: string; admin?: string | null; phoneNumber?: string | null }>
+    }>
+    tags?: string[]
+  }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId }) as any)['import-groups'].post({
+      groups: data.groups,
+      tags: data.tags,
+    })
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao importar grupos.' }
+    return res
+  })
+
+export const importGroupMembers = createServerFn()
+  .validator((data: { workspaceId: string; connectionId: string; groupJid: string; tags?: string[] }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId }) as any)['import-group-members'].post({
+      groupJid: data.groupJid,
+      tags: data.tags,
+    })
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao importar membros do grupo.' }
+    return res
+  })
+
+export const syncContactGroupMembers = createServerFn()
+  .validator((data: { workspaceId: string; contactId: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }).contacts({ contactId: data.contactId }) as any)['sync-members'].post()
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao sincronizar membros do grupo.' }
+    return res
+  })
+
+
+// ─── Campaigns & Dashboard ───────────────────────────────────────────────────
+
+export const fetchDashboardStats = createServerFn()
+  .validator((workspaceId: string) => workspaceId)
+  .handler(async ({ data: workspaceId }) => {
+    const api = await requireApi()
+    const { data } = await (api.workspaces({ workspaceId }) as unknown as { dashboard: { get: () => Promise<{ data?: any }> } }).dashboard.get()
+    return data ?? null
+  })
+
+export const fetchCampaigns = createServerFn()
+  .validator((workspaceId: string) => workspaceId)
+  .handler(async ({ data: workspaceId }) => {
+    const api = await requireApi()
+    const { data } = await api.workspaces({ workspaceId }).campaigns.get({ query: {} })
+    return data?.campaigns ?? []
+  })
+
+export const fetchCampaign = createServerFn()
+  .validator((data: { workspaceId: string; campaignId: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).campaigns({ campaignId: data.campaignId }).get()
+    if (error || !res || !('campaign' in res)) return null
+    return res
+  })
+
+export const fetchCampaignMessages = createServerFn()
+  .validator((data: { workspaceId: string; campaignId: string; runId?: string; status?: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res } = await api.workspaces({ workspaceId: data.workspaceId }).campaigns({ campaignId: data.campaignId }).messages.get({
+      query: { runId: data.runId, status: data.status },
+    })
+    return res?.messages ?? []
+  })
+
+export type CampaignVariantInput = { body: string; mediaAssetIds?: string[] }
+export type CampaignScheduleInput = {
+  type: 'immediate' | 'once' | 'recurring'
+  onceAt?: string
+  recurrence?: {
+    kind: 'daily' | 'weekly' | 'every_x_hours' | 'times_per_day'
+    time?: string
+    weekdays?: number[]
+    everyHours?: number
+    timesPerDay?: number
+    startDate?: string
+    endDate?: string
+    maxOccurrences?: number
+  }
+  workingHours?: { start: string; end: string; weekdays: number[] }
+  dailyCap?: number
+}
+export type CampaignSpeedInput = {
+  preset: 'lento' | 'medio' | 'rapido' | 'manual'
+  minSeconds?: number
+  maxSeconds?: number
+  pauseEveryN?: number
+  pauseMinMinutes?: number
+  pauseMaxMinutes?: number
+}
+
+// Shape mínimo serializável devolvido pelas mutações — o suficiente pro
+// redirect pós-criação; telas de leitura usam fetchCampaign/fetchAutomations.
+export type CampaignRef = { id: string; status: string }
+export type AutomationRef = { id: string; active: boolean }
+
+export type CampaignPayload = {
+  workspaceId: string
+  name: string
+  connectionIds: string[]
+  variants: CampaignVariantInput[]
+  segmentFilter?: unknown
+  schedule?: CampaignScheduleInput
+  speed?: CampaignSpeedInput
+  timezone?: string
+  applyTagOnDispatch?: string | null
+}
+
+export const createCampaign = createServerFn()
+  .validator((data: CampaignPayload) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { workspaceId, ...payload } = data
+    const { data: res, error } = await api.workspaces({ workspaceId }).campaigns.post(payload as never)
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao criar campanha.' }
+    return { campaign: (res as { campaign?: CampaignRef })?.campaign }
+  })
+
+export const updateCampaign = createServerFn()
+  .validator((data: Partial<CampaignPayload> & { workspaceId: string; campaignId: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { workspaceId, campaignId, ...payload } = data
+    const { data: res, error } = await api.workspaces({ workspaceId }).campaigns({ campaignId }).patch(payload as never)
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao atualizar campanha.' }
+    return { campaign: (res as { campaign?: CampaignRef })?.campaign }
+  })
+
+export const dispatchCampaign = createServerFn()
+  .validator((data: { workspaceId: string; campaignId: string; consent: boolean }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    if (!data.consent) return { error: 'É necessário confirmar o consentimento do público antes de disparar.' }
+    const { data: res, error } = await api
+      .workspaces({ workspaceId: data.workspaceId })
+      .campaigns({ campaignId: data.campaignId })
+      .dispatch.post({ consent: true })
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao disparar campanha.' }
+    return { message: (res as { message?: string })?.message }
+  })
+
+export const pauseCampaign = createServerFn()
+  .validator((data: { workspaceId: string; campaignId: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { error } = await api.workspaces({ workspaceId: data.workspaceId }).campaigns({ campaignId: data.campaignId }).pause.post()
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao pausar campanha.' }
+    return { ok: true as const }
+  })
+
+export const resumeCampaign = createServerFn()
+  .validator((data: { workspaceId: string; campaignId: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).campaigns({ campaignId: data.campaignId }).resume.post()
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao retomar campanha.' }
+    return { message: (res as { message?: string })?.message }
+  })
+
+export const updateCampaignSchedule = createServerFn()
+  .validator((data: {
+    workspaceId: string
+    campaignId: string
+    schedule: CampaignScheduleInput
+    timezone?: string
+    speed?: CampaignSpeedInput
+  }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { workspaceId, campaignId, ...payload } = data
+    const { data: res, error } = await api.workspaces({ workspaceId }).campaigns({ campaignId }).schedule.patch(payload as never)
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao alterar agendamento.' }
+    return { campaign: (res as { campaign?: CampaignRef })?.campaign }
+  })
+
+export const cancelCampaign = createServerFn()
+  .validator((data: { workspaceId: string; campaignId: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    await api.workspaces({ workspaceId: data.workspaceId }).campaigns({ campaignId: data.campaignId }).cancel.post()
+    return { ok: true }
+  })
+
+export const fetchCampaignRuns = createServerFn()
+  .validator((data: { workspaceId: string; campaignId: string; page?: number }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res } = await api
+      .workspaces({ workspaceId: data.workspaceId })
+      .campaigns({ campaignId: data.campaignId })
+      .runs.get({ query: { page: data.page } })
+    return { runs: (res as { runs?: Array<any> })?.runs ?? [], total: (res as { total?: number })?.total ?? 0 }
+  })
+
+export const fetchSendsTimeseries = createServerFn()
+  .validator((data: { workspaceId: string; tz?: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res } = await (api.workspaces({ workspaceId: data.workspaceId }).dashboard as any).timeseries.get({
+      query: { tz: data.tz },
+    })
+    return (res ?? { perDay: [], perHour: [], timezone: 'America/Sao_Paulo' }) as {
+      perDay: Array<{ date: string; sent: number; failed: number }>
+      perHour: Array<{ hour: string; sent: number }>
+      timezone: string
+    }
+  })
+
+// ─── Mídia ───────────────────────────────────────────────────────────────────
+
+export const presignMediaUpload = createServerFn()
+  .validator((data: { workspaceId: string; filename: string; mimeType: string; sizeBytes: number }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }) as any).media.presign.post({
+      filename: data.filename,
+      mimeType: data.mimeType,
+      sizeBytes: data.sizeBytes,
+    })
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao preparar upload.' }
+    return res as { assetId: string; kind: string; storageKey: string; uploadUrl: string }
+  })
+
+export const confirmMediaUpload = createServerFn()
+  .validator((data: { workspaceId: string; assetId: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }) as any).media({ assetId: data.assetId }).confirm.post()
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao confirmar upload.' }
+    return res as { asset: { id: string; kind: string; filename: string; mimeType: string } }
+  })
+
+export const fetchMediaUrl = createServerFn()
+  .validator((data: { workspaceId: string; assetId: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res } = await (api.workspaces({ workspaceId: data.workspaceId }) as any).media({ assetId: data.assetId }).url.get()
+    return (res ?? null) as { url: string; mimeType: string; kind: string } | null
+  })
+
+// ─── Audiência (manual + arquivo) ────────────────────────────────────────────
+
+export const bulkUpsertContacts = createServerFn()
+  .validator((data: { workspaceId: string; rows: Array<{ name: string; phone: string }>; tags?: string[] }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }).contacts as any)['bulk-upsert'].post({
+      rows: data.rows,
+      tags: data.tags,
+    })
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao salvar contatos.' }
+    return res as { created: number; updated: number; failed: number; errors: string[]; contactIds: string[]; tags: string[] }
+  })
+
+export const importContactsFile = createServerFn()
+  .validator((data: { workspaceId: string; filename: string; mimeType: string; contentBase64: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    if (!data.workspaceId || !data.contentBase64) return { error: 'Arquivo ou workspace ausente.' }
+    const bytes = Uint8Array.from(atob(data.contentBase64), (c) => c.charCodeAt(0))
+    const file = new File([bytes], data.filename, { type: data.mimeType })
+    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }).contacts as any)['import-file'].post({ file })
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao importar arquivo.' }
+    return res as { imported: number; skipped: number; failed: number; errors: string[]; tag: string }
+  })
+
+// ─── Automações ──────────────────────────────────────────────────────────────
+
+export type AutomationPayload = {
+  workspaceId: string
+  name: string
+  type: 'birthday'
+  connectionIds: string[]
+  content: CampaignVariantInput[]
+  sendTime: string
+  timezone?: string
+  speed?: CampaignSpeedInput
+  active?: boolean
+}
+
+export const fetchAutomations = createServerFn()
+  .validator((workspaceId: string) => workspaceId)
+  .handler(async ({ data: workspaceId }) => {
+    const api = await requireApi()
+    const { data } = await (api.workspaces({ workspaceId }) as any).automations.get()
+    return (data?.automations ?? []) as Array<any>
+  })
+
+export const createAutomation = createServerFn()
+  .validator((data: AutomationPayload) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { workspaceId, ...payload } = data
+    const { data: res, error } = await (api.workspaces({ workspaceId }) as any).automations.post(payload)
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao criar automação.' }
+    return { automation: (res as { automation?: AutomationRef })?.automation }
+  })
+
+export const updateAutomation = createServerFn()
+  .validator((data: Partial<AutomationPayload> & { workspaceId: string; automationId: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { workspaceId, automationId, ...payload } = data
+    const { data: res, error } = await (api.workspaces({ workspaceId }) as any).automations({ automationId }).patch(payload)
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao atualizar automação.' }
+    return { automation: (res as { automation?: AutomationRef })?.automation }
+  })
+
+export const toggleAutomation = createServerFn()
+  .validator((data: { workspaceId: string; automationId: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }) as any).automations({ automationId: data.automationId }).toggle.post()
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao alternar automação.' }
+    return res as { active: boolean }
+  })
+
+export const deleteAutomation = createServerFn()
+  .validator((data: { workspaceId: string; automationId: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { error } = await (api.workspaces({ workspaceId: data.workspaceId }) as any).automations({ automationId: data.automationId }).delete()
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao excluir automação.' }
+    return { ok: true as const }
+  })
+
+// ─── Billing ─────────────────────────────────────────────────────────────────
+
+export const fetchPlans = createServerFn()
+  .handler(async () => {
+    const api = await requireApi()
+    const { data, error } = await api.billing.plans.get()
+    if (error || !data || !('plans' in data)) return null
+    return data
+  })
+
+export const fetchManageBillingUrl = createServerFn().handler(async (): Promise<string | undefined> => {
+  const api = await requireApi()
+  const { data } = await api.billing['manage-url'].get()
+  return (data as { url?: string } | null)?.url
+})

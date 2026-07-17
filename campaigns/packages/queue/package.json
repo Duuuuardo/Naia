@@ -1,0 +1,21 @@
+{
+  "name": "@naia/queue",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "bullmq": "^5",
+    "ioredis": "5.10.1"
+  },
+  "devDependencies": {
+    "@naia/config": "workspace:*",
+    "bun-types": "latest",
+    "typescript": "^5"
+  }
+}

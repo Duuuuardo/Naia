@@ -1,0 +1,82 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "5435:5432"
+    environment:
+      POSTGRES_DB: naia
+      POSTGRES_USER: naia
+      POSTGRES_PASSWORD: naia_secret
+    volumes:
+      - naia_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U naia -d naia"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  crm_postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "5436:5432"
+    environment:
+      POSTGRES_DB: crm
+      POSTGRES_USER: crm
+      POSTGRES_PASSWORD: crm_secret
+    volumes:
+      - crm_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crm -d crm"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6381:6379"
+    volumes:
+      - naia_redis_data:/data
+
+  # Armazenamento de mídia das campanhas (imagens/vídeos/áudios/documentos).
+  # Instância própria do Campaigns — o MinIO do Vianova é exclusivo de avatares.
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "9102:9000" # S3 API
+      - "9103:9001" # Console
+    environment:
+      MINIO_ROOT_USER: naia
+      MINIO_ROOT_PASSWORD: naia_secret_minio
+      # Presigned PUT direto do browser em dev
+      MINIO_API_CORS_ALLOW_ORIGIN: "*"
+    volumes:
+      - naia_minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Cria o bucket de mídia na primeira subida e encerra.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 naia naia_secret_minio &&
+      mc mb --ignore-existing local/naia-campaigns
+      "
+
+volumes:
+  naia_postgres_data:
+  crm_postgres_data:
+  naia_redis_data:
+  naia_minio_data:

@@ -1,0 +1,11 @@
+{
+  "name": "@naia/config",
+  "version": "0.0.1",
+  "private": true,
+  "exports": {
+    "./tsconfig/base.json": "./tsconfig/base.json",
+    "./tsconfig/react.json": "./tsconfig/react.json",
+    "./tsconfig/bun.json": "./tsconfig/bun.json",
+    "./tailwind/base.css": "./tailwind/base.css"
+  }
+}

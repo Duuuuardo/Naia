@@ -1,0 +1,28 @@
+{
+  "name": "@crm/api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "bun --hot --env-file ../../../.env src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target bun",
+    "start": "bun --env-file ../../../.env dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@crm/db": "workspace:*",
+    "@elysiajs/cors": "^1",
+    "@naia/vianova-auth": "workspace:*",
+    "drizzle-orm": "^0.44",
+    "elysia": "^1",
+    "logixlysia": "^6.6.0"
+  },
+  "devDependencies": {
+    "@naia/config": "workspace:*",
+    "bun-types": "latest",
+    "typescript": "^5"
+  }
+}

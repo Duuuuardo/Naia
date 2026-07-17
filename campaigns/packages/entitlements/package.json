@@ -1,0 +1,20 @@
+{
+  "name": "@naia/entitlements",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@naia/schemas": "workspace:*"
+  },
+  "devDependencies": {
+    "@naia/config": "workspace:*",
+    "bun-types": "latest",
+    "typescript": "^5"
+  }
+}

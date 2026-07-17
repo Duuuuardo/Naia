@@ -1,0 +1,26 @@
+{
+  "name": "@naia/worker",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --hot --env-file ../../../.env src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target bun",
+    "start": "bun --env-file ../../../.env dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "latest",
+    "@naia/db": "workspace:*",
+    "@naia/schemas": "workspace:*",
+    "@naia/queue": "workspace:*",
+    "@naia/scheduling": "workspace:*",
+    "@naia/storage": "workspace:*",
+    "drizzle-orm": "^0.44"
+  },
+  "devDependencies": {
+    "@naia/config": "workspace:*",
+    "bun-types": "latest",
+    "typescript": "^5"
+  }
+}

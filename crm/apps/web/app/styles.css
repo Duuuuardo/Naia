@@ -1,0 +1,24 @@
+@import "tailwindcss";
+@import "@naia/config/tailwind/base.css";
+
+@layer base {
+  @font-face {
+    font-family: 'Plus Jakarta Sans';
+    font-style: normal;
+    font-weight: 300 800;
+    font-display: swap;
+    src: url('https://fonts.gstatic.com/s/plusjakartasans/v8/LDIbaomQNQcsA88c7O9yZ4KMCoOg4IA6-91aHEjcWuA_KU7NSg.woff2') format('woff2');
+  }
+
+  html {
+    font-family: var(--font-sans);
+    color: var(--color-dark-800);
+    background-color: var(--color-neutral-0);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  * {
+    border-color: var(--color-neutral-200);
+  }
+}

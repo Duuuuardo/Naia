@@ -1,0 +1,1 @@
+ALTER TABLE "campaign_runs" ADD COLUMN "next_pacer_at" timestamp;
