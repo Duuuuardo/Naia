@@ -23,6 +23,7 @@
     "@naia/session-host-client": "workspace:*",
     "@naia/storage": "workspace:*",
     "@naia/vianova-auth": "workspace:*",
+    "@naia/vianova-config": "workspace:*",
     "drizzle-orm": "^0.44",
     "elysia": "^1",
     "logixlysia": "^6.6.0",

@@ -16,6 +16,7 @@
     "@naia/scheduling": "workspace:*",
     "@naia/session-host-client": "workspace:*",
     "@naia/storage": "workspace:*",
+    "@naia/vianova-config": "workspace:*",
     "drizzle-orm": "^0.44"
   },
   "devDependencies": {

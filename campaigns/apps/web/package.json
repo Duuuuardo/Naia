@@ -13,6 +13,7 @@
     "@naia/client": "workspace:*",
     "@naia/entitlements": "workspace:*",
     "@naia/schemas": "workspace:*",
+    "@naia/vianova-config": "workspace:*",
     "@tanstack/react-router": "^1",
     "@tanstack/react-start": "^1",
     "lucide-react": "^1.24.0",
@@ -24,6 +25,7 @@
   "devDependencies": {
     "@naia/api": "workspace:*",
     "@naia/config": "workspace:*",
+    "bun-types": "1.3.14",
     "@tailwindcss/vite": "^4",
     "@types/react": "^19",
     "@types/react-dom": "^19",

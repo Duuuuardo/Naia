@@ -14,11 +14,13 @@
     "@tanstack/react-router": "^1",
     "react": "^19",
     "react-dom": "^19",
-    "@crm/client": "workspace:*"
+    "@crm/client": "workspace:*",
+    "@naia/vianova-config": "workspace:*"
   },
   "devDependencies": {
     "@crm/api": "workspace:*",
     "@naia/config": "workspace:*",
+    "bun-types": "1.3.14",
     "@tailwindcss/vite": "^4",
     "@types/react": "^19",
     "@types/react-dom": "^19",
