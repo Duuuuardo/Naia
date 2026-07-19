@@ -66,6 +66,11 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:3301:3301"
+    networks:
+      default: {}
+      novaplatform:
+        aliases:
+          - naia-landing
     env_file:
       - ./.env
 
@@ -75,8 +80,10 @@ services:
     ports:
       - "127.0.0.1:4001:4001"
     networks:
-      - default
-      - novaplatform
+      default: {}
+      novaplatform:
+        aliases:
+          - naia-campaigns-api
     env_file:
       - ./.env
     depends_on:
@@ -92,6 +99,11 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:3001:3001"
+    networks:
+      default: {}
+      novaplatform:
+        aliases:
+          - naia-campaigns-web
     env_file:
       - ./.env
     depends_on:
@@ -114,8 +126,10 @@ services:
     ports:
       - "127.0.0.1:4002:4002"
     networks:
-      - default
-      - novaplatform
+      default: {}
+      novaplatform:
+        aliases:
+          - naia-crm-api
     env_file:
       - ./.env
     depends_on:
@@ -129,6 +143,11 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:3302:3302"
+    networks:
+      default: {}
+      novaplatform:
+        aliases:
+          - naia-crm-web
     env_file:
       - ./.env
     depends_on:
