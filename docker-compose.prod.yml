@@ -1,5 +1,9 @@
 name: naia-prod
 
+networks:
+  novaplatform:
+    external: true
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -70,6 +74,9 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:4001:4001"
+    networks:
+      - default
+      - novaplatform
     env_file:
       - ./.env
     depends_on:
@@ -106,6 +113,9 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:4002:4002"
+    networks:
+      - default
+      - novaplatform
     env_file:
       - ./.env
     depends_on:
