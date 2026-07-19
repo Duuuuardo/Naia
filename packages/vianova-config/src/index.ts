@@ -7,6 +7,10 @@ export type VianovaConfigClientOptions = {
   internalSecret?: string
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 export function createVianovaConfigClient({ baseUrl, serviceToken, internalSecret }: VianovaConfigClientOptions) {
   if (!serviceToken && !internalSecret) {
     throw new Error('Either serviceToken or internalSecret must be provided')
@@ -24,15 +28,30 @@ export function createVianovaConfigClient({ baseUrl, serviceToken, internalSecre
         headers['x-internal-secret'] = internalSecret
       }
 
-      const response = await fetch(url, { headers })
+      const maxAttempts = 30
+      const delayMs = 500
+      let lastError: unknown
 
-      if (!response.ok) {
-        const body = await response.text()
-        throw new Error(`config-server error ${response.status}: ${body}`)
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          const response = await fetch(url, { headers })
+
+          if (!response.ok) {
+            const body = await response.text()
+            throw new Error(`config-server error ${response.status}: ${body}`)
+          }
+
+          const json = (await response.json()) as { config: ConfigMap }
+          return json.config
+        } catch (err) {
+          lastError = err
+          if (attempt === maxAttempts) break
+          console.log(`[config] waiting for config-server... (${attempt}/${maxAttempts})`)
+          await sleep(delayMs)
+        }
       }
 
-      const json = (await response.json()) as { config: ConfigMap }
-      return json.config
+      throw lastError
     },
   }
 }
