@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@elysiajs/cors": "^1",
+    "@elysiajs/swagger": "^1",
     "@naia/db": "workspace:*",
     "@naia/entitlements": "workspace:*",
     "@naia/queue": "workspace:*",

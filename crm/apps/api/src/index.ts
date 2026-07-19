@@ -1,5 +1,6 @@
 import { Elysia } from 'elysia'
 import { cors } from '@elysiajs/cors'
+import { swagger } from '@elysiajs/swagger'
 import logixlysia from 'logixlysia'
 import { errorSanitizerPlugin } from './plugins/error-sanitizer'
 
@@ -15,6 +16,17 @@ const app = new Elysia()
           ? /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
           : (process.env.CRM_WEB_URL ?? 'http://localhost:3302'),
       credentials: true,
+    }),
+  )
+  .use(
+    swagger({
+      documentation: {
+        info: {
+          title: 'Naia CRM API',
+          version: '0.0.1',
+          description: 'Multi-channel inbox and conversations for Naia CRM (Milestone 3).',
+        },
+      },
     }),
   )
   .use(

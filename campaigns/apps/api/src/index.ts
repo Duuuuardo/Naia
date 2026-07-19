@@ -1,5 +1,6 @@
 import { Elysia } from 'elysia'
 import { cors } from '@elysiajs/cors'
+import { swagger } from '@elysiajs/swagger'
 import logixlysia from 'logixlysia'
 import { errorSanitizerPlugin } from './plugins/error-sanitizer'
 import { authPlugin } from './plugins/auth'
@@ -36,6 +37,17 @@ const app = new Elysia()
           ? /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
           : (process.env.NAIA_WEB_URL ?? 'http://localhost:3001'),
       credentials: true,
+    }),
+  )
+  .use(
+    swagger({
+      documentation: {
+        info: {
+          title: 'Naia Campaigns API',
+          version: '0.0.1',
+          description: 'Workspace, contacts, connections and campaign dispatch for Naia Campaigns.',
+        },
+      },
     }),
   )
   .use(
