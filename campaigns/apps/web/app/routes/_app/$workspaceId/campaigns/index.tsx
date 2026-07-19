@@ -15,7 +15,7 @@ import {
   Layers,
 } from 'lucide-react'
 import { fetchCampaigns } from '../../../../lib/actions'
-import { Card, EmptyState, PageHeader, StatusBadge } from '../../../../components/ui'
+import { Card, EmptyState, PageHeader, StatusBadge, ChannelBadge } from '../../../../components/ui'
 
 export const Route = createFileRoute('/_app/$workspaceId/campaigns/')({
   loader: ({ params }) => fetchCampaigns({ data: params.workspaceId }),
@@ -65,7 +65,7 @@ function CampaignsPage() {
         <Link
           to="/$workspaceId/campaigns/new"
           params={{ workspaceId }}
-          className="inline-flex h-10 items-center gap-2 rounded-xl bg-dark-800 px-4 text-sm font-semibold text-white shadow-sm transition-all hover:bg-dark-900 active:scale-[0.98]"
+          className="inline-flex h-10 w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-dark-800 px-4 text-sm font-semibold text-white shadow-sm transition-all hover:bg-dark-900 active:scale-[0.98]"
         >
           <Plus size={16} />
           <span>Criar campanha</span>
@@ -139,8 +139,8 @@ function CampaignsPage() {
         )
       ) : (
         <div className="rounded-2xl border border-neutral-200/80 bg-white shadow-xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+          <div className="overflow-x-auto -mx-5 px-5">
+            <table className="min-w-[640px] w-full text-left text-sm">
               <thead className="bg-neutral-50/80 border-b border-neutral-100 text-[11px] font-bold uppercase tracking-wider text-neutral-400">
                 <tr>
                   <th className="py-3.5 pl-6 pr-4">Campanha</th>
@@ -176,10 +176,7 @@ function CampaignsPage() {
                         )}
                       </td>
                       <td className="py-4 px-4">
-                        <span className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-100 px-2.5 py-1 text-xs font-mono font-bold uppercase text-neutral-700">
-                          {c.channel === 'whatsapp' ? <MessageCircle size={13} className="text-emerald-600" /> : <Send size={13} className="text-blue-500" />}
-                          {c.channel}
-                        </span>
+                        <ChannelBadge channel={c.channel} />
                       </td>
                       <td className="py-4 px-4">
                         <StatusBadge status={c.status} />

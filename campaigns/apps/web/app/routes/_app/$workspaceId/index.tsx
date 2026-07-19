@@ -19,7 +19,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { fetchDashboardStats, fetchSendsTimeseries } from '../../../lib/actions'
-import { StatusBadge } from '../../../components/ui'
+import { StatusBadge, ChannelBadge } from '../../../components/ui'
 import { SendsTimeseriesCard } from '../../../components/charts'
 
 export const Route = createFileRoute('/_app/$workspaceId/')({
@@ -42,6 +42,8 @@ function WorkspaceHome() {
     totalContacts: 0,
     optedOutContacts: 0,
     activeConnections: 0,
+    activeWaConnections: 0,
+    activeTgConnections: 0,
     totalContactsSum: 0,
     sentCount: 0,
     deliveredCount: 0,
@@ -52,7 +54,6 @@ function WorkspaceHome() {
   const usage = stats?.usage ?? {
     connectionsCount: 0,
     contactsCount: 0,
-    messagesThisMonth: 0,
     campaignsThisMonth: 0,
   }
 
@@ -83,7 +84,7 @@ function WorkspaceHome() {
   const totalDispatched = (summary.sentCount || 0) + (summary.deliveredCount || 0) + (summary.readCount || 0)
   const deliveryRate = totalDispatched > 0 ? Math.round(((summary.deliveredCount + summary.readCount) / totalDispatched) * 100) : 0
   const readRate = totalDispatched > 0 ? Math.round((summary.readCount / totalDispatched) * 100) : 0
-  const msgLimitPercentage = Math.min(100, Math.round((usage.messagesThisMonth / Math.max(1, ent.messagesPerMonth)) * 100))
+  const creditsPercentage = Math.min(100, Math.round((ent.creditsBalance / Math.max(1, ent.creditsPerCycle)) * 100))
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 pb-20">
@@ -106,11 +107,11 @@ function WorkspaceHome() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto">
           <Link
             to="/$workspaceId/connections"
             params={{ workspaceId: workspace.id }}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-neutral-200 bg-white text-xs font-bold text-dark-800 hover:bg-neutral-50 active:scale-[0.97] transition-all duration-150 shadow-2xs"
+            className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-neutral-200 bg-white text-xs font-bold text-dark-800 hover:bg-neutral-50 active:scale-[0.97] transition-all duration-150 shadow-2xs"
           >
             <Wifi size={15} className="text-emerald-600 animate-pulse" />
             <span>Canais ({summary.activeConnections})</span>
@@ -118,7 +119,7 @@ function WorkspaceHome() {
           <Link
             to="/$workspaceId/campaigns/new"
             params={{ workspaceId: workspace.id }}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-dark-800 text-xs font-bold text-white hover:bg-dark-900 active:scale-[0.97] transition-all duration-150 shadow-sm"
+            className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-dark-800 text-xs font-bold text-white hover:bg-dark-900 active:scale-[0.97] transition-all duration-150 shadow-sm"
           >
             <PlusCircle size={15} />
             <span>Nova campanha</span>
@@ -130,26 +131,27 @@ function WorkspaceHome() {
         <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-2xs hover:border-neutral-300 transition-all duration-200 space-y-2 group">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-neutral-400">
-              Disparos no mês
+              Créditos restantes
             </span>
             <Zap size={14} className="text-amber-500 group-hover:scale-110 transition-transform duration-200" />
           </div>
-          <div className="flex items-baseline justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
             <span className="font-display text-3xl font-extrabold text-dark-800 tracking-tight">
-              {usage.messagesThisMonth.toLocaleString('pt-BR')}
-            </span>
-            <span className="font-mono text-xs font-semibold text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded">
-              {msgLimitPercentage}% de {ent.messagesPerMonth.toLocaleString('pt-BR')}
+              {ent.creditsBalance.toLocaleString('pt-BR')}
             </span>
           </div>
           <div className="h-1.5 w-full rounded-full bg-neutral-100 overflow-hidden">
             <div
               className={`h-full rounded-full transition-all duration-500 ease-out ${
-                msgLimitPercentage >= 90 ? 'bg-error-500' : 'bg-brand-500'
+                creditsPercentage <= 10 ? 'bg-error-500' : 'bg-brand-500'
               }`}
-              style={{ width: `${msgLimitPercentage}%` }}
+              style={{ width: `${creditsPercentage}%` }}
             />
           </div>
+          <p className="text-xs font-medium text-neutral-500 pt-1 flex items-center justify-between border-t border-neutral-100 mt-2">
+            <span>Total no ciclo:</span>
+            <span className="font-mono font-bold text-dark-800">{ent.creditsPerCycle.toLocaleString('pt-BR')}</span>
+          </p>
         </div>
 
         <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-2xs hover:border-neutral-300 transition-all duration-200 space-y-2 group">
@@ -159,12 +161,12 @@ function WorkspaceHome() {
             </span>
             <Layers size={14} className="text-blue-500 group-hover:scale-110 transition-transform duration-200" />
           </div>
-          <div className="flex items-baseline justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
             <span className="font-display text-3xl font-extrabold text-dark-800 tracking-tight">
               {usage.campaignsThisMonth}
             </span>
-            <span className="font-mono text-xs text-neutral-500">
-              teto: {ent.campaignsPerMonth}
+            <span className="shrink-0 self-start text-xs font-bold text-neutral-600 bg-neutral-100 border border-neutral-200/80 px-2 py-0.5 rounded">
+              Limite: {ent.campaignsPerMonth}
             </span>
           </div>
           <p className="text-xs font-medium text-neutral-500 pt-1 flex items-center justify-between border-t border-neutral-100 mt-2">
@@ -180,12 +182,12 @@ function WorkspaceHome() {
             </span>
             <Users size={14} className="text-purple-500 group-hover:scale-110 transition-transform duration-200" />
           </div>
-          <div className="flex items-baseline justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
             <span className="font-display text-3xl font-extrabold text-dark-800 tracking-tight">
               {(summary.totalContacts - summary.optedOutContacts).toLocaleString('pt-BR')}
             </span>
-            <span className="font-mono text-xs text-neutral-500">
-              {summary.totalContacts.toLocaleString('pt-BR')} total
+            <span className="shrink-0 self-start text-xs font-bold text-neutral-600 bg-neutral-100 border border-neutral-200/80 px-2 py-0.5 rounded">
+              Total: {summary.totalContacts.toLocaleString('pt-BR')}
             </span>
           </div>
           <p className="text-xs font-medium text-neutral-500 pt-1 flex items-center justify-between border-t border-neutral-100 mt-2">
@@ -201,11 +203,11 @@ function WorkspaceHome() {
             </span>
             <TrendingUp size={14} className="text-emerald-600 group-hover:scale-110 transition-transform duration-200" />
           </div>
-          <div className="flex items-baseline justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
             <span className="font-display text-3xl font-extrabold text-dark-800 tracking-tight">
               {readRate}%
             </span>
-            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 rounded flex items-center gap-1">
+            <span className="shrink-0 self-start text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 rounded inline-flex items-center gap-1">
               <span>Entrega: {deliveryRate}%</span>
             </span>
           </div>
@@ -413,7 +415,7 @@ function WorkspaceHome() {
         <div className="space-y-6">
           {/* Gráfico 3: Separação Geográfica de Contatos por Estado UF */}
           <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xs space-y-4">
-            <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-neutral-100 pb-3">
               <div>
                 <h3 className="font-display text-sm font-bold text-dark-800 flex items-center gap-2">
                   <MapPin size={16} className="text-brand-600" />
@@ -423,7 +425,7 @@ function WorkspaceHome() {
                   Distribuição geográfica por DDD
                 </p>
               </div>
-              <span className="text-xs font-mono font-bold text-neutral-500 bg-neutral-100 px-2 py-0.5 rounded">
+              <span className="shrink-0 self-start sm:self-center text-xs font-mono font-bold text-neutral-500 bg-neutral-100 px-2 py-0.5 rounded">
                 {totalStateUFContacts} contatos
               </span>
             </div>
@@ -481,29 +483,29 @@ function WorkspaceHome() {
             </div>
 
             <div className="space-y-3 text-xs">
-              <div className="flex items-center justify-between p-3 rounded-xl bg-neutral-50 border border-neutral-200/80">
-                <div className="flex items-center gap-2.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-xl bg-neutral-50 border border-neutral-200/80">
+                <div className="flex items-center gap-2.5 min-w-0">
                   <MessageCircle size={16} className="text-emerald-600 shrink-0" />
-                  <div>
-                    <span className="font-bold text-dark-800 block">WhatsApp Baileys</span>
+                  <div className="min-w-0">
+                    <span className="font-bold text-dark-800 block">WhatsApp</span>
                     <span className="text-[11px] text-neutral-500">Números conectados</span>
                   </div>
                 </div>
-                <span className="font-mono font-bold text-dark-800 bg-white px-2 py-1 rounded border border-neutral-200">
-                  {summary.activeConnections} ativos
+                <span className="shrink-0 self-start sm:self-center font-mono font-bold text-dark-800 bg-white px-2 py-1 rounded border border-neutral-200 whitespace-nowrap">
+                  {summary.activeWaConnections ?? summary.activeConnections} ativos
                 </span>
               </div>
 
-              <div className="flex items-center justify-between p-3 rounded-xl bg-neutral-50 border border-neutral-200/80">
-                <div className="flex items-center gap-2.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-xl bg-neutral-50 border border-neutral-200/80">
+                <div className="flex items-center gap-2.5 min-w-0">
                   <Send size={16} className="text-blue-500 shrink-0" />
-                  <div>
+                  <div className="min-w-0">
                     <span className="font-bold text-dark-800 block">Telegram</span>
-                    <span className="text-[11px] text-neutral-500">Bots ativos</span>
+                    <span className="text-[11px] text-neutral-500">Contas conectadas</span>
                   </div>
                 </div>
-                <span className="font-mono font-bold text-dark-800 bg-white px-2 py-1 rounded border border-neutral-200">
-                  Ativo
+                <span className="shrink-0 self-start sm:self-center font-mono font-bold text-dark-800 bg-white px-2 py-1 rounded border border-neutral-200 whitespace-nowrap">
+                  {summary.activeTgConnections ?? 0} ativos
                 </span>
               </div>
             </div>
@@ -531,9 +533,9 @@ function WorkspaceHome() {
           </Link>
         </div>
 
-        <div className="flex-1 overflow-x-auto">
+        <div className="flex-1 overflow-x-auto -mx-5 px-5">
           {stats?.recentCampaigns && stats.recentCampaigns.length > 0 ? (
-            <table className="w-full text-left text-sm">
+            <table className="min-w-[640px] w-full text-left text-sm">
               <thead className="bg-neutral-50/80 border-b border-neutral-200/80 text-[11px] font-bold uppercase tracking-wider text-neutral-500">
                 <tr>
                   <th className="py-3.5 pl-6 pr-4">Campanha</th>
@@ -547,7 +549,6 @@ function WorkspaceHome() {
               <tbody className="divide-y divide-neutral-100 text-neutral-700 font-medium">
                 {stats.recentCampaigns.map((camp: any) => {
                   const campRate = camp.totalContacts > 0 ? Math.round((camp.readCount / camp.totalContacts) * 100) : 0
-                  const isWa = camp.channel === 'whatsapp'
                   return (
                     <tr key={camp.id} className="hover:bg-neutral-50/80 transition-colors group">
                       <td className="py-4 pl-6 pr-4">
@@ -560,16 +561,7 @@ function WorkspaceHome() {
                         </Link>
                       </td>
                       <td className="py-4 px-4">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border ${
-                            isWa
-                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200/80'
-                              : 'bg-blue-50 text-blue-800 border-blue-200/80'
-                          }`}
-                        >
-                          {isWa ? <MessageCircle size={13} className="text-emerald-600" /> : <Send size={13} className="text-blue-500" />}
-                          <span>{isWa ? 'WhatsApp' : 'Telegram'}</span>
-                        </span>
+                        <ChannelBadge channel={camp.channel} />
                       </td>
                       <td className="py-4 px-4">
                         <StatusBadge status={camp.status} />

@@ -43,14 +43,34 @@
         "@naia/queue": "workspace:*",
         "@naia/scheduling": "workspace:*",
         "@naia/schemas": "workspace:*",
+        "@naia/session-host-client": "workspace:*",
         "@naia/storage": "workspace:*",
         "@naia/vianova-auth": "workspace:*",
+        "drizzle-orm": "^0.44",
+        "elysia": "^1",
+        "logixlysia": "^6.6.0",
+        "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+      },
+      "devDependencies": {
+        "@naia/config": "workspace:*",
+        "bun-types": "latest",
+        "typescript": "^5",
+      },
+    },
+    "campaigns/apps/session-host": {
+      "name": "@naia/session-host",
+      "version": "0.0.1",
+      "dependencies": {
+        "@elysiajs/cors": "^1",
+        "@naia/db": "workspace:*",
+        "@naia/queue": "workspace:*",
+        "@naia/schemas": "workspace:*",
+        "@naia/storage": "workspace:*",
         "@whiskeysockets/baileys": "latest",
         "drizzle-orm": "^0.44",
         "elysia": "^1",
         "logixlysia": "^6.6.0",
         "teleproto": "^1.228.2",
-        "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
       },
       "devDependencies": {
         "@naia/config": "workspace:*",
@@ -94,8 +114,8 @@
         "@naia/queue": "workspace:*",
         "@naia/scheduling": "workspace:*",
         "@naia/schemas": "workspace:*",
+        "@naia/session-host-client": "workspace:*",
         "@naia/storage": "workspace:*",
-        "@whiskeysockets/baileys": "latest",
         "drizzle-orm": "^0.44",
       },
       "devDependencies": {
@@ -176,6 +196,19 @@
       "version": "0.0.1",
       "dependencies": {
         "@sinclair/typebox": "^0.34",
+      },
+      "devDependencies": {
+        "@naia/config": "workspace:*",
+        "bun-types": "latest",
+        "typescript": "^5",
+      },
+    },
+    "campaigns/packages/session-host-client": {
+      "name": "@naia/session-host-client",
+      "version": "0.0.1",
+      "dependencies": {
+        "@naia/queue": "workspace:*",
+        "@naia/schemas": "workspace:*",
       },
       "devDependencies": {
         "@naia/config": "workspace:*",
@@ -505,6 +538,10 @@
     "@naia/scheduling": ["@naia/scheduling@workspace:campaigns/packages/scheduling"],
 
     "@naia/schemas": ["@naia/schemas@workspace:campaigns/packages/schemas"],
+
+    "@naia/session-host": ["@naia/session-host@workspace:campaigns/apps/session-host"],
+
+    "@naia/session-host-client": ["@naia/session-host-client@workspace:campaigns/packages/session-host-client"],
 
     "@naia/storage": ["@naia/storage@workspace:campaigns/packages/storage"],
 

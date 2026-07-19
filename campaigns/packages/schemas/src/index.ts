@@ -21,6 +21,7 @@ export const PERMISSION_KEYS = [
   'members',
   'billing',
   'settings',
+  'files',
 ] as const
 export type PermissionKey = (typeof PERMISSION_KEYS)[number]
 
@@ -37,6 +38,7 @@ export const OWNER_PERMISSIONS: RolePermissionMap = {
   members: true,
   billing: true,
   settings: true,
+  files: true,
 }
 
 export const DEFAULT_ROLE_PERMISSIONS: WorkspaceRolePermissions = {
@@ -47,6 +49,7 @@ export const DEFAULT_ROLE_PERMISSIONS: WorkspaceRolePermissions = {
     members: true,
     billing: true,
     settings: true,
+    files: true,
   },
   member: {
     contacts: true,
@@ -55,6 +58,7 @@ export const DEFAULT_ROLE_PERMISSIONS: WorkspaceRolePermissions = {
     members: false,
     billing: false,
     settings: false,
+    files: false,
   },
 }
 
@@ -128,8 +132,55 @@ export type CampaignRunStatus = Static<typeof CampaignRunStatus>
 export const CampaignKind = Type.Union([Type.Literal('manual'), Type.Literal('automation')])
 export type CampaignKind = Static<typeof CampaignKind>
 
-export const AutomationType = Type.Union([Type.Literal('birthday')])
+export const AutomationType = Type.Union([
+  Type.Literal('birthday'),
+  Type.Literal('webhook'),
+  Type.Literal('tag_added'),
+  Type.Literal('contact_created'),
+])
 export type AutomationType = Static<typeof AutomationType>
+
+export const AutomationStepAction = Type.Union([
+  Type.Literal('message'),
+  Type.Literal('delay'),
+  Type.Literal('add_tag'),
+])
+export type AutomationStepAction = Static<typeof AutomationStepAction>
+
+export const AutomationStepSchema = Type.Object({
+  id: Type.String(),
+  action: AutomationStepAction,
+  // Ação de mensagem
+  content: Type.Optional(
+    Type.Array(
+      Type.Object({
+        body: Type.String({ minLength: 1 }),
+        mediaAssetIds: Type.Optional(Type.Array(Type.String())),
+      }),
+    ),
+  ),
+  // Ação de delay (espera)
+  delayHours: Type.Optional(Type.Integer({ minimum: 1 })),
+  // Ação de adicionar tag
+  tag: Type.Optional(Type.String({ minLength: 1 })),
+})
+export type AutomationStep = Static<typeof AutomationStepSchema>
+
+export const AutomationEnrollmentStatus = Type.Union([
+  Type.Literal('active'),
+  Type.Literal('completed'),
+  Type.Literal('cancelled'),
+])
+export type AutomationEnrollmentStatus = Static<typeof AutomationEnrollmentStatus>
+
+// Config do gatilho, por tipo: webhook → { secret } (credencial da URL pública),
+// tag_added → { tag } (qual tag dispara a automação)
+export const AutomationTriggerConfigSchema = Type.Object({
+  secret: Type.Optional(Type.String()),
+  tag: Type.Optional(Type.String()),
+})
+export type AutomationTriggerConfig = Static<typeof AutomationTriggerConfigSchema>
+
 
 // ─── Agendamento ─────────────────────────────────────────────────────────────
 // Persistido como JSON em campaigns.schedule_json. `immediate` dispara na hora
@@ -229,7 +280,7 @@ export type MediaRef = Static<typeof MediaRefSchema>
 // Espelha exatamente o payload sincronizado pelo Vianova em
 // POST /internal/entitlements (ver vianova/apps/api/src/lib/product-sync.ts):
 // { workspace_id, product_slug, tier, status, limits: { seats, connections,
-// messagesPerMonth, campaignsPerMonth } } — chaves batem com os planos
+// creditsPerCycle, campaignsPerMonth } } — chaves batem com os planos
 // seedados no catálogo do Vianova para o produto "naia".
 
 export const EntitlementsSchema = Type.Object({
@@ -237,8 +288,12 @@ export const EntitlementsSchema = Type.Object({
   status: Type.String(), // 'active' | 'none' | 'canceled' | 'past_due' ...
   seats: Type.Number(),
   connections: Type.Number(),
-  messagesPerMonth: Type.Number(),
+  creditsPerCycle: Type.Number(),
+  creditsBalance: Type.Number(),
   campaignsPerMonth: Type.Number(),
+  automations: Type.Number(), // -1 = ilimitado
+  storageBytes: Type.Number(),
+  maxFileSizeBytes: Type.Number(),
 })
 export type Entitlements = Static<typeof EntitlementsSchema>
 
@@ -276,6 +331,9 @@ export const SendMessageJobSchema = Type.Object({
 export type SendMessageJob = Static<typeof SendMessageJobSchema>
 
 export const PacerJobSchema = Type.Object({
+  // Desde quando o run está estacionado sem conexão saudável (epoch ms) —
+  // o pacer espera a conexão voltar até um teto antes de falhar as mensagens
+  noConnSince: Type.Optional(Type.Number()),
   runId: Type.String(),
   campaignId: Type.String(),
   sentInBurst: Type.Integer({ minimum: 0 }),

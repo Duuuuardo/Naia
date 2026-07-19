@@ -6,7 +6,7 @@
 // nunca dessincroniza e um tick perdido se recupera sozinho no seguinte.
 
 import { db, campaigns, automations } from '@naia/db'
-import { sql, eq } from 'drizzle-orm'
+import { sql, eq, and } from 'drizzle-orm'
 import { dayKeyInTz, isPastTimeOfDay } from '@naia/scheduling'
 
 const API_URL = process.env.NAIA_API_URL ?? 'http://localhost:4001'
@@ -58,8 +58,13 @@ async function tickDueCampaigns(): Promise<void> {
 }
 
 async function tickDueAutomations(): Promise<void> {
+  // Só aniversário passa pelo fluxo diário de evaluate — os outros gatilhos
+  // (webhook, tag_added, contact_created) entram pela régua (tickDueEnrollments)
   const now = new Date()
-  const active = await db.select().from(automations).where(eq(automations.active, true))
+  const active = await db
+    .select()
+    .from(automations)
+    .where(and(eq(automations.active, true), eq(automations.type, 'birthday')))
 
   for (const automation of active) {
     const today = dayKeyInTz(now, automation.timezone)
@@ -79,10 +84,50 @@ async function tickDueAutomations(): Promise<void> {
   }
 }
 
+async function tickDueEnrollments(): Promise<void> {
+  // Claim com lease: empurra next_step_at +5min ao reivindicar — se a chamada
+  // à API falhar (ou o worker morrer no meio), o lease expira e o próximo
+  // tick tenta de novo sozinho. Automação inativa não é reivindicada: a régua
+  // fica pausada e retoma quando reativarem.
+  const due = (await db.execute(sql`
+    WITH due AS (
+      SELECT e.id, e.automation_id FROM automation_enrollments e
+      JOIN automations a ON a.id = e.automation_id
+      WHERE e.status = 'active' AND e.next_step_at <= now() AND a.active = true
+      ORDER BY e.next_step_at
+      LIMIT 200
+      FOR UPDATE OF e SKIP LOCKED
+    )
+    UPDATE automation_enrollments e SET next_step_at = now() + interval '5 minutes', updated_at = now()
+    FROM due WHERE e.id = due.id
+    RETURNING e.id, due.automation_id AS "automationId"
+  `)) as unknown as Array<{ id: string; automationId: string }>
+  if (due.length === 0) return
+
+  const byAutomation = new Map<string, string[]>()
+  for (const row of due) {
+    const ids = byAutomation.get(row.automationId) ?? []
+    ids.push(row.id)
+    byAutomation.set(row.automationId, ids)
+  }
+
+  for (const [automationId, enrollmentIds] of byAutomation) {
+    try {
+      console.log(`[scheduler] automação ${automationId} — ${enrollmentIds.length} inscrição(ões) devida(s) na régua`)
+      const res = await callInternal(`/internal/automations/${automationId}/execute-steps`, { enrollmentIds })
+      if (!res.ok) throw new Error(`API retornou ${res.status}`)
+    } catch (err) {
+      // lease de 5min reagenda sozinho — só logar
+      console.error(`[scheduler] falha ao executar passos da automação ${automationId}:`, err)
+    }
+  }
+}
+
 export async function schedulerTick(): Promise<void> {
   try {
     await tickDueCampaigns()
     await tickDueAutomations()
+    await tickDueEnrollments()
   } catch (err) {
     console.error('[scheduler] erro no tick:', err)
   }

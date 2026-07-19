@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import type { WizardConnection, WizardDraft } from './types'
 import { TIMEZONES, WEEKDAY_LABELS } from './types'
+import { ToggleRow } from '../ui'
 
 const PRESET_META: Array<{
   id: SpeedPreset
@@ -515,51 +516,6 @@ function WeekdayPicker({
           )
         })}
       </div>
-    </div>
-  )
-}
-
-export function ToggleRow({
-  id,
-  label,
-  hint,
-  checked,
-  onChange,
-  icon: Icon,
-}: {
-  id: string
-  label: string
-  hint?: string
-  checked: boolean
-  onChange: (on: boolean) => void
-  icon?: typeof Clock
-}) {
-  return (
-    <div className="flex items-start justify-between gap-4">
-      <span className="min-w-0">
-        <label htmlFor={id} className="mb-0 flex cursor-pointer items-center gap-1.5 text-sm font-semibold">
-          {Icon && <Icon size={14} className="text-brand-500" aria-hidden="true" />}
-          {label}
-        </label>
-        {hint && <span className="mt-0.5 block text-[11px] leading-snug text-neutral-500">{hint}</span>}
-      </span>
-      <button
-        id={id}
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        onClick={() => onChange(!checked)}
-        className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 ${
-          checked ? 'bg-brand-500' : 'bg-neutral-300'
-        }`}
-      >
-        <span
-          className={`absolute top-0.5 size-5 rounded-full bg-white shadow-2xs transition-transform duration-200 ease-out ${
-            checked ? 'translate-x-[22px]' : 'translate-x-0.5'
-          }`}
-          aria-hidden="true"
-        />
-      </button>
     </div>
   )
 }

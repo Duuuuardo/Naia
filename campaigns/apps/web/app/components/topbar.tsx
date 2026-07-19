@@ -1,18 +1,25 @@
 import { Link, useRouter } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
-import { ChevronRight, Inbox, LayoutGrid, LogOut, Megaphone, UserRound } from 'lucide-react'
+import { ChevronRight, Inbox, LayoutGrid, LogOut, Megaphone, UserRound, Zap } from 'lucide-react'
 import { logout } from '../lib/vianova'
-import { NaiaLogo } from './logo'
+
 import { Avatar } from './ui'
+import { NotificationBell } from './notification-bell'
 
 export function Topbar({
   user,
   workspaceName,
   workspaceAvatarUrl,
+  credits,
+  workspaceId,
+  mobileNav,
 }: {
   user: { name: string; picture?: string | null; pictureFrame?: string | null }
   workspaceName?: string
   workspaceAvatarUrl?: string | null
+  credits?: { balance: number; perCycle: number }
+  workspaceId?: string
+  mobileNav?: React.ReactNode
 }) {
   const router = useRouter()
 
@@ -21,12 +28,16 @@ export function Topbar({
     router.navigate({ to: '/login' })
   }
 
+  const low = credits && credits.perCycle > 0 && credits.balance / credits.perCycle <= 0.1
+
   return (
     <header className="h-14 border-b border-neutral-200 bg-white">
       <div className="mx-auto flex h-full max-w-6xl items-center justify-between gap-4 px-4">
         <div className="flex items-center gap-2">
-          <Link to="/workspaces" aria-label="Seus workspaces">
-            <NaiaLogo className="h-6" />
+          {mobileNav}
+          <Link to="/workspaces" aria-label="Seus workspaces" className="inline-flex items-center gap-2">
+            <img src="/brand/naia-mark.png" alt="Naia" className="h-6 w-auto" />
+            <span className="font-sans text-lg font-bold tracking-tight text-dark-800">Campaigns</span>
           </Link>
           {workspaceName && (
             <span className="flex items-center gap-2 text-sm">
@@ -47,6 +58,22 @@ export function Topbar({
           )}
         </div>
         <div className="flex items-center gap-3">
+          {credits && workspaceId && (
+            <Link
+              to="/$workspaceId/billing"
+              params={{ workspaceId }}
+              title={`${credits.balance.toLocaleString('pt-BR')} créditos restantes`}
+              className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-bold transition-colors ${
+                low
+                  ? 'border-error-200 bg-error-50 text-error-600 hover:bg-error-100'
+                  : 'border-neutral-200 bg-neutral-50 text-neutral-600 hover:bg-neutral-100'
+              }`}
+            >
+              <Zap size={12} aria-hidden="true" className={low ? 'text-error-500' : 'text-amber-500'} />
+              <span>{credits.balance.toLocaleString('pt-BR')}</span>
+            </Link>
+          )}
+          <NotificationBell />
           <ProductSwitcher />
           <ProfileMenu user={user} onLogout={handleLogout} />
         </div>

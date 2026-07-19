@@ -1,4 +1,4 @@
-import { createFileRoute, useLoaderData } from '@tanstack/react-router'
+import { createFileRoute, useLoaderData, useRouteContext } from '@tanstack/react-router'
 import { fetchConnections, fetchContactTags } from '../../../../lib/actions'
 import { CampaignWizard } from '../../../../components/campaign-wizard'
 import { emptyDraft } from '../../../../components/campaign-wizard/types'
@@ -17,7 +17,8 @@ export const Route = createFileRoute('/_app/$workspaceId/campaigns/new')({
 function NewCampaignPage() {
   const { connections, availableTags } = Route.useLoaderData()
   const { workspaceId } = Route.useParams()
-  const { entitlements } = useLoaderData({ from: '/_app/$workspaceId' })
+  const { entitlements, permissions } = useLoaderData({ from: '/_app/$workspaceId' })
+  const { user } = useRouteContext({ from: '/_app' })
 
   return (
     <CampaignWizard
@@ -26,6 +27,8 @@ function NewCampaignPage() {
       availableTags={availableTags}
       tier={entitlements?.tier ?? 'free'}
       initialDraft={emptyDraft()}
+      userId={user.id}
+      permissions={permissions}
     />
   )
 }

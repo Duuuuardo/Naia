@@ -1,5 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
+import { getCookie } from '@tanstack/react-start/server'
 import { requireApi } from './session.server'
+import { SESSION_COOKIE } from './vianova'
 
 // ─── Workspaces ──────────────────────────────────────────────────────────────
 
@@ -629,9 +631,13 @@ export const fetchSendsTimeseries = createServerFn()
   .validator((data: { workspaceId: string; tz?: string }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    const { data: res } = await (api.workspaces({ workspaceId: data.workspaceId }).dashboard as any).timeseries.get({
-      query: { tz: data.tz },
+    const { data: res, error } = await (api as any).workspaces[data.workspaceId].dashboard.timeseries.get({
+      $query: { tz: data.tz },
     })
+    
+    if (error) {
+      console.error('[fetchSendsTimeseries] erro na API:', error?.status, JSON.stringify(error?.value))
+    }
     return (res ?? { perDay: [], perHour: [], timezone: 'America/Sao_Paulo' }) as {
       perDay: Array<{ date: string; sent: number; failed: number }>
       perHour: Array<{ hour: string; sent: number }>
@@ -699,13 +705,24 @@ export const importContactsFile = createServerFn()
 
 // ─── Automações ──────────────────────────────────────────────────────────────
 
+export type AutomationStepInput = {
+  id: string
+  action: 'message' | 'delay' | 'add_tag'
+  content?: CampaignVariantInput[]
+  delayHours?: number
+  tag?: string
+}
+
 export type AutomationPayload = {
   workspaceId: string
   name: string
-  type: 'birthday'
+  type: 'birthday' | 'webhook' | 'tag_added' | 'contact_created'
   connectionIds: string[]
-  content: CampaignVariantInput[]
-  sendTime: string
+  content?: CampaignVariantInput[]
+  steps?: AutomationStepInput[]
+  stopOnTags?: string[]
+  triggerTag?: string
+  sendTime?: string
   timezone?: string
   speed?: CampaignSpeedInput
   active?: boolean
@@ -772,3 +789,204 @@ export const fetchManageBillingUrl = createServerFn().handler(async (): Promise<
   const { data } = await api.billing['manage-url'].get()
   return (data as { url?: string } | null)?.url
 })
+
+// ─── Vianova Storage (arquivos do workspace) ─────────────────────────────────
+
+export const fetchWorkspaceFiles = createServerFn()
+  .validator((data: { workspaceId: string; status?: 'active' | 'trashed'; cursor?: string; ownerUserId?: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const query: Record<string, string | number> = { status: data.status ?? 'active', limit: 50 }
+    if (data.cursor) query.cursor = data.cursor
+    if (data.ownerUserId) query.ownerUserId = data.ownerUserId
+    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }) as any).files.get({
+      query,
+    })
+    if (error || !res) return { error: (error?.value as { message?: string })?.message ?? 'Erro ao listar arquivos.' }
+    return res as { items: Array<{ id: string; url: string; originalName: string; mimeType: string; sizeBytes: number; status: string; createdAt: string }>; nextCursor: string | null }
+  })
+
+export const fetchFileUsage = createServerFn()
+  .validator((workspaceId: string) => workspaceId)
+  .handler(async ({ data: workspaceId }) => {
+    const api = await requireApi()
+    const { data: res, error } = await (api.workspaces({ workspaceId }) as any).files.usage.get()
+    if (error || !res) return { error: (error?.value as { message?: string })?.message ?? 'Erro ao consultar uso.' }
+    return res as { usedBytes: number; quotaBytes: number; maxFileSizeBytes: number; fileCount: number; percent: number }
+  })
+
+export const uploadWorkspaceFile = createServerFn({ method: 'POST' })
+  .validator((data: FormData) => {
+    if (!(data instanceof FormData)) throw new Error('Expected FormData')
+    const workspaceId = data.get('workspaceId')?.toString()
+    const file = data.get('file')
+    if (!workspaceId || !(file instanceof File)) throw new Error('Dados inválidos.')
+    return { workspaceId, file }
+  })
+  .handler(async ({ data }) => {
+    const token = getCookie(SESSION_COOKIE)
+    if (!token) return { error: 'Não autenticado.' }
+
+    const form = new FormData()
+    form.append('file', data.file)
+
+    const apiUrl = process.env.NAIA_API_URL ?? 'http://localhost:4001'
+    const res = await fetch(`${apiUrl}/workspaces/${encodeURIComponent(data.workspaceId)}/files/upload`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}` },
+      body: form,
+    })
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ message: 'Erro ao enviar arquivo.' }))
+      return { error: (body as { message?: string }).message ?? 'Erro ao enviar arquivo.' }
+    }
+
+    return (await res.json()) as { id: string; url: string; sizeBytes: number; mimeType: string; originalName: string }
+  })
+
+function mediaKindFromMime(mimeType: string): 'image' | 'video' | 'audio' | 'document' {
+  if (mimeType.startsWith('image/')) return 'image'
+  if (mimeType.startsWith('video/')) return 'video'
+  if (mimeType.startsWith('audio/')) return 'audio'
+  return 'document'
+}
+
+export const uploadCampaignMedia = createServerFn({ method: 'POST' })
+  .validator((data: FormData) => {
+    if (!(data instanceof FormData)) throw new Error('Expected FormData')
+    const workspaceId = data.get('workspaceId')?.toString()
+    const file = data.get('file')
+    if (!workspaceId || !(file instanceof File)) throw new Error('Dados inválidos.')
+    return { workspaceId, file }
+  })
+  .handler(async ({ data }) => {
+    const token = getCookie(SESSION_COOKIE)
+    if (!token) return { error: 'Não autenticado.' }
+
+    const form = new FormData()
+    form.append('file', data.file)
+
+    const apiUrl = process.env.NAIA_API_URL ?? 'http://localhost:4001'
+    const res = await fetch(`${apiUrl}/workspaces/${encodeURIComponent(data.workspaceId)}/files/upload`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}` },
+      body: form,
+    })
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ message: 'Erro ao enviar arquivo.' }))
+      return { error: (body as { message?: string }).message ?? 'Erro ao enviar arquivo.' }
+    }
+
+    const file = (await res.json()) as { id: string; url: string; sizeBytes: number; mimeType: string; originalName: string }
+    return {
+      assetId: file.id,
+      filename: file.originalName,
+      mimeType: file.mimeType,
+      kind: mediaKindFromMime(file.mimeType),
+      previewUrl: file.url,
+    }
+  })
+
+export const deleteWorkspaceFile = createServerFn()
+  .validator((data: { workspaceId: string; fileId: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { error } = await (api.workspaces({ workspaceId: data.workspaceId }) as any).files({ fileId: data.fileId }).delete()
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao remover arquivo.' }
+    return { ok: true as const }
+  })
+
+export const restoreWorkspaceFile = createServerFn()
+  .validator((data: { workspaceId: string; fileId: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { error } = await (api.workspaces({ workspaceId: data.workspaceId }) as any).files({ fileId: data.fileId }).restore.post()
+    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao restaurar arquivo.' }
+    return { ok: true as const }
+  })
+
+// ─── Notificações (proxy para central do Vianova) ────────────────────────────
+
+export type NotificationItem = {
+  id: string
+  type: 'billing' | 'security' | 'product' | 'marketing'
+  title: string
+  body: string | null
+  readAt: string | null
+  actionUrl: string | null
+  actionLabel: string | null
+  source: string
+  sourceProductSlug: string | null
+  sourceWorkspaceId: string | null
+  sourceWorkspaceName: string | null
+  createdAt: string
+  metadata: Record<string, string | number | boolean | null> | null
+}
+
+export const fetchNotifications = createServerFn()
+  .validator((data: { page?: number; productSlug?: string }) => data)
+  .handler(async ({ data }): Promise<{ notifications: NotificationItem[]; total: number; page: number; hasMore?: boolean }> => {
+    const api = await requireApi()
+    const query: Record<string, string | number> = { page: data.page ?? 1 }
+    if (data.productSlug) query.product_slug = data.productSlug
+    const { data: res, error } = await api.notifications.get({ query })
+    if (error || !res) return { notifications: [] as NotificationItem[], total: 0, page: 1 }
+    return res as { notifications: NotificationItem[]; total: number; page: number; hasMore?: boolean }
+  })
+
+export const fetchUnreadNotificationCount = createServerFn()
+  .handler(async (): Promise<{ count: number }> => {
+    const api = await requireApi()
+    const { data: res, error } = await api.notifications['unread-count'].get()
+    if (error || !res) return { count: 0 }
+    return res as { count: number }
+  })
+
+export const markNotificationRead = createServerFn()
+  .validator((notificationId: string) => notificationId)
+  .handler(async ({ data: notificationId }): Promise<{ ok: true }> => {
+    const api = await requireApi()
+    await api.notifications({ id: notificationId }).read.post()
+    return { ok: true as const }
+  })
+
+export const markAllNotificationsRead = createServerFn()
+  .handler(async (): Promise<{ ok: true }> => {
+    const api = await requireApi()
+    await api.notifications['read-all'].post()
+    return { ok: true as const }
+  })
+
+export type NotificationPreferences = {
+  emailOnCampaignCompleted: boolean
+  emailOnCampaignFailed: boolean
+  emailOnCreditsExhausted: boolean
+  emailOnConnectionDisconnected: boolean
+}
+
+export const fetchNotificationPreferences = createServerFn()
+  .validator((workspaceId: string) => workspaceId)
+  .handler(async ({ data: workspaceId }): Promise<NotificationPreferences> => {
+    const api = await requireApi()
+    const { data: res, error } = await (api.workspaces({ workspaceId }) as any)['notification-preferences'].get()
+    if (error || !res) {
+      return {
+        emailOnCampaignCompleted: true,
+        emailOnCampaignFailed: true,
+        emailOnCreditsExhausted: true,
+        emailOnConnectionDisconnected: true,
+      }
+    }
+    return res.preferences as NotificationPreferences
+  })
+
+export const updateNotificationPreferences = createServerFn()
+  .validator((data: { workspaceId: string; preferences: Partial<NotificationPreferences> }) => data)
+  .handler(async ({ data }): Promise<NotificationPreferences> => {
+    const api = await requireApi()
+    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }) as any)['notification-preferences'].patch(data.preferences)
+    if (error || !res) throw new Error('Erro ao salvar preferências.')
+    return res.preferences as NotificationPreferences
+  })

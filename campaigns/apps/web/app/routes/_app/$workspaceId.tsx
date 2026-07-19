@@ -1,7 +1,8 @@
 import { createFileRoute, Link, Outlet, redirect, useRouteContext } from '@tanstack/react-router'
-import { CreditCard, House, Megaphone, Plug, Settings, Users, UsersRound, Workflow } from 'lucide-react'
+import { CreditCard, Files, House, Megaphone, Plug, Settings, Users, UsersRound, Workflow } from 'lucide-react'
 import type { PermissionKey, RolePermissionMap } from '@naia/schemas'
 import { Topbar } from '../../components/topbar'
+import { MobileNav } from '../../components/mobile-nav'
 import { fetchWorkspace } from '../../lib/actions'
 
 export const Route = createFileRoute('/_app/$workspaceId')({
@@ -32,11 +33,12 @@ const navItems: {
   { to: '/$workspaceId/automations', label: 'Automações', icon: Workflow, permission: 'campaigns' },
   { to: '/$workspaceId/members', label: 'Membros', icon: Users, permission: 'members' },
   { to: '/$workspaceId/billing', label: 'Assinatura', icon: CreditCard, permission: 'billing' },
+  { to: '/$workspaceId/files', label: 'Arquivos', icon: Files, permission: 'files' },
   { to: '/$workspaceId/settings', label: 'Configurações', icon: Settings, permission: 'settings' },
 ]
 
 function WorkspaceLayout() {
-  const { workspace, permissions } = Route.useLoaderData()
+  const { workspace, permissions, entitlements } = Route.useLoaderData()
   const { user } = useRouteContext({ from: '/_app' })
   const { workspaceId } = Route.useParams()
 
@@ -50,6 +52,9 @@ function WorkspaceLayout() {
         user={user}
         workspaceName={workspace.name}
         workspaceAvatarUrl={'avatarUrl' in workspace ? (workspace.avatarUrl as string | null) : null}
+        credits={{ balance: entitlements.creditsBalance, perCycle: entitlements.creditsPerCycle }}
+        workspaceId={workspaceId}
+        mobileNav={<MobileNav workspaceId={workspaceId} items={visibleItems} />}
       />
       <div className="flex-1 flex max-w-6xl w-full mx-auto">
         <aside className="hidden md:block w-48 shrink-0 border-r border-neutral-200 py-8 pr-4">

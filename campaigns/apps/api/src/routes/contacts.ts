@@ -6,8 +6,28 @@ import { matchesBirthdayToday, todayMonthDay, DEFAULT_TIMEZONE } from '@naia/sch
 
 import { authPlugin } from '../plugins/auth'
 import { resolveWorkspaceAccess } from '../lib/workspace-auth'
+import { handleContactCreated, handleTagsAdded } from '../lib/automation-triggers'
 import { generateId } from '../lib/crypto'
-import { getGroupParticipants, resolveWhatsAppContactName, enrichWhatsAppContactInfo, batchEnrichWhatsAppContacts, getActiveWhatsAppConnectionForWorkspace } from '../lib/whatsapp-manager'
+import {
+  getGroupParticipants,
+  resolveWhatsAppContactName,
+  enrichWhatsAppContact,
+  batchEnrichWhatsAppContacts,
+} from '@naia/session-host-client'
+
+async function getActiveWhatsAppConnectionForWorkspace(workspaceId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ id: connections.id })
+    .from(connections)
+    .where(and(
+      eq(connections.workspaceId, workspaceId),
+      eq(connections.channel, 'whatsapp'),
+      eq(connections.status, 'active'),
+    ))
+    .orderBy(connections.createdAt)
+    .limit(1)
+  return row?.id ?? null
+}
 
 async function pickWhatsAppConnectionId(workspaceId: string, connectionIds: string[]): Promise<string> {
   if (connectionIds.length > 0) {
@@ -184,7 +204,7 @@ export async function resolveCampaignTargets(workspaceId: string, connectionIds:
       let groupName = gc?.name || `Grupo ${gId}`
       if (gId.endsWith('@g.us')) {
         try {
-          const enriched = await enrichWhatsAppContactInfo(connectionId, gId, groupName, true)
+          const enriched = await enrichWhatsAppContact(connectionId, gId, groupName)
           if (enriched.avatarUrl) avatarUrl = enriched.avatarUrl
           if (enriched.name && enriched.name !== `Contato +${gId}`) groupName = enriched.name
         } catch {}
@@ -264,7 +284,7 @@ export async function resolveCampaignTargets(workspaceId: string, connectionIds:
       const isGenericName = (name: string) => !name || name.startsWith('Contato +') || name.startsWith('Contato ') || name.startsWith('Membro ') || name === phone || name === `+${phone}`
       const resolvedName = enriched?.name && !isGenericName(enriched.name)
         ? enriched.name
-        : resolveWhatsAppContactName(connectionId, p.id, p.name || null)
+        : await resolveWhatsAppContactName(connectionId, p.id, p.name || null)
       const avatarUrl = enriched?.avatarUrl || (p as any).avatarUrl || null
 
       let [existing] = await db
@@ -366,13 +386,14 @@ async function importContactRows(
 
       if (whatsappPhone) {
         const [existing] = await db
-          .select({ id: contacts.id })
+          .select({ id: contacts.id, tags: contacts.tags })
           .from(contacts)
           .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.whatsappPhone, whatsappPhone)))
           .limit(1)
 
         if (existing) {
           if (onDuplicate === 'skip') { skipped++; continue }
+          const addedTags = tags.filter((tag) => !existing.tags.includes(tag))
           await db.update(contacts).set({
             name,
             telegramChatId: telegramChatId ?? undefined,
@@ -403,6 +424,7 @@ async function importContactRows(
             }).onConflictDoNothing()
           }
 
+          if (addedTags.length > 0) await handleTagsAdded(workspaceId, [existing.id], addedTags)
           imported++
           continue
         }
@@ -442,6 +464,10 @@ async function importContactRows(
         }).onConflictDoNothing()
       }
 
+      // Gatilhos de automação: contato novo + tags que vieram no import
+      await handleContactCreated(workspaceId, newId)
+      if (tags.length > 0) await handleTagsAdded(workspaceId, [newId], tags)
+
       imported++
     } catch (err) {
       failed++
@@ -463,18 +489,24 @@ async function applyTagToIdentifiers(
   identifiers: { phones: string[]; telegramIds: string[] },
 ): Promise<void> {
   const notTagged = sql`NOT (${contacts.tags} @> ARRAY[${tag}]::text[])`
+  const taggedIds: string[] = []
   if (identifiers.phones.length > 0) {
-    await db
+    const rows = await db
       .update(contacts)
       .set({ tags: sql`array_append(${contacts.tags}, ${tag})`, updatedAt: new Date() })
       .where(and(eq(contacts.workspaceId, workspaceId), inArray(contacts.whatsappPhone, identifiers.phones), notTagged))
+      .returning({ id: contacts.id })
+    taggedIds.push(...rows.map((r) => r.id))
   }
   if (identifiers.telegramIds.length > 0) {
-    await db
+    const rows = await db
       .update(contacts)
       .set({ tags: sql`array_append(${contacts.tags}, ${tag})`, updatedAt: new Date() })
       .where(and(eq(contacts.workspaceId, workspaceId), inArray(contacts.telegramChatId, identifiers.telegramIds), notTagged))
+      .returning({ id: contacts.id })
+    taggedIds.push(...rows.map((r) => r.id))
   }
+  if (taggedIds.length > 0) await handleTagsAdded(workspaceId, taggedIds, [tag])
 }
 
 function slugify(value: string): string {
@@ -750,9 +782,12 @@ export const contactRoutes = new Elysia()
       let finalAvatarUrl = body.avatarUrl ?? null
       if (body.whatsappPhone && (!finalAvatarUrl || isGenericName(finalName))) {
         try {
-          const enriched = await enrichWhatsAppContactInfo(params.workspaceId, body.whatsappPhone, finalName, false)
-          if (enriched.avatarUrl && !finalAvatarUrl) finalAvatarUrl = enriched.avatarUrl
-          if (isGenericName(finalName) && enriched.name && !isGenericName(enriched.name)) finalName = enriched.name
+          const connectionId = await getActiveWhatsAppConnectionForWorkspace(params.workspaceId)
+          if (connectionId) {
+            const enriched = await enrichWhatsAppContact(connectionId, body.whatsappPhone, finalName)
+            if (enriched.avatarUrl && !finalAvatarUrl) finalAvatarUrl = enriched.avatarUrl
+            if (isGenericName(finalName) && enriched.name && !isGenericName(enriched.name)) finalName = enriched.name
+          }
         } catch {}
       }
 
@@ -809,6 +844,10 @@ export const contactRoutes = new Elysia()
           }
         }
       }
+
+      // Gatilhos de automação: contato novo + tags definidas no cadastro
+      await handleContactCreated(params.workspaceId, id)
+      if (body.tags && body.tags.length > 0) await handleTagsAdded(params.workspaceId, [id], body.tags)
 
       const [contact] = await db.select().from(contacts).where(eq(contacts.id, id)).limit(1)
       const identities = await db.select().from(contactIdentities).where(eq(contactIdentities.contactId, id))
@@ -889,13 +928,19 @@ export const contactRoutes = new Elysia()
       if (body.notes !== undefined) updates.notes = body.notes
       if (body.tags !== undefined) updates.tags = body.tags
       if (body.customFields !== undefined) updates.customFields = JSON.stringify(body.customFields)
-      if (body.optInStatus !== undefined) {
+      if (body.optInStatus !== undefined && !existing.isGroup) {
         updates.optInStatus = body.optInStatus
         if (body.optInStatus && !existing.optInStatus) updates.optInAt = new Date()
       }
 
 
       await db.update(contacts).set(updates).where(eq(contacts.id, params.contactId))
+
+      // Tags novas acionam automações (tag_added) e o freio de mão das réguas
+      if (body.tags !== undefined) {
+        const addedTags = body.tags.filter((tag) => !existing.tags.includes(tag))
+        if (addedTags.length > 0) await handleTagsAdded(params.workspaceId, [params.contactId], addedTags)
+      }
 
       if (body.telegramChatId) {
         const [existingTg] = await db
@@ -1246,7 +1291,7 @@ export const contactRoutes = new Elysia()
         const isGenericName = (name: string) => !name || name.startsWith('Contato +') || name.startsWith('Contato ') || name.startsWith('Membro ') || name === phone || name === `+${phone}`
         const resolvedName = enriched?.name && !isGenericName(enriched.name)
           ? enriched.name
-          : resolveWhatsAppContactName(connectionId, p.id, p.name || null)
+          : await resolveWhatsAppContactName(connectionId, p.id, p.name || null)
         const avatarUrl = enriched?.avatarUrl || (p as any).avatarUrl || null
 
         const [existing] = await db
@@ -1297,7 +1342,7 @@ export const contactRoutes = new Elysia()
       let groupAvatar = gc.avatarUrl
       let groupName = gc.name
       try {
-        const enrichedGroup = await enrichWhatsAppContactInfo(connectionId, groupJid, gc.name, true)
+        const enrichedGroup = await enrichWhatsAppContact(connectionId, groupJid, gc.name)
         if (enrichedGroup.avatarUrl) groupAvatar = enrichedGroup.avatarUrl
         if (enrichedGroup.name && enrichedGroup.name !== `Contato +${groupJid}`) groupName = enrichedGroup.name
       } catch {}

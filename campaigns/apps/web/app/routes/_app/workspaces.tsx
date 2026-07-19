@@ -232,7 +232,7 @@ function WorkspacesPage() {
 
           <button
             onClick={() => setShowCreate(true)}
-            className="h-10 px-4 rounded-md bg-brand-500 text-white text-sm font-semibold hover:bg-brand-600 active:scale-[0.98] transition-all shadow-sm inline-flex items-center justify-center gap-2 shrink-0"
+            className="h-10 px-4 rounded-md bg-brand-500 text-white text-sm font-semibold hover:bg-brand-600 active:scale-[0.98] transition-all shadow-sm inline-flex items-center justify-center gap-2 shrink-0 w-full md:w-auto"
           >
             <Plus size={16} aria-hidden="true" />
             <span>Criar workspace</span>

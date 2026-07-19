@@ -423,14 +423,14 @@ function ContactsPage() {
             Gerencie sua base de clientes e leads segmentados por plataforma para envio de campanhas e automações.
           </p>
         </div>
-        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
-          <Button variant="secondary" icon={Tag} onClick={() => { setShowTagsModal(true); loadTags() }}>
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap w-full md:w-auto">
+          <Button className="flex-1 md:flex-none" variant="secondary" icon={Tag} onClick={() => { setShowTagsModal(true); loadTags() }}>
             Gerenciar Tags
           </Button>
-          <Button variant="secondary" icon={FileUp} onClick={() => { setShowImportModal(true); setShowCreateModal(false) }}>
+          <Button className="flex-1 md:flex-none" variant="secondary" icon={FileUp} onClick={() => { setShowImportModal(true); setShowCreateModal(false) }}>
             Importar CSV
           </Button>
-          <Button icon={UserRoundPlus} onClick={() => { setShowCreateModal(true); setShowImportModal(false) }}>
+          <Button className="flex-1 md:flex-none" icon={UserRoundPlus} onClick={() => { setShowCreateModal(true); setShowImportModal(false) }}>
             + Novo Contato
           </Button>
         </div>
@@ -510,8 +510,8 @@ function ContactsPage() {
             </div>
           </div>
         ) : (
-          <div className="overflow-x-auto [scrollbar-width:thin]">
-            <table className="w-full text-left text-sm">
+          <div className="overflow-x-auto -mx-5 px-5 [scrollbar-width:thin]">
+            <table className="min-w-[640px] w-full text-left text-sm">
               <thead className="bg-neutral-50 border-b border-neutral-200/80 text-[11px] font-bold uppercase tracking-wider text-neutral-500">
                 <tr>
                   <th className="py-3.5 pl-6 pr-4">Nome do Contato</th>
@@ -597,23 +597,11 @@ function ContactsPage() {
                         </span>
                       </td>
                       <td className="py-4 px-4">
-                        {c.isGroup || identifier.includes('@') ? (
-                          <div className="flex items-center gap-2 font-mono text-xs">
-                            <span
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-purple-50/90 border border-purple-200/80 text-purple-900 font-semibold max-w-[200px] truncate"
-                              title={`ID completo: ${identifier}`}
-                            >
-                              <Users size={12} className="text-purple-600 shrink-0" />
-                              <span className="truncate">ID: {identifier.replace(/@.*$/, '')}</span>
-                            </span>
-                            <button
-                              onClick={() => handleCopy(identifier, `${c.id}:${identifier}`)}
-                              title="Copiar ID completo do grupo (@g.us)"
-                              className="opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-dark-800 transition-opacity p-1 shrink-0"
-                            >
-                              {isCopied ? <Check size={13} className="text-success-600" /> : <Copy size={13} />}
-                            </button>
-                          </div>
+                        {c.isGroup ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-purple-50/90 border border-purple-200/80 text-purple-700 text-xs font-semibold">
+                            <Users size={12} className="text-purple-500 shrink-0" />
+                            Grupo
+                          </span>
                         ) : (
                           <div className="flex items-center gap-2 font-mono text-xs text-dark-800">
                             <span>{isWa ? `+${identifier}` : identifier}</span>

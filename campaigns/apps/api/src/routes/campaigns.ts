@@ -1,5 +1,5 @@
 import { Elysia, t } from 'elysia'
-import { db, campaigns, campaignMessages, campaignRuns, campaignConnections, campaignVariants, campaignVariantMedia, mediaAssets, connections, contacts } from '@naia/db'
+import { db, campaigns, campaignMessages, campaignRuns, campaignConnections, campaignVariants, campaignVariantMedia, mediaAssets, connections, contacts, entitlements } from '@naia/db'
 import { eq, and, sql, desc, asc, inArray, gte } from 'drizzle-orm'
 import { canCreateCampaign, canUseSpeed, hasActiveSubscription } from '@naia/entitlements'
 import { getQueue, QUEUES, defaultJobOptions } from '@naia/queue'
@@ -7,7 +7,7 @@ import { ScheduleSchema, SpeedSchema, type PacerJob, type Schedule, type Speed, 
 import { computeNextRunAt, DEFAULT_TIMEZONE } from '@naia/scheduling'
 import { authPlugin } from '../plugins/auth'
 import { resolveWorkspaceAccess } from '../lib/workspace-auth'
-import { startCampaignRun, getMonthlyMessageCount, monthStart, parseSchedule } from '../lib/campaign-runner'
+import { startCampaignRun, parseSchedule } from '../lib/campaign-runner'
 import { generateId } from '../lib/crypto'
 
 const VariantInput = t.Object({
@@ -15,12 +15,28 @@ const VariantInput = t.Object({
   mediaAssetIds: t.Optional(t.Array(t.String())),
 })
 
+function cycleStart(): Date {
+  const d = new Date()
+  d.setDate(1)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
 async function getMonthlyCampaignCount(workspaceId: string): Promise<number> {
   const [result] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(campaigns)
-    .where(and(eq(campaigns.workspaceId, workspaceId), gte(campaigns.createdAt, monthStart())))
+    .where(and(eq(campaigns.workspaceId, workspaceId), gte(campaigns.createdAt, cycleStart())))
   return result?.count ?? 0
+}
+
+async function getCreditsBalance(workspaceId: string): Promise<number> {
+  const [ent] = await db
+    .select({ creditsBalance: entitlements.creditsBalance })
+    .from(entitlements)
+    .where(eq(entitlements.workspaceId, workspaceId))
+    .limit(1)
+  return ent?.creditsBalance ?? 0
 }
 
 /** Conexões do workspace validadas contra a seleção do usuário. */
@@ -728,6 +744,7 @@ export const campaignRoutes = new Elysia()
           contactName: contacts.name,
           contactPhone: contacts.whatsappPhone,
           contactTelegram: contacts.telegramChatId,
+          contactIsGroup: contacts.isGroup,
         })
           .from(campaignMessages)
           .leftJoin(contacts, eq(campaignMessages.contactId, contacts.id))
@@ -760,14 +777,14 @@ export const campaignRoutes = new Elysia()
       if (!ctx) { set.status = 401; return { message: 'Não autenticado.' } }
       if (!ctx.permissions.campaigns) { set.status = 403; return { message: 'Seu papel não tem acesso a esta área do workspace.' } }
 
-      const [connectionsCount, contactsCount, messagesThisMonth, campaignsThisMonth] = await Promise.all([
+      const [connectionsCount, contactsCount, creditsBalance, campaignsThisMonth] = await Promise.all([
         db.select({ count: sql<number>`count(*)::int` }).from(connections).where(eq(connections.workspaceId, params.workspaceId)).then((r) => r[0]?.count ?? 0),
         db.select({ count: sql<number>`count(*)::int` }).from(contacts).where(eq(contacts.workspaceId, params.workspaceId)).then((r) => r[0]?.count ?? 0),
-        getMonthlyMessageCount(params.workspaceId),
+        getCreditsBalance(params.workspaceId),
         getMonthlyCampaignCount(params.workspaceId),
       ])
 
-      return { connectionsCount, contactsCount, messagesThisMonth, campaignsThisMonth }
+      return { connectionsCount, contactsCount, creditsBalance, campaignsThisMonth }
     },
   )
 
@@ -779,70 +796,76 @@ export const campaignRoutes = new Elysia()
       if (!ctx) { set.status = 401; return { message: 'Não autenticado.' } }
       if (!ctx.permissions.campaigns) { set.status = 403; return { message: 'Seu papel não tem acesso a esta área do workspace.' } }
 
-      const tz = query.tz ?? DEFAULT_TIMEZONE
+      const tz = query.tz || DEFAULT_TIMEZONE
 
-      // sent_at é timestamp naive em UTC: AT TIME ZONE 'UTC' o transforma em
-      // timestamptz, o segundo AT TIME ZONE projeta no fuso do usuário.
-      const perDayRows = await db.execute(sql`
-        SELECT
-          to_char((cm.sent_at AT TIME ZONE 'UTC') AT TIME ZONE ${tz}, 'YYYY-MM-DD') AS date,
-          count(*)::int AS sent
-        FROM campaign_messages cm
-        INNER JOIN campaigns c ON c.id = cm.campaign_id
-        WHERE c.workspace_id = ${params.workspaceId}
-          AND cm.sent_at IS NOT NULL
-          AND cm.sent_at >= now() - interval '30 days'
-        GROUP BY 1
-        ORDER BY 1
-      `)
+      try {
+        // sent_at é timestamp naive em UTC: AT TIME ZONE 'UTC' o transforma em
+        // timestamptz, o segundo AT TIME ZONE projeta no fuso do usuário.
+        const perDayRows = await db.execute(sql`
+          SELECT
+            to_char((cm.sent_at AT TIME ZONE 'UTC') AT TIME ZONE ${tz}, 'YYYY-MM-DD') AS date,
+            count(*)::int AS sent
+          FROM campaign_messages cm
+          INNER JOIN campaigns c ON c.id = cm.campaign_id
+          WHERE c.workspace_id = ${params.workspaceId}
+            AND cm.sent_at IS NOT NULL
+            AND cm.sent_at >= now() - interval '30 days'
+          GROUP BY 1
+          ORDER BY 1
+        `)
 
-      const failedPerDayRows = await db.execute(sql`
-        SELECT
-          to_char((cm.updated_at AT TIME ZONE 'UTC') AT TIME ZONE ${tz}, 'YYYY-MM-DD') AS date,
-          count(*)::int AS failed
-        FROM campaign_messages cm
-        INNER JOIN campaigns c ON c.id = cm.campaign_id
-        WHERE c.workspace_id = ${params.workspaceId}
-          AND cm.status = 'failed'
-          AND cm.updated_at >= now() - interval '30 days'
-        GROUP BY 1
-        ORDER BY 1
-      `)
+        const failedPerDayRows = await db.execute(sql`
+          SELECT
+            to_char((cm.updated_at AT TIME ZONE 'UTC') AT TIME ZONE ${tz}, 'YYYY-MM-DD') AS date,
+            count(*)::int AS failed
+          FROM campaign_messages cm
+          INNER JOIN campaigns c ON c.id = cm.campaign_id
+          WHERE c.workspace_id = ${params.workspaceId}
+            AND cm.status = 'failed'
+            AND cm.updated_at >= now() - interval '30 days'
+          GROUP BY 1
+          ORDER BY 1
+        `)
 
-      const perHourRows = await db.execute(sql`
-        SELECT
-          to_char((cm.sent_at AT TIME ZONE 'UTC') AT TIME ZONE ${tz}, 'HH24') AS hour,
-          count(*)::int AS sent
-        FROM campaign_messages cm
-        INNER JOIN campaigns c ON c.id = cm.campaign_id
-        WHERE c.workspace_id = ${params.workspaceId}
-          AND cm.sent_at IS NOT NULL
-          AND ((cm.sent_at AT TIME ZONE 'UTC') AT TIME ZONE ${tz})::date = (now() AT TIME ZONE ${tz})::date
-        GROUP BY 1
-        ORDER BY 1
-      `)
+        const perHourRows = await db.execute(sql`
+          SELECT
+            to_char((cm.sent_at AT TIME ZONE 'UTC') AT TIME ZONE ${tz}, 'HH24') AS hour,
+            count(*)::int AS sent
+          FROM campaign_messages cm
+          INNER JOIN campaigns c ON c.id = cm.campaign_id
+          WHERE c.workspace_id = ${params.workspaceId}
+            AND cm.sent_at IS NOT NULL
+            AND ((cm.sent_at AT TIME ZONE 'UTC') AT TIME ZONE ${tz})::date = (now() AT TIME ZONE ${tz})::date
+          GROUP BY 1
+          ORDER BY 1
+        `)
 
-      const failedByDate = new Map(
-        (failedPerDayRows as unknown as Array<{ date: string; failed: number }>).map((r) => [r.date, r.failed]),
-      )
-      const perDay = (perDayRows as unknown as Array<{ date: string; sent: number }>).map((r) => ({
-        date: r.date,
-        sent: r.sent,
-        failed: failedByDate.get(r.date) ?? 0,
-      }))
-      // Dias só com falhas (nenhum envio) também aparecem na série
-      for (const [date, failed] of failedByDate) {
-        if (!perDay.some((d) => d.date === date)) perDay.push({ date, sent: 0, failed })
-      }
-      perDay.sort((a, b) => a.date.localeCompare(b.date))
-
-      return {
-        perDay,
-        perHour: (perHourRows as unknown as Array<{ hour: string; sent: number }>).map((r) => ({
-          hour: r.hour,
-          sent: r.sent,
-        })),
-        timezone: tz,
+        const failedByDate = new Map(
+          (failedPerDayRows as unknown as Array<{ date: string; failed: number }>).map((r) => [r.date, r.failed]),
+        )
+        const perDay = (perDayRows as unknown as Array<{ date: string; sent: number }>).map((r) => ({
+          date: r.date,
+          sent: Number(r.sent),
+          failed: Number(failedByDate.get(r.date) ?? 0),
+        }))
+        // Dias só com falhas (nenhum envio) também aparecem na série
+        for (const [date, failed] of failedByDate) {
+          if (!perDay.some((d) => d.date === date)) perDay.push({ date, sent: 0, failed: Number(failed) })
+        }
+        perDay.sort((a, b) => a.date.localeCompare(b.date))
+        
+        return {
+          perDay,
+          perHour: (perHourRows as unknown as Array<{ hour: string; sent: number }>).map((r) => ({
+            hour: r.hour,
+            sent: Number(r.sent),
+          })),
+          timezone: tz,
+        }
+      } catch (err) {
+        console.error('[timeseries] erro ao consultar banco:', err)
+        set.status = 500
+        return { message: 'Erro ao buscar série temporal.' }
       }
     },
     {
@@ -863,9 +886,9 @@ export const campaignRoutes = new Elysia()
       const [
         connectionsCount,
         contactsCount,
-        messagesThisMonth,
+        creditsBalance,
         campaignsThisMonth,
-        activeConnectionsCount,
+        activeConnectionsStats,
         optedOutContactsCount,
         totalCampaignsCount,
         recentCampaigns,
@@ -876,9 +899,15 @@ export const campaignRoutes = new Elysia()
       ] = await Promise.all([
         db.select({ count: sql<number>`count(*)::int` }).from(connections).where(eq(connections.workspaceId, params.workspaceId)).then((r) => r[0]?.count ?? 0),
         db.select({ count: sql<number>`count(*)::int` }).from(contacts).where(eq(contacts.workspaceId, params.workspaceId)).then((r) => r[0]?.count ?? 0),
-        getMonthlyMessageCount(params.workspaceId),
+        getCreditsBalance(params.workspaceId),
         getMonthlyCampaignCount(params.workspaceId),
-        db.select({ count: sql<number>`count(*)::int` }).from(connections).where(and(eq(connections.workspaceId, params.workspaceId), eq(connections.status, 'active'))).then((r) => r[0]?.count ?? 0),
+        db.select({ channel: connections.channel, count: sql<number>`count(*)::int` }).from(connections).where(and(eq(connections.workspaceId, params.workspaceId), eq(connections.status, 'active'))).groupBy(connections.channel).then((rows) => {
+          return {
+            whatsapp: rows.find(r => r.channel === 'whatsapp')?.count ?? 0,
+            telegram: rows.find(r => r.channel === 'telegram')?.count ?? 0,
+            total: rows.reduce((acc, curr) => acc + curr.count, 0)
+          }
+        }),
         db.select({ count: sql<number>`count(*)::int` }).from(contacts).where(and(eq(contacts.workspaceId, params.workspaceId), eq(contacts.optInStatus, false))).then((r) => r[0]?.count ?? 0),
         db.select({ count: sql<number>`count(*)::int` }).from(campaigns).where(eq(campaigns.workspaceId, params.workspaceId)).then((r) => r[0]?.count ?? 0),
         db.select().from(campaigns).where(eq(campaigns.workspaceId, params.workspaceId)).orderBy(desc(campaigns.createdAt)).limit(6),
@@ -963,12 +992,14 @@ export const campaignRoutes = new Elysia()
       }
 
       return {
-        usage: { connectionsCount, contactsCount, messagesThisMonth, campaignsThisMonth },
+        usage: { connectionsCount, contactsCount, creditsBalance, campaignsThisMonth },
         summary: {
           totalCampaigns: totalCampaignsCount,
           totalContacts: contactsCount,
           optedOutContacts: optedOutContactsCount,
-          activeConnections: activeConnectionsCount,
+          activeConnections: activeConnectionsStats.total,
+          activeWaConnections: activeConnectionsStats.whatsapp,
+          activeTgConnections: activeConnectionsStats.telegram,
           totalContactsSum: campaignSums.totalContactsSum,
           sentCount: campaignSums.sentCount,
           deliveredCount: campaignSums.deliveredCount,

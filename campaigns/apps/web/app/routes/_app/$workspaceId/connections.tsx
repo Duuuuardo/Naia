@@ -38,7 +38,7 @@ import {
   importConnectionGroups,
   importGroupMembers,
 } from '../../../lib/actions'
-import { Button, StatusBadge } from '../../../components/ui'
+import { Button, StatusBadge, ChannelBadge, formatChannelName } from '../../../components/ui'
 
 export const Route = createFileRoute('/_app/$workspaceId/connections')({
   loader: ({ params }) => fetchConnections({ data: params.workspaceId }),
@@ -70,7 +70,7 @@ const PLATFORMS: PlatformOption[] = [
     id: 'telegram_user',
     name: 'Telegram Conta Pessoal',
     channel: 'Login por Telefone (código no app)',
-    description: 'Dispare campanhas pela sua própria conta do Telegram — informe o número, confirme o código recebido no app e pronto.',
+    description: 'Dispare campanhas pela sua própria conta do Telegram. Informe o número, confirme o código recebido no app e pronto.',
     icon: Send,
   },
 ]
@@ -94,7 +94,9 @@ function ConnectionsPage() {
 
   useEffect(() => {
     const hasWaitingWhatsApp = connections.some(
-      (c) => (c.channel === 'whatsapp' || (c as any).kind === 'user') && c.status !== 'active',
+      (c) =>
+        (c.channel === 'whatsapp' || (c as any).kind === 'user') &&
+        (c.status !== 'active' || (c as any).socketStatus !== 'connected'),
     )
     if (!hasWaitingWhatsApp && !adding) return
 
@@ -165,9 +167,9 @@ function ConnectionsPage() {
             Conecte e gerencie seus números de WhatsApp, contas pessoais e bots do Telegram, sincronize contatos e importe grupos para disparos.
           </p>
         </div>
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto">
           {!adding && (
-            <Button icon={Plus} onClick={handleStartAdd}>
+            <Button className="w-full md:w-auto" icon={Plus} onClick={handleStartAdd}>
               Adicionar Canal
             </Button>
           )}
@@ -364,6 +366,8 @@ function ConnectionsPage() {
             const isWa = c.channel === 'whatsapp'
             const isWhatsAppWaiting = isWa && c.status !== 'active'
             const isTgUserWaiting = isTgUser && c.status !== 'active'
+            const isReconnecting =
+              (isWa || isTgUser) && c.status === 'active' && (c as any).socketStatus !== 'connected'
 
             return (
               <div
@@ -386,9 +390,7 @@ function ConnectionsPage() {
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-dark-800 text-base">{c.name}</span>
-                        <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-neutral-500 bg-neutral-100 px-2 py-0.5 rounded">
-                          {c.channel}
-                        </span>
+                        <ChannelBadge channel={c.channel} />
                         {c.channel === 'telegram' && (
                           <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-sky-600 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded">
                             conta
@@ -397,11 +399,16 @@ function ConnectionsPage() {
                       </div>
                       <div className="mt-1 flex items-center gap-2">
                         <StatusBadge status={c.status} />
-                        {isWa && c.status === 'active' && (
+                        {isReconnecting ? (
+                          <span className="text-xs text-warning-600 font-semibold flex items-center gap-1">
+                            <Loader2 size={12} className="animate-spin" />
+                            Reconectando...
+                          </span>
+                        ) : isWa && c.status === 'active' ? (
                           <span className="text-xs text-success-600 font-semibold flex items-center gap-1">
                             • Pareado e Sincronizado
                           </span>
-                        )}
+                        ) : null}
                       </div>
                       {c.lastErrorMessage && (
                         <div className="mt-2.5 inline-flex items-center gap-1.5 text-xs text-error-600 bg-error-50 px-2.5 py-1 rounded-md border border-error-200 font-medium">

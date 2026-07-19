@@ -3,16 +3,16 @@ import {
   FileText,
   Film,
   ImageIcon,
-  Loader2,
   Music,
   Paperclip,
   Plus,
   Trash2,
   X,
 } from 'lucide-react'
-import { confirmMediaUpload, fetchMediaUrl, presignMediaUpload } from '../../lib/actions'
-import { ErrorNote } from '../ui'
-import type { WizardDraft, WizardMedia, WizardVariant } from './types'
+
+import { MediaPicker } from '../media-picker'
+import type { RolePermissionMap } from '@naia/schemas'
+import type { WizardDraft, WizardVariant } from './types'
 import { newVariantKey } from './types'
 
 const MAX_VARIANTS = 4
@@ -47,16 +47,18 @@ export function StepContent({
   draft,
   patch,
   workspaceId,
+  userId,
+  permissions,
 }: {
   draft: WizardDraft
   patch: (partial: Partial<WizardDraft>) => void
   workspaceId: string
+  userId: string
+  permissions: RolePermissionMap
 }) {
   const [activeKey, setActiveKey] = useState(draft.variants[0]?.key ?? '')
-  const [uploading, setUploading] = useState(false)
-  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [pickerOpen, setPickerOpen] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const active = draft.variants.find((v) => v.key === activeKey) ?? draft.variants[0]!
 
@@ -100,53 +102,13 @@ export function StepContent({
     })
   }
 
-  async function handleUpload(file: File) {
-    setUploadError(null)
-    setUploading(true)
-    try {
-      const presign = await presignMediaUpload({
-        data: { workspaceId, filename: file.name, mimeType: file.type, sizeBytes: file.size },
-      })
-      if ('error' in presign) {
-        setUploadError(presign.error ?? 'Erro ao preparar upload.')
-        return
-      }
-      const put = await fetch(presign.uploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: { 'Content-Type': file.type },
-      })
-      if (!put.ok) {
-        setUploadError('Falha no envio do arquivo. Tente novamente.')
-        return
-      }
-      const confirmed = await confirmMediaUpload({ data: { workspaceId, assetId: presign.assetId } })
-      if ('error' in confirmed) {
-        setUploadError(confirmed.error ?? 'Erro ao confirmar upload.')
-        return
-      }
-      const urlRes = await fetchMediaUrl({ data: { workspaceId, assetId: presign.assetId } })
-      const media: WizardMedia = {
-        assetId: presign.assetId,
-        filename: file.name,
-        kind: confirmed.asset.kind,
-        mimeType: file.type,
-        previewUrl: urlRes?.url ?? null,
-      }
-      patchVariant(active.key, { media: [...active.media, media] })
-    } finally {
-      setUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    }
-  }
-
   return (
     <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
       <aside className="hidden lg:block">
         <h3 className="text-sm font-bold text-dark-800">Por que usar mais de uma mensagem?</h3>
         <p className="mt-2 text-xs leading-relaxed text-neutral-600">
           Variantes dizem a mesma coisa de formas diferentes. O disparo alterna entre elas, então nenhum padrão
-          fixo se repete — isso reduz a chance da campanha ser marcada como spam.
+          fixo se repete. Isso reduz a chance da campanha ser marcada como spam.
         </p>
         <p className="mt-2 text-xs leading-relaxed text-neutral-600">
           Não é obrigatório, mas duas ou três variações já fazem diferença em campanhas grandes.
@@ -237,33 +199,30 @@ export function StepContent({
           </div>
 
           <div className="flex items-center gap-2 border-t border-neutral-100 px-3 py-2.5">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*,video/*,audio/*,.pdf,.doc,.docx"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0]
-                if (f) void handleUpload(f)
-              }}
-            />
             <button
               type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading || active.media.length >= MAX_MEDIA_PER_VARIANT}
+              onClick={() => setPickerOpen(true)}
+              disabled={active.media.length >= MAX_MEDIA_PER_VARIANT}
               className="inline-flex items-center gap-1.5 rounded-md border border-neutral-300 px-2.5 py-1.5 text-xs font-semibold text-dark-800 transition-colors duration-150 hover:border-brand-500 hover:text-brand-600 active:scale-[0.97] disabled:opacity-40"
             >
-              {uploading ? (
-                <Loader2 size={13} className="animate-spin" aria-hidden="true" />
-              ) : (
-                <Paperclip size={13} aria-hidden="true" />
-              )}
-              {uploading ? 'Enviando…' : 'Anexar mídia'}
+              <Paperclip size={13} aria-hidden="true" />
+              Anexar mídia
             </button>
             <span className="text-[11px] text-neutral-400">
-              Imagem até 10 MB · vídeo, áudio e documento até 50 MB
+              Escolha um arquivo do workspace ou envie um novo
             </span>
           </div>
+
+          <MediaPicker
+            workspaceId={workspaceId}
+            userId={userId}
+            permissions={permissions}
+            open={pickerOpen}
+            onClose={() => setPickerOpen(false)}
+            onSelect={(media) => {
+              patchVariant(active.key, { media: [...active.media, media] })
+            }}
+          />
 
           {active.media.length > 0 && (
             <div className="flex flex-wrap gap-2 border-t border-neutral-100 px-3 py-2.5">
@@ -298,8 +257,6 @@ export function StepContent({
             </div>
           )}
         </div>
-
-        {uploadError && <div className="mt-2"><ErrorNote>{uploadError}</ErrorNote></div>}
 
         {active.body.trim() && (
           <div className="mt-3 rounded-lg border border-neutral-200 bg-[#f6f2ee] p-4">

@@ -2,7 +2,7 @@
 // si vive em sends-chart.tsx e só é carregado (lazy) depois do mount no cliente.
 
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { TrendingUp } from 'lucide-react'
+import { TrendingUp, Send } from 'lucide-react'
 
 const SendsAreaChart = lazy(() => import('./sends-chart'))
 
@@ -13,7 +13,10 @@ export type TimeseriesData = {
 }
 
 function fillPerDay(perDay: TimeseriesData['perDay']): Array<{ label: string; sent: number; failed: number }> {
-  const byDate = new Map(perDay.map((d) => [d.date, d]))
+  const byDate = new Map(perDay.map((d) => {
+    const dateStr = typeof d.date === 'string' ? d.date : (d.date as any).toISOString?.() || String(d.date)
+    return [dateStr.split('T')[0], d]
+  }))
   const out: Array<{ label: string; sent: number; failed: number }> = []
   const today = new Date()
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -48,6 +51,7 @@ export function SendsTimeseriesCard({ data }: { data: TimeseriesData }) {
 
   const rows = mode === 'days' ? fillPerDay(data.perDay) : fillPerHour(data.perHour)
   const total = rows.reduce((sum, r) => sum + r.sent, 0)
+  const hasData = rows.some((r) => r.sent > 0 || r.failed > 0)
 
   return (
     <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xs space-y-4">
@@ -96,9 +100,18 @@ export function SendsTimeseriesCard({ data }: { data: TimeseriesData }) {
 
       <div className="h-56">
         {mounted ? (
-          <Suspense fallback={<ChartSkeleton />}>
-            <SendsAreaChart rows={rows} showFailed={mode === 'days'} />
-          </Suspense>
+          hasData ? (
+            <Suspense fallback={<ChartSkeleton />}>
+              <SendsAreaChart rows={rows} showFailed={mode === 'days'} />
+            </Suspense>
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+              <Send size={22} className="text-neutral-300" />
+              <p className="text-xs font-semibold text-neutral-400">
+                {mode === 'days' ? 'Nenhum envio nos últimos 30 dias' : 'Nenhum envio registrado hoje'}
+              </p>
+            </div>
+          )
         ) : (
           <ChartSkeleton />
         )}

@@ -5,10 +5,11 @@
 // Postgres é a única fonte da verdade; o Redis guarda no máximo um job de
 // controle por run.
 
-import { db, campaigns, campaignRuns, campaignMessages, campaignConnections, campaignVariants, campaignVariantMedia, mediaAssets, connections, contacts, entitlements } from '@naia/db'
-import { eq, and, sql, asc, inArray } from 'drizzle-orm'
-import { getQueue, QUEUES, defaultJobOptions } from '@naia/queue'
+import { db, campaigns, campaignRuns, campaignMessages, campaignConnections, campaignVariants, campaignVariantMedia, mediaAssets, connections, contacts, entitlements, automationEnrollments, workspaces } from '@naia/db'
+import { eq, and, sql, asc, desc, inArray } from 'drizzle-orm'
+import { getQueue, QUEUES, defaultJobOptions, getOutboundQueueName } from '@naia/queue'
 import type { PacerJob, SendMessageJob, Schedule, Speed, MediaRef, SpeedChannel } from '@naia/schemas'
+import { notifyWorkspaceOwner } from '../lib/vianova-notifications'
 import {
   isWithinWorkingHours,
   nextWindowStart,
@@ -21,6 +22,13 @@ import {
 
 const TERMINAL_RUN = ['completed', 'failed', 'cancelled', 'skipped_quota'] as const
 
+const NAIA_WEB_URL = () => process.env.NAIA_WEB_URL ?? 'http://localhost:3001'
+
+// Sem conexão saudável o run estaciona e reavalia — só falha de vez após o teto.
+// Cobre queda de conexão no meio do envio (ex: WhatsApp reconectando).
+const NO_CONNECTION_RETRY_MS = 60_000
+const NO_CONNECTION_MAX_WAIT_MS = 6 * 60 * 60 * 1000
+
 function parseJson<T>(json: string, fallback: T): T {
   try {
     return JSON.parse(json) as T
@@ -29,14 +37,14 @@ function parseJson<T>(json: string, fallback: T): T {
   }
 }
 
-export async function enqueuePacerStep(runId: string, campaignId: string, sentInBurst: number, delayMs: number): Promise<void> {
+export async function enqueuePacerStep(runId: string, campaignId: string, sentInBurst: number, delayMs: number, noConnSince?: number): Promise<void> {
   await db
     .update(campaignRuns)
     .set({ nextPacerAt: new Date(Date.now() + delayMs), updatedAt: new Date() })
     .where(eq(campaignRuns.id, runId))
   await getQueue<PacerJob>(QUEUES.CAMPAIGN_PACER).add(
     `pacer:${runId}:${Date.now()}`,
-    { runId, campaignId, sentInBurst },
+    { runId, campaignId, sentInBurst, noConnSince },
     { ...defaultJobOptions, delay: delayMs, removeOnComplete: { count: 100 } },
   )
 }
@@ -90,31 +98,28 @@ export async function handlePacerStep(job: PacerJob): Promise<void> {
     }
   }
 
-  // Cota mensal esgotada no meio do run: falha o restante e conclui
-  const [ent] = await db.select().from(entitlements).where(eq(entitlements.workspaceId, campaign.workspaceId)).limit(1)
-  if (ent) {
-    const monthStart = new Date()
-    monthStart.setDate(1)
-    monthStart.setHours(0, 0, 0, 0)
-    // Date direto em sql`` cru quebra o postgres-js — sempre ISO + cast
-    const rows = (await db.execute(sql`
-      SELECT count(*)::int AS c FROM campaign_messages cm
-      INNER JOIN campaigns c2 ON c2.id = cm.campaign_id
-      WHERE c2.workspace_id = ${campaign.workspaceId} AND cm.sent_at >= ${monthStart.toISOString()}::timestamptz
-    `)) as unknown as Array<{ c: number }>
-    if ((rows[0]?.c ?? 0) >= ent.messagesPerMonth) {
-      const failed = await db
-        .update(campaignMessages)
-        .set({ status: 'failed', failureReason: `Limite de mensagens do mês atingido (${ent.messagesPerMonth}).`, updatedAt: now })
-        .where(and(eq(campaignMessages.runId, runId), eq(campaignMessages.status, 'queued')))
-        .returning({ id: campaignMessages.id })
-      if (failed.length > 0) {
-        await db.update(campaignRuns).set({ failedCount: sql`${campaignRuns.failedCount} + ${failed.length}`, updatedAt: now }).where(eq(campaignRuns.id, runId))
-        await db.update(campaigns).set({ failedCount: sql`${campaigns.failedCount} + ${failed.length}`, updatedAt: now }).where(eq(campaigns.id, campaignId))
-      }
-      await completeRun(runId, campaignId)
-      return
+  // Créditos esgotados no meio do run: falha o restante e conclui
+  const [ent] = await db.select({ creditsBalance: entitlements.creditsBalance, tier: entitlements.tier }).from(entitlements).where(eq(entitlements.workspaceId, campaign.workspaceId)).limit(1)
+  if (ent && ent.creditsBalance <= 0) {
+    const failed = await db
+      .update(campaignMessages)
+      .set({ status: 'failed', failureReason: 'Créditos de disparo esgotados.', updatedAt: now })
+      .where(and(eq(campaignMessages.runId, runId), eq(campaignMessages.status, 'queued')))
+      .returning({ id: campaignMessages.id })
+    if (failed.length > 0) {
+      await db.update(campaignRuns).set({ failedCount: sql`${campaignRuns.failedCount} + ${failed.length}`, updatedAt: now }).where(eq(campaignRuns.id, runId))
+      await db.update(campaigns).set({ failedCount: sql`${campaigns.failedCount} + ${failed.length}`, updatedAt: now }).where(eq(campaigns.id, campaignId))
     }
+    await notifyWorkspaceOwner(campaign.workspaceId, {
+      type: 'product',
+      title: 'Créditos de disparo esgotados',
+      body: `A campanha "${campaign.name}" foi interrompida porque os créditos do workspace acabaram.`,
+      actionUrl: `${NAIA_WEB_URL()}/${campaign.workspaceId}/billing`,
+      actionLabel: 'Adicionar créditos',
+      metadata: { campaignId, campaignName: campaign.name, reason: 'credits_exhausted' },
+    }, 'emailOnCreditsExhausted')
+    await completeRun(runId, campaignId)
+    return
   }
 
   // Claim atômico da próxima mensagem (skip locked protege contra pacer duplicado)
@@ -158,7 +163,16 @@ export async function handlePacerStep(job: PacerJob): Promise<void> {
   const healthyForChannel = healthyAll.filter((c) => c.channel === channel)
 
   if (healthyAll.length === 0) {
-    // Invariante: erro de conexão reflete no status da campanha em andamento
+    // Estaciona o run até a conexão voltar (reconexão do WhatsApp, instabilidade):
+    // devolve a mensagem reivindicada à fila e reavalia a cada minuto, até o teto.
+    const since = job.noConnSince ?? Date.now()
+    if (Date.now() - since < NO_CONNECTION_MAX_WAIT_MS) {
+      await db.update(campaignMessages).set({ status: 'queued', updatedAt: now }).where(eq(campaignMessages.id, claimed.id))
+      console.warn(`[pacer] run ${runId} sem conexão ativa — aguardando reconexão (desde ${new Date(since).toISOString()})`)
+      await enqueuePacerStep(runId, campaignId, job.sentInBurst, NO_CONNECTION_RETRY_MS, since)
+      return
+    }
+    // Teto de espera estourado — invariante: erro de conexão reflete no status da campanha
     await db.update(campaignMessages).set({ status: 'failed', failureReason: 'Nenhuma conexão ativa disponível.', updatedAt: now })
       .where(and(eq(campaignMessages.runId, runId), inArray(campaignMessages.status, ['queued', 'sending'])))
     const [counts] = await db
@@ -174,11 +188,29 @@ export async function handlePacerStep(job: PacerJob): Promise<void> {
       updatedAt: now,
     }).where(eq(campaignRuns.id, runId))
     await db.update(campaigns).set({ status: 'failed', nextRunAt: null, completedAt: now, updatedAt: now }).where(eq(campaigns.id, campaignId))
+    await notifyWorkspaceOwner(campaign.workspaceId, {
+      type: 'product',
+      title: 'Campanha falhou: sem conexão ativa',
+      body: `A campanha "${campaign.name}" falhou porque nenhuma conexão ativa ficou disponível após várias tentativas.`,
+      actionUrl: `${NAIA_WEB_URL()}/${campaign.workspaceId}/connections`,
+      actionLabel: 'Ver conexões',
+      metadata: { campaignId, campaignName: campaign.name, reason: 'no_active_connection' },
+    }, 'emailOnCampaignFailed')
     console.error(`[pacer] run ${runId} falhou — nenhuma conexão ativa`)
     return
   }
 
   if (healthyForChannel.length === 0) {
+    // Canal do contato sem conexão saudável: mesma espera estacionada do caso
+    // geral (campanha mista com um canal fora aguarda junto — raro e mais
+    // seguro do que falhar a mensagem na hora)
+    const since = job.noConnSince ?? Date.now()
+    if (Date.now() - since < NO_CONNECTION_MAX_WAIT_MS) {
+      await db.update(campaignMessages).set({ status: 'queued', updatedAt: now }).where(eq(campaignMessages.id, claimed.id))
+      console.warn(`[pacer] run ${runId} sem conexão ${channel} ativa — aguardando reconexão`)
+      await enqueuePacerStep(runId, campaignId, job.sentInBurst, NO_CONNECTION_RETRY_MS, since)
+      return
+    }
     await markMessageFailed(claimed.id, runId, campaignId, `Nenhuma conexão ${channel === 'whatsapp' ? 'WhatsApp' : 'Telegram'} ativa disponível.`)
     await enqueuePacerStep(runId, campaignId, job.sentInBurst, 1_000)
     return
@@ -233,8 +265,35 @@ export async function handlePacerStep(job: PacerJob): Promise<void> {
 
   await db.update(campaignMessages).set({ connectionId: connection.id, updatedAt: now }).where(eq(campaignMessages.id, claimed.id))
 
-  const content = renderTemplate(body, contact)
-  const queue = getQueue<SendMessageJob>(channel === 'telegram' ? QUEUES.TELEGRAM_OUTBOUND : QUEUES.WHATSAPP_OUTBOUND)
+  // Decremento atômico — o crédito é consumido ao despachar, não ao entregar.
+  // GREATEST evita saldo negativo em caso de corrida entre pacers paralelos.
+  await db
+    .update(entitlements)
+    .set({ creditsBalance: sql`GREATEST(${entitlements.creditsBalance} - 1, 0)`, updatedAt: now })
+    .where(eq(entitlements.workspaceId, campaign.workspaceId))
+
+  // Campanha de automação: variáveis do evento que inscreveu o contato na
+  // régua (ex: {{cart_url}} do webhook) entram como custom fields na renderização
+  let templateContact = contact
+  if (campaign.automationId) {
+    const [enrollment] = await db
+      .select({ contextJson: automationEnrollments.contextJson })
+      .from(automationEnrollments)
+      .where(and(eq(automationEnrollments.automationId, campaign.automationId), eq(automationEnrollments.contactId, contact.id)))
+      .orderBy(desc(automationEnrollments.createdAt))
+      .limit(1)
+    if (enrollment) {
+      const context = parseJson<Record<string, unknown>>(enrollment.contextJson, {})
+      const custom = parseJson<Record<string, string>>(contact.customFields, {})
+      for (const [key, value] of Object.entries(context)) {
+        if (value !== null && value !== undefined) custom[key] = String(value)
+      }
+      templateContact = { ...contact, customFields: JSON.stringify(custom) }
+    }
+  }
+
+  const content = renderTemplate(body, templateContact)
+  const queue = getQueue<SendMessageJob>(getOutboundQueueName(channel as 'whatsapp' | 'telegram', campaign.workspaceId, ent?.tier))
   await queue.add(
     `send:${claimed.id}`,
     {
@@ -303,6 +362,17 @@ export async function completeRun(runId: string, campaignId: string): Promise<vo
     console.log(`[pacer] run ${runId} concluído — campanha ${campaignId} reagendada para ${campaign.nextRunAt.toISOString()}`)
   } else {
     await db.update(campaigns).set({ status: 'completed', completedAt: now, updatedAt: now }).where(and(eq(campaigns.id, campaignId), eq(campaigns.status, 'running')))
+    const sent = counts?.sent ?? 0
+    const delivered = counts?.delivered ?? 0
+    const failed = counts?.failed ?? 0
+    await notifyWorkspaceOwner(campaign.workspaceId, {
+      type: 'product',
+      title: 'Campanha finalizada',
+      body: `A campanha "${campaign.name}" foi concluída. ${sent} enviada${sent === 1 ? '' : 's'}, ${delivered} entregue${delivered === 1 ? '' : 's'}${failed > 0 ? `, ${failed} falha${failed === 1 ? '' : 's'}` : ''}.`,
+      actionUrl: `${NAIA_WEB_URL()}/${campaign.workspaceId}/campaigns/${campaignId}`,
+      actionLabel: 'Ver resultados',
+      metadata: { campaignId, campaignName: campaign.name, sent, delivered, failed },
+    }, 'emailOnCampaignCompleted')
     console.log(`[pacer] run ${runId} concluído — campanha ${campaignId} finalizada`)
   }
 }

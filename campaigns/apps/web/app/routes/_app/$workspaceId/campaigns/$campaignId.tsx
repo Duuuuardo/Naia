@@ -25,7 +25,7 @@ import {
   pauseCampaign,
   resumeCampaign,
 } from '../../../../lib/actions'
-import { Button, Card, ErrorNote, PageHeader, Stat, StatusBadge } from '../../../../components/ui'
+import { Button, Card, ErrorNote, PageHeader, Stat, StatusBadge, ChannelBadge } from '../../../../components/ui'
 import { WEEKDAY_LABELS } from '../../../../components/campaign-wizard/types'
 
 export const Route = createFileRoute('/_app/$workspaceId/campaigns/$campaignId')({
@@ -145,7 +145,7 @@ function CampaignDetailPage() {
         subtitle={
           <span className="inline-flex flex-wrap items-center gap-2">
             <StatusBadge status={campaign.status} />
-            <span className="font-mono text-xs uppercase text-neutral-400">[{campaign.channel}]</span>
+            <ChannelBadge channel={campaign.channel} />
             {campaign.kind === 'automation' && (
               <span className="rounded-full bg-brand-100 px-2 py-0.5 text-xs font-semibold text-brand-700">
                 Automação
@@ -155,29 +155,29 @@ function CampaignDetailPage() {
         }
       >
         {editable && (
-          <Button variant="secondary" icon={Pencil} disabled={busy} onClick={() =>
+          <Button className="w-full sm:w-auto" variant="secondary" icon={Pencil} disabled={busy} onClick={() =>
             router.navigate({ to: '/$workspaceId/campaigns/$campaignId/edit', params: { workspaceId, campaignId } })
           }>
             Editar
           </Button>
         )}
         {['draft', 'scheduled'].includes(campaign.status) && (
-          <Button icon={Zap} disabled={busy} onClick={() => setConfirmingDispatch((v) => !v)}>
+          <Button className="w-full sm:w-auto" icon={Zap} disabled={busy} onClick={() => setConfirmingDispatch((v) => !v)}>
             {campaign.status === 'scheduled' ? 'Disparar agora' : 'Disparar'}
           </Button>
         )}
         {['running', 'scheduled'].includes(campaign.status) && (
-          <Button variant="secondary" icon={Pause} loading={busy} onClick={() => act(() => pauseCampaign({ data: { workspaceId, campaignId } }))}>
+          <Button className="w-full sm:w-auto" variant="secondary" icon={Pause} loading={busy} onClick={() => act(() => pauseCampaign({ data: { workspaceId, campaignId } }))}>
             Pausar
           </Button>
         )}
         {campaign.status === 'paused' && (
-          <Button icon={Play} loading={busy} onClick={() => act(() => resumeCampaign({ data: { workspaceId, campaignId } }))}>
+          <Button className="w-full sm:w-auto" icon={Play} loading={busy} onClick={() => act(() => resumeCampaign({ data: { workspaceId, campaignId } }))}>
             Retomar
           </Button>
         )}
         {['running', 'scheduled', 'paused'].includes(campaign.status) && (
-          <Button variant="danger" icon={XCircle} loading={busy} onClick={() => act(() => cancelCampaign({ data: { workspaceId, campaignId } }))}>
+          <Button className="w-full sm:w-auto" variant="danger" icon={XCircle} loading={busy} onClick={() => act(() => cancelCampaign({ data: { workspaceId, campaignId } }))}>
             Cancelar
           </Button>
         )}
@@ -273,7 +273,7 @@ function CampaignDetailPage() {
         </Card>
       </div>
 
-      <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-5">
+      <div className="mb-8 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
         <Stat icon={Users} label="Total" value={campaign.totalContacts} />
         <Stat icon={Send} label="Enviados" value={campaign.sentCount} />
         <Stat icon={CheckCheck} label="Entregues" value={campaign.deliveredCount} />
@@ -285,7 +285,8 @@ function CampaignDetailPage() {
         <>
           <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">Execuções</h2>
           <Card className="mb-8 overflow-hidden">
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto -mx-4 px-4 sm:-mx-5 sm:px-5">
+            <table className="min-w-[640px] w-full text-sm">
               <thead className="bg-neutral-50 text-left text-neutral-500">
                 <tr>
                   <th className="px-4 py-2.5 font-medium">#</th>
@@ -315,6 +316,7 @@ function CampaignDetailPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </Card>
         </>
       )}
@@ -345,7 +347,8 @@ function CampaignDetailPage() {
         )}
       </div>
       <Card className="overflow-hidden">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto -mx-4 px-4 sm:-mx-5 sm:px-5">
+        <table className="min-w-[640px] w-full text-sm">
           <thead className="bg-neutral-50 text-left text-neutral-500">
             <tr>
               <th className="px-4 py-2.5 font-medium">Contato</th>
@@ -369,9 +372,16 @@ function CampaignDetailPage() {
               <tr key={m.message.id} className="border-t border-neutral-100 transition-colors hover:bg-neutral-50">
                 <td className="px-4 py-2.5 font-medium text-dark-800">{m.contactName ?? '—'}</td>
                 <td className="px-4 py-2.5 font-mono text-xs text-neutral-500">
-                  {m.contactPhone ? `+${m.contactPhone}` : m.contactTelegram ?? '—'}
+                  {m.contactIsGroup ? (
+                    <span className="inline-flex items-center gap-1 text-purple-700 font-sans font-semibold not-italic">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                      Grupo
+                    </span>
+                  ) : m.contactPhone ? `+${m.contactPhone}` : m.contactTelegram ?? '—'}
                 </td>
-                <td className="px-4 py-2.5 text-xs uppercase text-neutral-400">{m.message.channel ?? '—'}</td>
+                <td className="px-4 py-2.5">
+                  <ChannelBadge channel={m.message.channel} />
+                </td>
                 <td className="px-4 py-2.5">
                   <StatusBadge status={m.message.status} />
                 </td>
@@ -390,6 +400,7 @@ function CampaignDetailPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </Card>
     </div>
   )

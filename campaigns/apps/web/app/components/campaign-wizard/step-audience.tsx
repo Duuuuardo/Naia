@@ -108,7 +108,7 @@ export function StepAudience({
               className="max-w-sm"
             />
             <p className="mt-1 text-[11px] text-neutral-500">
-              Cada contato atingido pelo disparo recebe essa tag — útil para segmentar as próximas campanhas.
+              Cada contato atingido pelo disparo recebe essa tag. Útil para segmentar as próximas campanhas.
             </p>
           </div>
         </div>
@@ -122,7 +122,7 @@ function AllPane() {
     <div className="rounded-lg border border-neutral-200 bg-neutral-50/60 p-5 text-sm text-neutral-600">
       <p className="font-semibold text-dark-800">Todos os contatos elegíveis do workspace.</p>
       <p className="mt-1 text-xs leading-relaxed">
-        Contatos que se descadastraram (opt-out) ficam de fora automaticamente — essa regra vale para qualquer
+        Contatos que se descadastraram (opt-out) ficam de fora automaticamente. Essa regra vale para qualquer
         público e não pode ser desativada.
       </p>
     </div>
@@ -528,7 +528,7 @@ function FilePane({ file, setFile }: { file: File | null; setFile: (f: File | nu
         {file ? (
           <>
             <span className="text-sm font-bold text-dark-800">{file.name}</span>
-            <span className="text-xs text-neutral-500">{(file.size / 1024).toFixed(0)} KB — clique para trocar</span>
+            <span className="text-xs text-neutral-500">{(file.size / 1024).toFixed(0)} KB · clique para trocar</span>
           </>
         ) : (
           <>
@@ -551,7 +551,7 @@ function FilePane({ file, setFile }: { file: File | null; setFile: (f: File | nu
         </button>
       )}
       <p className="mt-3 max-w-lg text-[11px] leading-relaxed text-neutral-500">
-        Os contatos do arquivo são importados para o workspace com uma tag própria — a campanha usa essa tag
+        Os contatos do arquivo são importados para o workspace com uma tag própria. A campanha usa essa tag
         como público. Duplicados são reaproveitados, não recriados.
       </p>
     </div>

@@ -9,6 +9,7 @@ import {
   CreditCard,
   Crown,
   Check,
+  Files,
   Lock,
   Megaphone,
   Plug,
@@ -28,7 +29,7 @@ import {
   updateMemberRole,
   updatePermissions,
 } from '../../../lib/actions'
-import { Avatar, Button } from '../../../components/ui'
+import { Avatar, Button, Switch } from '../../../components/ui'
 
 export const Route = createFileRoute('/_app/$workspaceId/members')({
   loader: async ({ params }) => {
@@ -48,6 +49,7 @@ const PERMISSION_INFO: { key: PermissionKey; icon: typeof Users; label: string; 
   { key: 'connections', icon: Plug, label: 'Conexões', description: 'Conectar e remover canais (WhatsApp, Telegram).' },
   { key: 'members', icon: Users, label: 'Membros', description: 'Convidar, remover e definir papéis da equipe.' },
   { key: 'billing', icon: CreditCard, label: 'Assinatura', description: 'Planos, add-ons e cobrança do workspace.' },
+  { key: 'files', icon: Files, label: 'Arquivos', description: 'Mídias e documentos enviados para o workspace.' },
   { key: 'settings', icon: Settings, label: 'Configurações', description: 'Nome, avatar e informações do workspace.' },
 ]
 
@@ -126,8 +128,9 @@ function MembersPage() {
             Gerencie os colaboradores que possuem acesso ao workspace <strong className="text-dark-800">{workspace.name}</strong> e suas permissões.
           </p>
         </div>
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto">
           <Button
+            className="w-full md:w-auto"
             icon={UserPlus}
             onClick={() => setShowInviteForm((v) => !v)}
           >
@@ -158,7 +161,7 @@ function MembersPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-3 shrink-0 flex-wrap">
           <div className="w-36 h-2 rounded-full bg-neutral-100 overflow-hidden">
             <div
               className={`h-full rounded-full transition-all duration-500 ${isAtSeatLimit ? 'bg-error-500' : 'bg-dark-800'}`}
@@ -276,8 +279,8 @@ function MembersPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
+        <div className="overflow-x-auto -mx-5 px-5">
+          <table className="min-w-[640px] w-full text-left text-sm">
             <thead className="bg-neutral-50/80 border-b border-neutral-200/80 text-[11px] font-bold uppercase tracking-wider text-neutral-500">
               <tr>
                 <th className="py-3.5 pl-6 pr-4">Colaborador</th>
@@ -359,8 +362,8 @@ function MembersPage() {
             <p className="text-xs text-neutral-500 mt-0.5">Aguardando ativação por parte do convidado</p>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+          <div className="overflow-x-auto -mx-5 px-5">
+            <table className="min-w-[640px] w-full text-left text-sm">
               <thead className="bg-neutral-50/80 border-b border-neutral-200/80 text-[11px] font-bold uppercase tracking-wider text-neutral-500">
                 <tr>
                   <th className="py-3.5 pl-6 pr-4">E-mail Convidado</th>
@@ -421,23 +424,13 @@ function PermissionToggle({
   onChange: (value: boolean) => void
 }) {
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
+    <Switch
+      size="sm"
+      checked={checked}
       disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-        checked ? 'bg-brand-500' : 'bg-neutral-200'
-      }`}
-    >
-      <span
-        className={`inline-block size-3.5 rounded-full bg-white shadow-sm transition-transform ${
-          checked ? 'translate-x-[18px]' : 'translate-x-[3px]'
-        }`}
-      />
-    </button>
+      onChange={onChange}
+      aria-label={label}
+    />
   )
 }
 
@@ -485,8 +478,8 @@ function PermissionMatrixSection({
         </p>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
+      <div className="overflow-x-auto -mx-5 px-5">
+        <table className="min-w-[640px] w-full text-left text-sm">
           <thead className="bg-neutral-50/80 border-b border-neutral-200/80 text-[11px] font-bold uppercase tracking-wider text-neutral-500">
             <tr>
               <th className="py-3.5 pl-6 pr-4">Área</th>

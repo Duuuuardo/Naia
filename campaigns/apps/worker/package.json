@@ -10,11 +10,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "latest",
     "@naia/db": "workspace:*",
     "@naia/schemas": "workspace:*",
     "@naia/queue": "workspace:*",
     "@naia/scheduling": "workspace:*",
+    "@naia/session-host-client": "workspace:*",
     "@naia/storage": "workspace:*",
     "drizzle-orm": "^0.44"
   },

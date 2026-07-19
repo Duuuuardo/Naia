@@ -57,7 +57,7 @@ export async function usePostgresAuthState(connectionId: string): Promise<{
   // Auto-migration from legacy disk session if postgres session table has no creds yet
   const existingCredsRow = await readData('creds')
   if (!existingCredsRow) {
-    const sessionDir = path.join('/home/eduardo/Naia/naia/sessions', connectionId)
+    const sessionDir = path.join(process.env.NAIA_SESSIONS_DIR ?? '/tmp/naia-sessions', connectionId)
     if (fs.existsSync(path.join(sessionDir, 'creds.json'))) {
       try {
         console.log(`[whatsapp-manager] Migrando sessão do disco para Postgres (${connectionId})...`)

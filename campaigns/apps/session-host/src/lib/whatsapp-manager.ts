@@ -5,6 +5,7 @@ import { eq, and, or, sql } from 'drizzle-orm'
 import { getQueue, QUEUES, defaultJobOptions } from '@naia/queue'
 import type { StatusWebhookJob } from '@naia/schemas'
 import { usePostgresAuthState } from './use-postgres-auth-state'
+import { notifyWorkspaceOwner, NAIA_WEB_URL } from './vianova-notifications'
 
 type QREntry = { qr: string; expiresAt: Date }
 type SocketEntry = { status: 'connecting' | 'connected' | 'disconnected'; socket: unknown }
@@ -193,7 +194,7 @@ function loadBaileys() {
 }
 
 function getSessionDir(connectionId: string): string {
-  return path.join('/home/eduardo/Naia/naia/sessions', connectionId)
+  return path.join(process.env.NAIA_SESSIONS_DIR ?? '/tmp/naia-sessions', connectionId)
 }
 
 export async function initAllWhatsAppSessions(): Promise<void> {
@@ -237,8 +238,10 @@ export async function startWhatsAppSession(connectionId: string): Promise<void> 
     .where(eq(connections.id, connectionId))
     .limit(1)
 
-  // Se a conexão estava desconectada/limpa no banco ou foi pedido reconectar, limpa o estado de sessão anterior
-  if (conn && (!conn.config || conn.config === '{}' || conn.status === 'disconnected')) {
+  // Sem credenciais salvas (conexão nova, Reconectar manual ou logout — todos zeram o
+  // config) → limpa restos de sessão. Não usar o status aqui: durante o pareamento o
+  // status ainda é 'disconnected' quando o restart pós-QR (515) chega com creds recém-salvas.
+  if (conn && (!conn.config || conn.config === '{}')) {
     await fs.promises.rm(sessionDir, { recursive: true, force: true }).catch(() => {})
     await fs.promises.mkdir(sessionDir, { recursive: true }).catch(() => {})
     await db.delete(whatsappSessions).where(eq(whatsappSessions.connectionId, connectionId)).catch(() => {})
@@ -575,12 +578,12 @@ export async function startWhatsAppSession(connectionId: string): Promise<void> 
       qrMap.delete(connectionId)
 
       if (shouldReconnect) {
+        // Queda transitória (stream restart, rede): as credenciais continuam válidas,
+        // então o status persistido não muda — a vivacidade do socket é o socketStatus.
         await db
           .update(connections)
           .set({
-            status: 'error',
             lastErrorAt: new Date(),
-            lastErrorMessage: 'Conexão interrompida — tentando reconectar automaticamente...',
             updatedAt: new Date(),
           })
           .where(eq(connections.id, connectionId))
@@ -590,6 +593,11 @@ export async function startWhatsAppSession(connectionId: string): Promise<void> 
         }, 5000)
       } else {
         await fs.promises.rm(sessionDir, { recursive: true, force: true }).catch(() => {})
+        const [connInfo] = await db
+          .select({ workspaceId: connections.workspaceId, name: connections.name, channel: connections.channel })
+          .from(connections)
+          .where(eq(connections.id, connectionId))
+          .limit(1)
         await db
           .update(connections)
           .set({
@@ -599,6 +607,16 @@ export async function startWhatsAppSession(connectionId: string): Promise<void> 
             updatedAt: new Date(),
           })
           .where(eq(connections.id, connectionId))
+        if (connInfo) {
+          notifyWorkspaceOwner(connInfo.workspaceId, {
+            type: 'product',
+            title: 'WhatsApp desconectado',
+            body: `A conexão "${connInfo.name}" do WhatsApp foi desconectada. Reconecte para continuar os envios.`,
+            actionUrl: `${NAIA_WEB_URL()}/${connInfo.workspaceId}/connections`,
+            actionLabel: 'Reconectar',
+            metadata: { connectionId, connectionName: connInfo.name, channel: connInfo.channel, reason: 'whatsapp_disconnected' },
+          }, 'emailOnConnectionDisconnected').catch((err) => console.error('[whatsapp-manager] falha ao notificar desconexão:', err))
+        }
       }
     }
   })

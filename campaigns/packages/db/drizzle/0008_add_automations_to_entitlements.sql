@@ -1,0 +1,1 @@
+ALTER TABLE "entitlements" ADD COLUMN IF NOT EXISTS "automations" integer DEFAULT 0 NOT NULL;

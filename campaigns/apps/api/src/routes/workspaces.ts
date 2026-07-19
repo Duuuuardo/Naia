@@ -7,6 +7,31 @@ import { authPlugin } from '../plugins/auth'
 import { resolveWorkspaceAccess } from '../lib/workspace-auth'
 import { generateId } from '../lib/crypto'
 
+const VIANOVA_API_URL = process.env.VIANOVA_API_URL ?? 'http://localhost:5000'
+const VIANOVA_INTERNAL_SECRET = process.env.VIANOVA_INTERNAL_SECRET ?? 'vianova-internal-secret'
+const PRODUCT_SLUG = 'naia'
+
+async function ensureVianovaFreeSubscription(workspace: { id: string; name: string; ownerUserId: string; organizationId: string | null }) {
+  try {
+    await fetch(`${VIANOVA_API_URL}/internal/billing/ensure-free-subscription`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-internal-secret': VIANOVA_INTERNAL_SECRET,
+      },
+      body: JSON.stringify({
+        product_slug: PRODUCT_SLUG,
+        workspace_id: workspace.id,
+        workspace_name: workspace.name,
+        owner_user_id: workspace.ownerUserId,
+        organization_id: workspace.organizationId,
+      }),
+    })
+  } catch (err) {
+    console.error('[naia:workspaces] falha ao garantir subscription free no Vianova:', err)
+  }
+}
+
 // Avatar do workspace entra como data URL já redimensionada no cliente —
 // limite defensivo pra não inflar a linha no banco.
 const MAX_AVATAR_LENGTH = 400_000
@@ -86,8 +111,19 @@ export const workspaceRoutes = new Elysia()
         status: 'active',
         seats: 1,
         connections: 1,
-        messagesPerMonth: 3,
+        creditsPerCycle: 3,
+        creditsBalance: 3,
         campaignsPerMonth: 1,
+        automations: 0,
+      })
+
+      // Registra o workspace no Vianova para que entitlements (storage, addons,
+      // etc.) sejam sincronizados a partir do catálogo de planos.
+      await ensureVianovaFreeSubscription({
+        id,
+        name: body.name,
+        ownerUserId: session.userId,
+        organizationId: body.organizationId ?? null,
       })
 
       const [workspace] = await db.select().from(workspaces).where(eq(workspaces.id, id)).limit(1)
@@ -202,6 +238,66 @@ export const workspaceRoutes = new Elysia()
       body: t.Object({
         admin: permissionMapSchema,
         member: permissionMapSchema,
+      }),
+    },
+  )
+
+  // GET /workspaces/:workspaceId/notification-preferences — só Owner vê/editou.
+  .get('/workspaces/:workspaceId/notification-preferences', async ({ session, params, set }) => {
+    const ctx = await resolveWorkspaceAccess(session, params.workspaceId)
+    if (!ctx) { set.status = 401; return { message: 'Não autenticado.' } }
+    if (ctx.role !== 'owner') { set.status = 403; return { message: 'Apenas o Owner pode ver as preferências de notificação.' } }
+
+    const [workspace] = await db
+      .select({ notificationPreferences: workspaces.notificationPreferences })
+      .from(workspaces)
+      .where(eq(workspaces.id, params.workspaceId))
+      .limit(1)
+
+    const defaults = {
+      emailOnCampaignCompleted: true,
+      emailOnCampaignFailed: true,
+      emailOnCreditsExhausted: true,
+      emailOnConnectionDisconnected: true,
+    }
+    return { preferences: { ...defaults, ...(workspace?.notificationPreferences ?? {}) } }
+  })
+
+  // PATCH /workspaces/:workspaceId/notification-preferences — só Owner altera.
+  .patch(
+    '/workspaces/:workspaceId/notification-preferences',
+    async ({ session, params, body, set }) => {
+      const ctx = await resolveWorkspaceAccess(session, params.workspaceId)
+      if (!ctx) { set.status = 401; return { message: 'Não autenticado.' } }
+      if (ctx.role !== 'owner') { set.status = 403; return { message: 'Apenas o Owner pode alterar as preferências de notificação.' } }
+
+      const [workspace] = await db
+        .select({ notificationPreferences: workspaces.notificationPreferences })
+        .from(workspaces)
+        .where(eq(workspaces.id, params.workspaceId))
+        .limit(1)
+
+      const current = workspace?.notificationPreferences ?? {}
+      const next = {
+        emailOnCampaignCompleted: body.emailOnCampaignCompleted ?? current.emailOnCampaignCompleted ?? true,
+        emailOnCampaignFailed: body.emailOnCampaignFailed ?? current.emailOnCampaignFailed ?? true,
+        emailOnCreditsExhausted: body.emailOnCreditsExhausted ?? current.emailOnCreditsExhausted ?? true,
+        emailOnConnectionDisconnected: body.emailOnConnectionDisconnected ?? current.emailOnConnectionDisconnected ?? true,
+      }
+
+      await db
+        .update(workspaces)
+        .set({ notificationPreferences: next, updatedAt: new Date() })
+        .where(eq(workspaces.id, params.workspaceId))
+
+      return { preferences: next }
+    },
+    {
+      body: t.Object({
+        emailOnCampaignCompleted: t.Optional(t.Boolean()),
+        emailOnCampaignFailed: t.Optional(t.Boolean()),
+        emailOnCreditsExhausted: t.Optional(t.Boolean()),
+        emailOnConnectionDisconnected: t.Optional(t.Boolean()),
       }),
     },
   )

@@ -1,6 +1,7 @@
 import { db, connections, contacts, contactIdentities } from '@naia/db'
 import { eq, and } from 'drizzle-orm'
 import { generateId } from './crypto'
+import { notifyWorkspaceOwner, NAIA_WEB_URL } from './vianova-notifications'
 
 // Cliente MTProto (teleproto) por conexão — vive exclusivamente neste processo,
 // igual ao socket Baileys do whatsapp-manager. O worker nunca abre sessão
@@ -134,6 +135,11 @@ export async function connectExistingTelegramUser(connectionId: string): Promise
     const client = buildClient(config, creds)
     await client.connect()
     const authorized = await client.isUserAuthorized()
+    const [connInfo] = await db
+      .select({ workspaceId: connections.workspaceId, name: connections.name, status: connections.status, channel: connections.channel })
+      .from(connections)
+      .where(eq(connections.id, connectionId))
+      .limit(1)
     if (!authorized) {
       await client.disconnect().catch(() => {})
       telegramClientMap.delete(connectionId)
@@ -145,6 +151,16 @@ export async function connectExistingTelegramUser(connectionId: string): Promise
           updatedAt: new Date(),
         })
         .where(eq(connections.id, connectionId))
+      if (connInfo?.status === 'active') {
+        notifyWorkspaceOwner(connInfo.workspaceId, {
+          type: 'product',
+          title: 'Telegram desconectado',
+          body: `A conexão "${connInfo.name}" do Telegram expirou. Faça login novamente para continuar os envios.`,
+          actionUrl: `${NAIA_WEB_URL()}/${connInfo.workspaceId}/connections`,
+          actionLabel: 'Reconectar',
+          metadata: { connectionId, connectionName: connInfo.name, channel: connInfo.channel, reason: 'telegram_session_expired' },
+        }, 'emailOnConnectionDisconnected').catch((err) => console.error('[telegram-user] falha ao notificar desconexão:', err))
+      }
       return false
     }
 
@@ -157,6 +173,11 @@ export async function connectExistingTelegramUser(connectionId: string): Promise
     return true
   } catch (err) {
     telegramClientMap.delete(connectionId)
+    const [connInfo] = await db
+      .select({ workspaceId: connections.workspaceId, name: connections.name, status: connections.status, channel: connections.channel })
+      .from(connections)
+      .where(eq(connections.id, connectionId))
+      .limit(1)
     await db
       .update(connections)
       .set({
@@ -166,6 +187,16 @@ export async function connectExistingTelegramUser(connectionId: string): Promise
         updatedAt: new Date(),
       })
       .where(eq(connections.id, connectionId))
+    if (connInfo?.status === 'active') {
+      notifyWorkspaceOwner(connInfo.workspaceId, {
+        type: 'product',
+        title: 'Telegram com erro',
+        body: `A conexão "${connInfo.name}" do Telegram falhou ao conectar. Verifique as configurações.`,
+        actionUrl: `${NAIA_WEB_URL()}/${connInfo.workspaceId}/connections`,
+        actionLabel: 'Ver conexões',
+        metadata: { connectionId, connectionName: connInfo.name, channel: connInfo.channel, reason: 'telegram_connection_error' },
+      }, 'emailOnConnectionDisconnected').catch((err) => console.error('[telegram-user] falha ao notificar erro:', err))
+    }
     console.error(`[telegram-user] Erro ao conectar sessão ${connectionId}:`, err)
     return false
   }

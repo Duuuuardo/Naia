@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, unique, jsonb } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, integer, bigint, unique, jsonb } from 'drizzle-orm/pg-core'
 import type { WorkspaceRole, InviteStatus, WorkspaceRolePermissions } from '@naia/schemas'
 
 // Tenant do Naia. userId de owner/membros são ids de usuário do Vianova —
@@ -19,6 +19,21 @@ export const workspaces = pgTable('workspaces', {
   // Matriz de permissões por papel (admin/member). Null = defaults de
   // @naia/schemas; Owner sempre tem acesso total.
   rolePermissions: jsonb('role_permissions').$type<WorkspaceRolePermissions>(),
+  // Preferências de notificação por email do workspace. Somente o dono recebe.
+  notificationPreferences: jsonb('notification_preferences')
+    .$type<{
+      emailOnCampaignCompleted?: boolean
+      emailOnCampaignFailed?: boolean
+      emailOnCreditsExhausted?: boolean
+      emailOnConnectionDisconnected?: boolean
+    }>()
+    .notNull()
+    .default({
+      emailOnCampaignCompleted: true,
+      emailOnCampaignFailed: true,
+      emailOnCreditsExhausted: true,
+      emailOnConnectionDisconnected: true,
+    }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
@@ -55,8 +70,16 @@ export const entitlements = pgTable('entitlements', {
   status: text('status').notNull().default('active'),
   seats: integer('seats').notNull().default(1),
   connections: integer('connections').notNull().default(1),
-  messagesPerMonth: integer('messages_per_month').notNull().default(3),
+  // Créditos concedidos por ciclo de cobrança (propriedade estática do plano)
+  creditsPerCycle: integer('credits_per_cycle').notNull().default(3),
+  // Saldo spendable atual — decrementado por disparo, incrementado por renovação/compra
+  creditsBalance: integer('credits_balance').notNull().default(3),
   campaignsPerMonth: integer('campaigns_per_month').notNull().default(1),
+  // Limite de automações ativas (-1 = ilimitado, como Scale). Escrito só via sync do Vianova.
+  automations: integer('automations').notNull().default(0),
+  // Quota de storage e tamanho máximo por arquivo sincronizados pelo Vianova.
+  storageBytes: bigint('storage_bytes', { mode: 'number' }).notNull().default(0),
+  maxFileSizeBytes: bigint('max_file_size_bytes', { mode: 'number' }).notNull().default(0),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 

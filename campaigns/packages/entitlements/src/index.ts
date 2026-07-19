@@ -30,20 +30,47 @@ export function canAddConnection(e: Entitlements, current: number): EntitlementC
     : { allowed: false, reason: `Limite de conexões atingido (${e.connections}). Faça upgrade para adicionar mais canais.` }
 }
 
-export function canSendMessages(
+export function canSendWithCredits(
   e: Entitlements,
-  sentThisMonth: number,
   toSend: number,
 ): EntitlementCheckResult {
-  return sentThisMonth + toSend <= e.messagesPerMonth
+  return toSend <= e.creditsBalance
     ? { allowed: true }
-    : { allowed: false, reason: `Limite de mensagens do mês atingido (${e.messagesPerMonth}). Faça upgrade para enviar mais.` }
+    : { allowed: false, reason: e.creditsBalance <= 0
+        ? 'Seus créditos de disparo acabaram. Compre mais créditos ou aguarde a renovação do ciclo.'
+        : `Créditos insuficientes (${e.creditsBalance} disponíveis, ${toSend} necessários). Compre mais ou aguarde a renovação.` }
 }
 
 export function canCreateCampaign(e: Entitlements, createdThisMonth: number): EntitlementCheckResult {
   return createdThisMonth < e.campaignsPerMonth
     ? { allowed: true }
     : { allowed: false, reason: `Limite de campanhas do mês atingido (${e.campaignsPerMonth}). Faça upgrade para criar mais.` }
+}
+
+export function formatAutomationLimit(e: Entitlements): string {
+  if (e.automations < 0) return 'ilimitadas'
+  return `${e.automations} ${e.automations === 1 ? 'automação' : 'automações'}`
+}
+
+function automationNotAllowedReason(e: Entitlements): string {
+  if (e.automations <= 0) {
+    return 'Automações estão disponíveis a partir do plano Pro. Faça upgrade para criar automações.'
+  }
+  return `Limite de automações ativas atingido (${formatAutomationLimit(e)}). Compre uma automação extra ou faça upgrade para o Scale.`
+}
+
+export function canCreateAutomation(e: Entitlements, activeCount: number): EntitlementCheckResult {
+  if (e.automations < 0 || activeCount < e.automations) {
+    return { allowed: true }
+  }
+  return { allowed: false, reason: automationNotAllowedReason(e) }
+}
+
+export function canActivateAutomation(e: Entitlements, activeCount: number): EntitlementCheckResult {
+  if (e.automations < 0 || activeCount < e.automations) {
+    return { allowed: true }
+  }
+  return { allowed: false, reason: automationNotAllowedReason(e) }
 }
 
 // ─── Velocidade de envio por plano ───────────────────────────────────────────

@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { MessageCircle, Plug, Send } from 'lucide-react'
-import { EmptyState, StatusBadge } from '../ui'
+import { EmptyState, StatusBadge, ChannelBadge } from '../ui'
 import type { WizardConnection, WizardDraft } from './types'
 
 export function StepChannels({
@@ -46,7 +46,7 @@ export function StepChannels({
       <div className="mb-3 flex items-baseline gap-3 border-b border-neutral-100 pb-3">
         <h2 className="text-base font-bold text-dark-800">Canais</h2>
         <p className="text-xs text-neutral-500">
-          Selecione as conexões de envio — com mais de uma, os envios são distribuídos entre elas.
+          Selecione as conexões de envio. Com mais de uma, os envios são distribuídos entre elas.
         </p>
       </div>
 
@@ -93,7 +93,7 @@ export function StepChannels({
                     <Icon size={15} className={conn.channel === 'telegram' ? 'text-sky-500' : 'text-emerald-500'} aria-hidden="true" />
                     <span className="truncate">{conn.name}</span>
                   </span>
-                  <span className="text-xs font-medium uppercase text-neutral-500">{conn.channel}</span>
+                  <ChannelBadge channel={conn.channel} />
                   <StatusBadge status={conn.status} />
                 </button>
               </li>
@@ -104,7 +104,7 @@ export function StepChannels({
 
       {draft.connectionIds.length > 1 && (
         <p className="mt-3 text-xs text-neutral-500">
-          {draft.connectionIds.length} conexões selecionadas — o disparo alterna entre elas (round-robin). Se uma cair, as demais continuam.
+          {draft.connectionIds.length} conexões selecionadas. O disparo alterna entre elas (round-robin) e se uma cair, as demais continuam.
         </p>
       )}
     </div>

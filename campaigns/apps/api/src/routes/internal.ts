@@ -4,10 +4,11 @@ import { eq, and, sql, gte, asc } from 'drizzle-orm'
 import { verifyServiceToken } from '@naia/vianova-auth'
 import { canCreateCampaign, hasActiveSubscription } from '@naia/entitlements'
 import { dayKeyInTz, todayMonthDay } from '@naia/scheduling'
-import { sendWhatsAppMessage, disconnectWhatsApp } from '../lib/whatsapp-manager'
-import { sendTelegramUserMessage, disconnectTelegramUser, isTelegramUserConfig } from '../lib/telegram-user-manager'
-import { sanitizeErrorMessage, MediaRefSchema } from '@naia/schemas'
-import { startCampaignRun, monthStart } from '../lib/campaign-runner'
+import { disconnectSession } from '@naia/session-host-client'
+import { isTelegramUserConfig } from '../lib/telegram-helpers'
+import { sanitizeErrorMessage } from '@naia/schemas'
+import { startCampaignRun } from '../lib/campaign-runner'
+import { executeDueEnrollments } from '../lib/automation-engine'
 import { resolveCampaignTargets } from './contacts'
 import { replaceVariants } from './campaigns'
 import { generateId } from '../lib/crypto'
@@ -27,63 +28,99 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
   .post(
     '/entitlements',
     async ({ headers, body, set }) => {
-      const ok = await requireServiceScope(headers, 'service:entitlements:write')
-      if (!ok) { set.status = 401; return { message: 'Não autorizado.' } }
+      try {
+        const ok = await requireServiceScope(headers, 'service:entitlements:write')
+        if (!ok) { set.status = 401; return { message: 'Não autorizado.' } }
 
-      const isFree = body.tier === 'free' || body.tier === 'none'
-      const limits = {
-        seats: isFree ? 1 : (body.limits.seats ?? 0),
-        connections: isFree ? 1 : (body.limits.connections ?? 0),
-        messagesPerMonth: isFree ? 3 : (body.limits.messagesPerMonth ?? 0),
-        campaignsPerMonth: isFree ? 1 : (body.limits.campaignsPerMonth ?? 0),
-      }
+        const isFree = body.tier === 'free' || body.tier === 'none'
+        const limits = {
+          seats: isFree ? 1 : (body.limits.seats ?? 0),
+          connections: isFree ? 1 : (body.limits.connections ?? 0),
+          creditsPerCycle: isFree ? 3 : (body.limits.creditsPerCycle ?? 0),
+          campaignsPerMonth: isFree ? 1 : (body.limits.campaignsPerMonth ?? 0),
+          automations: isFree ? 0 : (body.limits.automations ?? 0),
+          storageBytes: isFree ? 104_857_600 : (body.limits.storageBytes ?? 0),
+          maxFileSizeBytes: isFree ? 5_242_880 : (body.limits.maxFileSizeBytes ?? 0),
+        }
 
-      await db
-        .insert(entitlements)
-        .values({
-          workspaceId: body.workspace_id,
-          tier: body.tier,
-          status: body.status,
-          ...limits,
-          updatedAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: entitlements.workspaceId,
-          set: {
+        // INSERT: workspace novo — concede os créditos do ciclo como saldo inicial.
+        // UPDATE: só atualiza limites estáticos; saldo é gerenciado por /credits/grant.
+        const inserted = await db
+          .insert(entitlements)
+          .values({
+            workspaceId: body.workspace_id,
             tier: body.tier,
             status: body.status,
             ...limits,
+            creditsBalance: limits.creditsPerCycle,
             updatedAt: new Date(),
-          },
-        })
+          })
+          .onConflictDoUpdate({
+            target: entitlements.workspaceId,
+            set: {
+              tier: body.tier,
+              status: body.status,
+              seats: limits.seats,
+              connections: limits.connections,
+              creditsPerCycle: limits.creditsPerCycle,
+              campaignsPerMonth: limits.campaignsPerMonth,
+              automations: limits.automations,
+              storageBytes: limits.storageBytes,
+              maxFileSizeBytes: limits.maxFileSizeBytes,
+              updatedAt: new Date(),
+            },
+          })
+          .returning({ workspaceId: entitlements.workspaceId })
 
-      // Se o limite de conexões diminuiu ou expirou, inativa as conexões excedentes,
-      // mantendo apenas as primeiras `limits.connections` ativas.
-      if (limits.connections >= 0) {
-        const activeConns = await db
-          .select()
-          .from(connections)
-          .where(and(eq(connections.workspaceId, body.workspace_id), eq(connections.status, 'active')))
-          .orderBy(connections.createdAt)
+        // Se o limite de conexões diminuiu ou expirou, inativa as conexões excedentes,
+        // mantendo apenas as primeiras `limits.connections` ativas.
+        if (limits.connections >= 0) {
+          const activeConns = await db
+            .select()
+            .from(connections)
+            .where(and(eq(connections.workspaceId, body.workspace_id), eq(connections.status, 'active')))
+            .orderBy(connections.createdAt)
 
-        if (activeConns.length > limits.connections) {
-          const toDeactivate = activeConns.slice(limits.connections)
-          for (const conn of toDeactivate) {
-            if (conn.channel === 'whatsapp') {
-              try { await disconnectWhatsApp(conn.id) } catch { /* ignore */ }
-            } else if (conn.channel === 'telegram' && isTelegramUserConfig(conn.config)) {
-              // sem logout: a sessão salva permite reconectar quando o limite voltar
-              try { await disconnectTelegramUser(conn.id) } catch { /* ignore */ }
+          if (activeConns.length > limits.connections) {
+            const toDeactivate = activeConns.slice(limits.connections)
+            for (const conn of toDeactivate) {
+              const isTgUser = conn.channel === 'telegram' && isTelegramUserConfig(conn.config)
+              try {
+                await disconnectSession(conn.id, { channel: conn.channel as 'whatsapp' | 'telegram', logout: false })
+              } catch { /* ignore */ }
+              await db
+                .update(connections)
+                .set({ status: 'disconnected', updatedAt: new Date() })
+                .where(eq(connections.id, conn.id))
             }
-            await db
-              .update(connections)
-              .set({ status: 'disconnected', updatedAt: new Date() })
-              .where(eq(connections.id, conn.id))
           }
         }
-      }
 
-      return { synced: true as const }
+        // Se o limite de automações ativas diminuiu, desativa as mais recentes
+        // e mantém as mais antigas dentro do novo teto.
+        if (limits.automations >= 0) {
+          const activeAutomations = await db
+            .select()
+            .from(automations)
+            .where(and(eq(automations.workspaceId, body.workspace_id), eq(automations.active, true)))
+            .orderBy(automations.createdAt)
+
+          if (activeAutomations.length > limits.automations) {
+            const toDeactivate = activeAutomations.slice(limits.automations).reverse()
+            for (const automation of toDeactivate) {
+              await db
+                .update(automations)
+                .set({ active: false, updatedAt: new Date() })
+                .where(eq(automations.id, automation.id))
+            }
+          }
+        }
+
+        return { synced: true as const }
+      } catch (err) {
+        console.error('[internal/entitlements] erro ao sincronizar entitlements:', err)
+        throw err
+      }
     },
     {
       body: t.Object({
@@ -96,63 +133,66 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
     },
   )
 
-  // Endpoint chamado pelo worker de WhatsApp para enviar mensagens usando o
-  // socket Baileys que vive exclusivamente no processo da API. O worker NÃO
-  // abre seu próprio socket — isso evitaria conflito de sessão entre processos.
+  // Concessão de créditos — chamada pelo Vianova em invoice.paid (renovação,
+  // nova assinatura, compra de pacote). Acumula sobre o saldo existente.
   .post(
-    '/whatsapp-send',
-    async ({ body, headers, set }) => {
-      const secret = process.env.NAIA_INTERNAL_SECRET
-      if (secret && headers['x-internal-secret'] !== secret) {
-        set.status = 401; return { success: false, error: 'Não autorizado.' }
-      }
-      try {
-        const result = await sendWhatsAppMessage(body.connectionId, body.phone, body.content, body.media)
-        return { success: true, externalMessageId: result.externalMessageId }
-      } catch (err) {
-        return { success: false, error: sanitizeErrorMessage(err, 'Falha interna ao processar envio de mensagem via WhatsApp.') }
-      }
+    '/credits/grant',
+    async ({ headers, body, set }) => {
+      const ok = await requireServiceScope(headers, 'service:entitlements:write')
+      if (!ok) { set.status = 401; return { message: 'Não autorizado.' } }
+      if (body.amount <= 0) return { granted: true as const, credited: 0 }
+
+      const [row] = await db
+        .update(entitlements)
+        .set({
+          creditsBalance: sql`${entitlements.creditsBalance} + ${body.amount}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(entitlements.workspaceId, body.workspace_id))
+        .returning({ creditsBalance: entitlements.creditsBalance })
+
+      console.log(`[credits] workspace ${body.workspace_id} +${body.amount} créditos → saldo ${row?.creditsBalance ?? '?'}`)
+      return { granted: true as const, credited: body.amount }
     },
     {
       body: t.Object({
-        connectionId: t.String(),
-        phone: t.String(),
-        content: t.String(),
-        media: t.Optional(t.Array(MediaRefSchema)),
+        workspace_id: t.String(),
+        product_slug: t.String(),
+        amount: t.Number(),
       }),
     },
   )
 
-  // Endpoint chamado pelo worker de Telegram para enviar mensagens usando o
-  // cliente MTProto (conta de usuário) que vive exclusivamente neste processo
-  // — mesmo motivo do /whatsapp-send.
+  // Reset de créditos — chamado pelo Vianova em estorno/chargeback ou quando a
+  // subscription paga é cancelada. Zera o saldo imediatamente.
   .post(
-    '/telegram-user-send',
-    async ({ body, headers, set }) => {
-      const secret = process.env.NAIA_INTERNAL_SECRET
-      if (secret && headers['x-internal-secret'] !== secret) {
-        set.status = 401; return { success: false, error: 'Não autorizado.' }
-      }
-      try {
-        const result = await sendTelegramUserMessage(body.connectionId, body.target, body.content, body.media)
-        return { success: true, externalMessageId: result.externalMessageId }
-      } catch (err) {
-        return { success: false, error: sanitizeErrorMessage(err, 'Falha interna ao processar envio de mensagem via Telegram.') }
-      }
+    '/credits/reset',
+    async ({ headers, body, set }) => {
+      const ok = await requireServiceScope(headers, 'service:entitlements:write')
+      if (!ok) { set.status = 401; return { message: 'Não autorizado.' } }
+
+      const [row] = await db
+        .update(entitlements)
+        .set({
+          creditsBalance: 0,
+          updatedAt: new Date(),
+        })
+        .where(eq(entitlements.workspaceId, body.workspace_id))
+        .returning({ creditsBalance: entitlements.creditsBalance })
+
+      console.log(`[credits] workspace ${body.workspace_id} créditos zerados → saldo ${row?.creditsBalance ?? '?'}`)
+      return { reset: true as const, balance: row?.creditsBalance ?? 0 }
     },
     {
       body: t.Object({
-        connectionId: t.String(),
-        target: t.String(),
-        content: t.String(),
-        media: t.Optional(t.Array(MediaRefSchema)),
+        workspace_id: t.String(),
+        product_slug: t.String(),
       }),
     },
   )
 
   // Chamado pelo tick do scheduler (worker) quando next_run_at vence. Vive na
-  // API porque a resolução de audiência pode expandir grupos via socket
-  // Baileys, que existe só neste processo (mesmo motivo do /whatsapp-send).
+  // API porque a resolução de audiência pode expandir grupos via session-host.
   .post(
     '/campaigns/:campaignId/start-run',
     async ({ params, body, headers, set }) => {
@@ -189,6 +229,9 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
 
       const [automation] = await db.select().from(automations).where(eq(automations.id, params.automationId)).limit(1)
       if (!automation) { set.status = 404; return { evaluated: false as const, reason: 'Automação não encontrada.' } }
+      if (automation.type !== 'birthday') {
+        return { evaluated: false as const, reason: 'Automação não é do fluxo diário (aniversário).' }
+      }
 
       const now = new Date()
       const today = dayKeyInTz(now, automation.timezone)
@@ -245,7 +288,7 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
         const [created] = await db
           .select({ count: sql<number>`count(*)::int` })
           .from(campaigns)
-          .where(and(eq(campaigns.workspaceId, automation.workspaceId), gte(campaigns.createdAt, monthStart())))
+          .where(and(eq(campaigns.workspaceId, automation.workspaceId), gte(campaigns.createdAt, (() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d })())))
         const campaignCheck = canCreateCampaign(ent, created?.count ?? 0)
         if (!campaignCheck.allowed) return await finish({ matched: eligible.length, skipReason: campaignCheck.reason })
 
@@ -302,6 +345,31 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
     },
   )
 
+  // Executa os passos devidos da régua (tick do scheduler). O worker já fez o
+  // claim com lease (next_step_at empurrado) — aqui roda o motor: delays,
+  // add_tag e disparo dos passos de mensagem via campanha persistente do passo.
+  .post(
+    '/automations/:automationId/execute-steps',
+    async ({ params, body, headers, set }) => {
+      const secret = process.env.NAIA_INTERNAL_SECRET
+      if (secret && headers['x-internal-secret'] !== secret) {
+        set.status = 401; return { processed: 0, message: 'Não autorizado.' }
+      }
+      try {
+        return await executeDueEnrollments(params.automationId, body.enrollmentIds)
+      } catch (err) {
+        console.error(`[internal] erro ao executar passos da automação ${params.automationId}:`, err)
+        set.status = 500
+        return { processed: 0, message: sanitizeErrorMessage(err, 'Falha interna ao executar passos da automação.') }
+      }
+    },
+    {
+      body: t.Object({
+        enrollmentIds: t.Array(t.String(), { minItems: 1 }),
+      }),
+    },
+  )
+
   // Base do single sign-out imediato: o Vianova avisa quais sids caíram, o
   // Naia passa a rejeitar tokens com esse `sid` sem precisar consultar o
   // Vianova de novo (ver plugins/auth.ts).
@@ -337,9 +405,9 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
         set.status = 401; return { message: 'Não autorizado.' }
       }
 
-      const monthStart = new Date()
-      monthStart.setDate(1)
-      monthStart.setHours(0, 0, 0, 0)
+      const cycleStart = new Date()
+      cycleStart.setDate(1)
+      cycleStart.setHours(0, 0, 0, 0)
 
       const [memberCount] = await db
         .select({ count: sql<number>`count(*)::int` })
@@ -356,23 +424,29 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
         .from(connections)
         .where(eq(connections.workspaceId, params.workspaceId))
 
-      const [messageCount] = await db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(campaignMessages)
-        .innerJoin(campaigns, eq(campaignMessages.campaignId, campaigns.id))
-        .where(and(eq(campaigns.workspaceId, params.workspaceId), gte(campaignMessages.sentAt, monthStart)))
+      const [entRow] = await db
+        .select({ creditsBalance: entitlements.creditsBalance })
+        .from(entitlements)
+        .where(eq(entitlements.workspaceId, params.workspaceId))
+        .limit(1)
 
       const [campaignCount] = await db
         .select({ count: sql<number>`count(*)::int` })
         .from(campaigns)
-        .where(and(eq(campaigns.workspaceId, params.workspaceId), gte(campaigns.createdAt, monthStart)))
+        .where(and(eq(campaigns.workspaceId, params.workspaceId), gte(campaigns.createdAt, cycleStart)))
+
+      const [automationCount] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(automations)
+        .where(and(eq(automations.workspaceId, params.workspaceId), eq(automations.active, true)))
 
       return {
         usage: {
           seats: Math.max(1, (memberCount?.count ?? 0) + (inviteCount?.count ?? 0)),
           connections: connectionCount?.count ?? 0,
-          messagesPerMonth: messageCount?.count ?? 0,
+          creditsBalance: entRow?.creditsBalance ?? 0,
           campaignsPerMonth: campaignCount?.count ?? 0,
+          automations: automationCount?.count ?? 0,
         },
       }
     },

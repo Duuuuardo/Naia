@@ -19,13 +19,12 @@
     "@naia/queue": "workspace:*",
     "@naia/scheduling": "workspace:*",
     "@naia/schemas": "workspace:*",
+    "@naia/session-host-client": "workspace:*",
     "@naia/storage": "workspace:*",
     "@naia/vianova-auth": "workspace:*",
-    "@whiskeysockets/baileys": "latest",
     "drizzle-orm": "^0.44",
     "elysia": "^1",
     "logixlysia": "^6.6.0",
-    "teleproto": "^1.228.2",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {

@@ -1,37 +1,10 @@
-import { db, connections, campaigns, campaignRuns, campaignMessages, contacts, contactIdentities } from '@naia/db'
+import { db, connections, campaigns, campaignRuns, campaignMessages, contacts, contactIdentities, entitlements } from '@naia/db'
 import { eq, and, sql } from 'drizzle-orm'
 import type { SendMessageJob } from '@naia/schemas'
 import { sanitizeErrorMessage } from '@naia/schemas'
-import { getQueue, QUEUES } from '@naia/queue'
+import { getQueue, getOutboundQueueName } from '@naia/queue'
+import { sendWhatsAppMessage } from '@naia/session-host-client'
 import { enqueueOptOutFollowup, OPTOUT_FOLLOWUP_WHATSAPP } from '../lib/followup'
-
-async function sendViaApi(
-  connectionId: string,
-  phone: string,
-  content: string,
-  media?: SendMessageJob['media'],
-): Promise<{ externalMessageId: string }> {
-  const apiUrl = process.env.NAIA_API_URL ?? 'http://localhost:4001'
-  const secret = process.env.NAIA_INTERNAL_SECRET ?? ''
-
-  const res = await fetch(`${apiUrl}/internal/whatsapp-send`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-internal-secret': secret,
-    },
-    body: JSON.stringify({ connectionId, phone, content, media }),
-    signal: AbortSignal.timeout(60000),
-  })
-
-  if (!res.ok) {
-    throw new Error(`API retornou status ${res.status} ao tentar enviar mensagem WhatsApp.`)
-  }
-
-  const data = (await res.json()) as { success: boolean; externalMessageId?: string; error?: string }
-  if (!data.success) throw new Error(data.error ?? 'Falha ao enviar mensagem via API.')
-  return { externalMessageId: data.externalMessageId ?? '' }
-}
 
 export async function handleWhatsAppSend(job: SendMessageJob): Promise<void> {
   const { campaignId, campaignMessageId, contactId, connectionId, content } = job
@@ -41,7 +14,7 @@ export async function handleWhatsAppSend(job: SendMessageJob): Promise<void> {
   if (job.kind === 'followup') {
     try {
       const phone = await resolveWhatsAppPhone(contactId)
-      if (phone) await sendViaApi(connectionId, phone, content)
+      if (phone) await sendWhatsAppMessage(connectionId, phone, content)
     } catch (err) {
       console.warn(`[worker-whatsapp] follow-up de opt-out falhou (ignorado): ${sanitizeErrorMessage(err, 'erro')}`)
     }
@@ -83,7 +56,7 @@ export async function handleWhatsAppSend(job: SendMessageJob): Promise<void> {
   }
 
   try {
-    const result = await sendViaApi(connectionId, phone, content, job.media)
+    const result = await sendWhatsAppMessage(connectionId, phone, content, job.media)
 
     await db.update(campaignMessages).set({
       status: 'sent',
@@ -104,9 +77,12 @@ export async function handleWhatsAppSend(job: SendMessageJob): Promise<void> {
       }).where(eq(campaignRuns.id, job.runId))
     }
 
-    // Aviso de opt-out como mensagem separada, alguns segundos depois —
-    // não conta na cota (não gera linha em campaign_messages).
-    await enqueueOptOutFollowup(getQueue<SendMessageJob>(QUEUES.WHATSAPP_OUTBOUND), job, OPTOUT_FOLLOWUP_WHATSAPP)
+    // Aviso de opt-out: só para contatos individuais — grupos não têm opt-out.
+    if (!contact.isGroup) {
+      const [ent] = await db.select({ tier: entitlements.tier }).from(entitlements).where(eq(entitlements.workspaceId, contact.workspaceId)).limit(1)
+      const queueName = getOutboundQueueName('whatsapp', contact.workspaceId, ent?.tier)
+      await enqueueOptOutFollowup(getQueue<SendMessageJob>(queueName), job, OPTOUT_FOLLOWUP_WHATSAPP)
+    }
   } catch (err) {
     await markFailed(campaignMessageId, campaignId, sanitizeErrorMessage(err, 'Falha ao processar envio da mensagem pelo WhatsApp.'), job.runId)
   }

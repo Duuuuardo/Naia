@@ -1,33 +1,16 @@
 // Início de um run de campanha — usado pelo dispatch imediato (rota) e pelo
 // tick do scheduler (via /internal/campaigns/:id/start-run). A cada run a
-// audiência é re-resolvida e a cota mensal re-checada; o envio em si é
+// audiência é re-resolvida e o saldo de créditos checado; o envio em si é
 // paceado pelo worker (handlers/pacer.ts), que consome as mensagens 'queued'.
 
 import { db, campaigns, campaignMessages, campaignRuns, campaignConnections, campaignVariants, connections, contacts, entitlements as entitlementsTable } from '@naia/db'
-import { eq, and, sql, gte, inArray, asc } from 'drizzle-orm'
+import { eq, and, sql, inArray, asc } from 'drizzle-orm'
 import { getQueue, QUEUES, defaultJobOptions } from '@naia/queue'
 import type { PacerJob, Schedule, ChannelType } from '@naia/schemas'
 import { computeNextRunAt, DEFAULT_TIMEZONE } from '@naia/scheduling'
 import { resolveCampaignTargets, type SegmentFilter } from '../routes/contacts'
+import { handleTagsAdded } from './automation-triggers'
 import { generateId } from './crypto'
-
-export function monthStart(): Date {
-  const d = new Date()
-  d.setDate(1)
-  d.setHours(0, 0, 0, 0)
-  return d
-}
-
-/** Mensagens enviadas no mês — followups de opt-out ficam fora por construção
- * (não geram linha em campaign_messages). */
-export async function getMonthlyMessageCount(workspaceId: string): Promise<number> {
-  const [result] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(campaignMessages)
-    .innerJoin(campaigns, eq(campaignMessages.campaignId, campaigns.id))
-    .where(and(eq(campaigns.workspaceId, workspaceId), gte(campaignMessages.sentAt, monthStart())))
-  return result?.count ?? 0
-}
 
 export function parseSchedule(json: string): Schedule {
   try {
@@ -121,14 +104,71 @@ export async function startCampaignRun(
     return { started: false, reason: 'Nenhum contato elegível.', runStatus: 'completed' }
   }
 
-  // Cota mensal: corta a audiência no que ainda cabe; zero restante pula o run
+  return launchRun(campaign, eligible, runNumber, scheduledFor, nextRunAt)
+}
+
+/**
+ * Run com audiência explícita — usado pelo motor de cadência (passos de
+ * mensagem de automation_enrollments). Diferente do startCampaignRun, aceita
+ * campanha 'completed' (a campanha de passo é reusada a cada leva) e não mexe
+ * no agendamento próprio da campanha.
+ */
+export async function startAdhocRun(campaignId: string, contactIds: string[]): Promise<StartRunResult> {
+  const now = new Date()
+  const [campaign] = await db.select().from(campaigns).where(eq(campaigns.id, campaignId)).limit(1)
+  if (!campaign) return { started: false, reason: 'Campanha não encontrada.' }
+  if (campaign.status === 'paused' || campaign.status === 'cancelled') {
+    return { started: false, reason: `Campanha em status '${campaign.status}' não pode iniciar run.` }
+  }
+
+  const connRows = await db
+    .select({ connection: connections })
+    .from(campaignConnections)
+    .innerJoin(connections, eq(campaignConnections.connectionId, connections.id))
+    .where(eq(campaignConnections.campaignId, campaignId))
+    .orderBy(asc(campaignConnections.position))
+  const activeConns = connRows.map((r) => r.connection).filter((c) => c.status === 'active')
+  if (activeConns.length === 0) {
+    // Sem falhar a campanha: o passo da cadência tenta de novo mais tarde
+    return { started: false, reason: 'Nenhuma conexão ativa disponível.' }
+  }
+
+  const availableChannels = new Set(activeConns.map((c) => c.channel))
+  const rows = await db
+    .select()
+    .from(contacts)
+    .where(and(inArray(contacts.id, contactIds), eq(contacts.workspaceId, campaign.workspaceId)))
+
+  const eligible: Array<{ contact: Targetable; channel: ChannelType }> = []
+  for (const contact of rows) {
+    const channel = resolveContactChannel(contact, availableChannels)
+    if (channel) eligible.push({ contact, channel })
+  }
+  if (eligible.length === 0) {
+    return { started: false, reason: 'Nenhum contato elegível.', runStatus: 'completed' }
+  }
+
+  return launchRun(campaign, eligible, campaign.occurrenceCount + 1, now, campaign.nextRunAt)
+}
+
+/** Núcleo compartilhado: créditos, tag de audiência, mensagens e pacer. */
+async function launchRun(
+  campaign: typeof campaigns.$inferSelect,
+  eligible: Array<{ contact: Targetable; channel: ChannelType }>,
+  runNumber: number,
+  scheduledFor: Date,
+  nextRunAt: Date | null,
+): Promise<StartRunResult> {
+  const now = new Date()
+  const campaignId = campaign.id
+
+  // Créditos: saldo disponível determina quantos contatos cabem neste run
   const [ent] = await db
     .select()
     .from(entitlementsTable)
     .where(eq(entitlementsTable.workspaceId, campaign.workspaceId))
     .limit(1)
-  const sentThisMonth = await getMonthlyMessageCount(campaign.workspaceId)
-  const remaining = Math.max(0, (ent?.messagesPerMonth ?? 0) - sentThisMonth)
+  const remaining = Math.max(0, ent?.creditsBalance ?? 0)
 
   if (remaining === 0) {
     await advanceAfterRun(campaignId, nextRunAt, runNumber, now)
@@ -137,21 +177,27 @@ export async function startCampaignRun(
       runNumber,
       scheduledFor,
       'skipped_quota',
-      `Limite de mensagens do mês atingido (${ent?.messagesPerMonth ?? 0}).`,
+      'Créditos de disparo esgotados.',
     )
-    return { started: false, reason: 'Limite de mensagens do mês atingido.', runStatus: 'skipped_quota' }
+    return { started: false, reason: 'Créditos de disparo esgotados.', runStatus: 'skipped_quota' }
   }
 
   const quotaTruncated = eligible.length > remaining
   const batch = quotaTruncated ? eligible.slice(0, remaining) : eligible
+  const excess = quotaTruncated ? eligible.slice(remaining) : []
 
   // Tag de audiência: aplicada a todos os contatos alcançados neste run
   if (campaign.applyTagOnDispatch) {
     const ids = batch.map((e) => e.contact.id)
-    await db
+    const tagged = await db
       .update(contacts)
       .set({ tags: sql`array_append(${contacts.tags}, ${campaign.applyTagOnDispatch})`, updatedAt: now })
       .where(and(inArray(contacts.id, ids), sql`NOT (${contacts.tags} @> ARRAY[${campaign.applyTagOnDispatch}]::text[])`))
+      .returning({ id: contacts.id })
+    // Tag nova pode acionar automações (tag_added) e o freio de mão
+    if (tagged.length > 0) {
+      await handleTagsAdded(campaign.workspaceId, tagged.map((t) => t.id), [campaign.applyTagOnDispatch])
+    }
   }
 
   const variants = await db
@@ -168,8 +214,9 @@ export async function startCampaignRun(
     status: 'running',
     scheduledFor,
     startedAt: now,
-    totalContacts: batch.length,
+    totalContacts: eligible.length,
     quotaTruncated,
+    failedCount: excess.length,
     nextPacerAt: now,
   })
 
@@ -183,8 +230,22 @@ export async function startCampaignRun(
     variantId: variants.length > 0 ? variants[i % variants.length]!.id : null,
     status: 'queued' as const,
   }))
-  for (let i = 0; i < messageRows.length; i += 500) {
-    await db.insert(campaignMessages).values(messageRows.slice(i, i + 500))
+
+  // Contatos além da cota entram como 'failed' imediatamente — visíveis na UI
+  const failedRows = excess.map((e) => ({
+    id: generateId(),
+    campaignId,
+    runId,
+    contactId: e.contact.id,
+    channel: e.channel,
+    variantId: null as string | null,
+    status: 'failed' as const,
+    failureReason: 'Créditos de disparo esgotados.',
+  }))
+
+  const allRows = [...messageRows, ...failedRows]
+  for (let i = 0; i < allRows.length; i += 500) {
+    await db.insert(campaignMessages).values(allRows.slice(i, i + 500))
   }
 
   await db
@@ -192,7 +253,8 @@ export async function startCampaignRun(
     .set({
       status: 'running',
       startedAt: campaign.startedAt ?? now,
-      totalContacts: sql`${campaigns.totalContacts} + ${batch.length}`,
+      totalContacts: sql`${campaigns.totalContacts} + ${eligible.length}`,
+      failedCount: sql`${campaigns.failedCount} + ${excess.length}`,
       occurrenceCount: runNumber,
       nextRunAt,
       updatedAt: now,
@@ -206,9 +268,9 @@ export async function startCampaignRun(
   )
 
   console.log(
-    `[campaign-runner] campanha ${campaignId} run #${runNumber} iniciado — ${batch.length} contatos${quotaTruncated ? ' (cota truncou a audiência)' : ''}`,
+    `[campaign-runner] campanha ${campaignId} run #${runNumber} iniciado — ${batch.length} contatos${quotaTruncated ? ` (${excess.length} bloqueados por cota)` : ''}`,
   )
-  return { started: true, runId, totalContacts: batch.length, quotaTruncated }
+  return { started: true, runId, totalContacts: eligible.length, quotaTruncated }
 }
 
 /** Run que não vai executar (skip/vazio): registra e avança o agendamento. */

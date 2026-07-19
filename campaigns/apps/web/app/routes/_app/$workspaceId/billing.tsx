@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Crown,
   ExternalLink,
+  HardDrive,
   Link2,
   MessageSquareText,
   Minus,
@@ -17,6 +18,8 @@ import {
   Sparkles,
   Undo2,
   Users,
+  Workflow,
+  Zap,
 } from 'lucide-react'
 import { fetchPlans, fetchManageBillingUrl } from '../../../lib/actions'
 
@@ -61,13 +64,21 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log10(bytes) / Math.log10(1024))
+  const value = bytes / 1024 ** i
+  return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+}
+
 function formatLimitItem(key: string, value: number) {
-  if (key === 'messagesPerMonth') {
+  if (key === 'creditsPerCycle') {
     const formatted = value >= 1000 ? `${(value / 1000).toLocaleString('pt-BR')}k` : value
     return {
-      icon: <MessageSquareText size={15} className="text-brand-500 shrink-0 mt-0.5" />,
-      label: 'Disparos:',
-      valueText: `${formatted} mensagens/mês`,
+      icon: <Zap size={15} className="text-brand-500 shrink-0 mt-0.5" />,
+      label: 'Créditos:',
+      valueText: `${formatted} créditos/ciclo`,
     }
   }
   if (key === 'campaignsPerMonth') {
@@ -91,6 +102,28 @@ function formatLimitItem(key: string, value: number) {
       valueText: `${value} ${value === 1 ? 'membro no workspace' : 'membros no workspace'}`,
     }
   }
+  if (key === 'automations') {
+    const valueText = value < 0 ? 'Automações ilimitadas' : `${value} ${value === 1 ? 'automação ativa' : 'automações ativas'}`
+    return {
+      icon: <Workflow size={15} className="text-brand-500 shrink-0 mt-0.5" />,
+      label: 'Automações:',
+      valueText,
+    }
+  }
+  if (key === 'storageBytes') {
+    return {
+      icon: <HardDrive size={15} className="text-brand-500 shrink-0 mt-0.5" />,
+      label: 'Storage:',
+      valueText: `${formatBytes(value)} de arquivos`,
+    }
+  }
+  if (key === 'maxFileSizeBytes') {
+    return {
+      icon: <HardDrive size={15} className="text-brand-500 shrink-0 mt-0.5" />,
+      label: 'Tamanho máx.:',
+      valueText: `até ${formatBytes(value)} por arquivo`,
+    }
+  }
   return {
     icon: <CheckCircle2 size={15} className="text-brand-500 shrink-0 mt-0.5" />,
     label: `${key}:`,
@@ -98,7 +131,7 @@ function formatLimitItem(key: string, value: number) {
   }
 }
 
-const LIMIT_ORDER = ['messagesPerMonth', 'campaignsPerMonth', 'connections', 'seats']
+const LIMIT_ORDER = ['creditsPerCycle', 'campaignsPerMonth', 'automations', 'connections', 'seats', 'storageBytes', 'maxFileSizeBytes']
 
 // Chamadas de billing vão direto ao Vianova (cross-origin, cookie de sessão
 // do Vianova) — única exceção documentada ao Eden Treaty; ver
@@ -164,6 +197,10 @@ function BillingPage() {
   const currentPlanTier = subscription?.plan?.tier ?? entitlements.tier
   const currentPlan = plans?.plans?.find((p) => p.tier === currentPlanTier) ?? null
 
+  // Scale é posicionado como tier enterprise separado — não entra no grid de 3.
+  const regularPlans = plans?.plans?.filter((p) => p.tier !== 'scale') ?? []
+  const scalePlan = plans?.plans?.find((p) => p.tier === 'scale') ?? null
+
   // Plano pago sem subscription no Stripe: ativação antiga direto no banco.
   // A cobrança precisa ser regularizada pelo checkout pra habilitar
   // renovação, cancelamento e add-ons.
@@ -207,7 +244,12 @@ function BillingPage() {
         return
       }
       if (data.changed) {
-        setNotice(`Plano alterado para ${tierLabels[plan.tier] ?? plan.tier}. A diferença é ajustada na próxima fatura.`)
+        const isUpgrade = (currentPlan?.priceCents ?? 0) < plan.priceCents
+        setNotice(
+          isUpgrade
+            ? `Plano alterado para ${tierLabels[plan.tier] ?? plan.tier}. O ciclo de faturamento foi reiniciado e o valor do novo plano cobrado agora.`
+            : `Plano alterado para ${tierLabels[plan.tier] ?? plan.tier}. A diferença será ajustada na próxima fatura.`,
+        )
       } else if (data.scheduled) {
         setNotice(
           `Downgrade agendado. Seu plano atual continua ativo até ${formatDate(data.effectiveAt as string)}.`,
@@ -254,7 +296,7 @@ function BillingPage() {
       setError((data.message as string) ?? 'Erro ao retomar a assinatura.')
       return
     }
-    setNotice('Assinatura retomada — a renovação automática está ativa de novo.')
+    setNotice('Assinatura retomada. A renovação automática está ativa de novo.')
     await refresh()
   }
 
@@ -310,7 +352,7 @@ function BillingPage() {
         {isOwner && (
           <button
             onClick={handleManage}
-            className="h-10 px-4 rounded-md border border-neutral-300 bg-white text-sm font-semibold text-dark-800 shadow-2xs hover:bg-neutral-50 transition-all active:scale-[0.98] inline-flex items-center gap-2 shrink-0"
+            className="h-10 px-4 rounded-md border border-neutral-300 bg-white text-sm font-semibold text-dark-800 shadow-2xs hover:bg-neutral-50 transition-all active:scale-[0.98] inline-flex items-center justify-center gap-2 shrink-0 w-full sm:w-auto"
           >
             <span>Portal de faturas</span>
             <ExternalLink size={14} className="text-neutral-400" />
@@ -321,7 +363,7 @@ function BillingPage() {
       {checkoutSuccess && !paidActive && subLoaded && (
         <div className="mt-6 rounded-xl bg-brand-50 border border-brand-100 px-4 py-3 text-sm text-brand-600 font-medium flex items-center gap-2.5">
           <span className="size-4 animate-spin rounded-full border-2 border-brand-200 border-t-brand-500 shrink-0" />
-          <span>Pagamento confirmado — ativando seu plano…</span>
+          <span>Pagamento confirmado. Ativando seu plano…</span>
         </div>
       )}
 
@@ -340,7 +382,7 @@ function BillingPage() {
               </div>
               <p className="text-xs text-neutral-500 mt-1">
                 {subscription?.cancelAtPeriodEnd && subscription.currentPeriodEnd
-                  ? `Cancelamento agendado — ativo até ${formatDate(subscription.currentPeriodEnd)}, depois volta ao Grátis.`
+                  ? `Cancelamento agendado. Ativo até ${formatDate(subscription.currentPeriodEnd)}, depois volta ao Grátis.`
                   : paidActive && subscription?.currentPeriodEnd
                     ? `Renova automaticamente em ${formatDate(subscription.currentPeriodEnd)}.`
                     : entitlements.status === 'active'
@@ -352,8 +394,8 @@ function BillingPage() {
 
           <div className="flex items-center gap-6 border-t md:border-t-0 md:border-l border-neutral-200 pt-3 md:pt-0 md:pl-6 text-xs text-dark-800">
             <div>
-              <span className="text-neutral-400 block text-[11px]">Envios</span>
-              <strong className="font-bold">{entitlements.campaignsPerMonth} campanhas/mês</strong>
+              <span className="text-neutral-400 block text-[11px]">Campanhas/mês</span>
+              <strong className="font-bold">{entitlements.campaignsPerMonth}</strong>
             </div>
             <div>
               <span className="text-neutral-400 block text-[11px]">Conexões</span>
@@ -393,7 +435,7 @@ function BillingPage() {
                 <button
                   onClick={handleCancel}
                   disabled={busyAction === 'cancel'}
-                  className="h-8 px-3 rounded-md bg-error-600 text-xs font-bold text-white hover:bg-error-700 transition-colors disabled:opacity-60"
+                  className="h-8 px-3 rounded-md bg-[#ef4444] text-xs font-bold text-white hover:bg-[#dc2626] transition-colors disabled:opacity-60"
                 >
                   {busyAction === 'cancel' ? 'Cancelando…' : 'Cancelar plano'}
                 </button>
@@ -407,7 +449,7 @@ function BillingPage() {
             ) : (
               <button
                 onClick={() => setConfirming('cancel')}
-                className="text-xs font-medium text-neutral-400 hover:text-error-600 transition-colors"
+                className="text-xs font-medium text-neutral-400 hover:text-[#ef4444] transition-colors"
               >
                 Cancelar assinatura
               </button>
@@ -429,7 +471,7 @@ function BillingPage() {
           <span>
             Seu plano <strong className="font-bold capitalize">{currentTierName}</strong> está ativo
             sem cobrança configurada. Assine pelo botão abaixo para habilitar renovação automática e
-            add-ons — os limites atuais não mudam.
+            add-ons. Os limites atuais não mudam.
           </span>
         </div>
       )}
@@ -448,7 +490,7 @@ function BillingPage() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-stretch mt-6">
-        {plans?.plans?.map((plan) => {
+        {regularPlans.map((plan) => {
           const isCurrent =
             entitlements.status === 'active' &&
             entitlements.tier === plan.tier &&
@@ -462,11 +504,13 @@ function BillingPage() {
           const isDowngrade = paidActive && plan.sortOrder < currentSort && plan.priceCents > 0
           const isUpgrade = paidActive && plan.sortOrder > currentSort
 
-          const sortedLimits = Object.entries(plan.limits).sort(([keyA], [keyB]) => {
-            const indexA = LIMIT_ORDER.indexOf(keyA)
-            const indexB = LIMIT_ORDER.indexOf(keyB)
-            return (indexA === -1 ? 99 : indexA) - (indexB === -1 ? 99 : indexB)
-          })
+          const sortedLimits = Object.entries(plan.limits)
+            .filter(([key]) => key !== 'creditsBalance')
+            .sort(([keyA], [keyB]) => {
+              const indexA = LIMIT_ORDER.indexOf(keyA)
+              const indexB = LIMIT_ORDER.indexOf(keyB)
+              return (indexA === -1 ? 99 : indexA) - (indexB === -1 ? 99 : indexB)
+            })
 
           const needsConfirm = isDowngrade || (paidActive && plan.priceCents === 0)
           const buttonLabel = isCurrent
@@ -484,13 +528,14 @@ function BillingPage() {
           return (
             <div
               key={plan.id}
-              className={`relative rounded-xl p-6 flex flex-col justify-between transition-all duration-200 ${
+              className={`relative rounded-xl p-6 flex flex-col justify-between transition-[transform,border-color,box-shadow] duration-200 ease-out ${
                 isCurrent
                   ? 'border-2 border-dark-800 bg-neutral-50/50 shadow-sm'
                   : isPopular
                     ? 'border-2 border-brand-500 bg-white shadow-md'
-                    : 'border border-neutral-200 bg-white hover:border-brand-300 shadow-2xs'
+                    : 'border border-neutral-200 bg-white hover:border-brand-300 hover:shadow-sm shadow-2xs'
               }`}
+              style={{ animation: 'fadeInUp 400ms ease-out backwards', animationDelay: `${plan.sortOrder * 60}ms` }}
             >
               <div>
                 <div className="flex items-center justify-between gap-2">
@@ -547,20 +592,20 @@ function BillingPage() {
                   <div className="space-y-2">
                     <p className="text-xs text-neutral-500 leading-snug">
                       {plan.priceCents === 0
-                        ? 'Seu plano pago segue até o fim do período — depois o workspace volta ao Grátis.'
+                        ? 'Seu plano pago segue até o fim do período. Depois o workspace volta ao Grátis.'
                         : 'Os limites mudam agora e o valor é ajustado proporcionalmente na próxima fatura.'}
                     </p>
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleSubscribe(plan)}
                         disabled={busyAction === plan.id}
-                        className="flex-1 h-9 rounded-md bg-dark-800 text-xs font-bold text-white hover:bg-dark-700 transition-colors disabled:opacity-60"
+                        className="flex-1 h-9 rounded-md bg-dark-800 text-xs font-bold text-white hover:bg-dark-700 active:scale-[0.97] transition-[transform,background-color] duration-150 ease-out disabled:opacity-60"
                       >
                         {busyAction === plan.id ? 'Aplicando…' : 'Confirmar'}
                       </button>
                       <button
                         onClick={() => setConfirming(null)}
-                        className="h-9 px-3 rounded-md text-xs font-semibold text-neutral-500 hover:bg-neutral-100 transition-colors"
+                        className="h-9 px-3 rounded-md text-xs font-semibold text-neutral-500 hover:bg-neutral-100 active:scale-[0.97] transition-[transform,background-color] duration-150 ease-out"
                       >
                         Voltar
                       </button>
@@ -570,12 +615,12 @@ function BillingPage() {
                   <button
                     onClick={() => (needsConfirm ? setConfirming(plan.id) : handleSubscribe(plan))}
                     disabled={busyAction === plan.id || isCurrent || !isOwner}
-                    className={`w-full h-10 rounded-md text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
+                    className={`w-full h-10 rounded-md text-sm font-semibold flex items-center justify-center gap-2 transition-[transform,background-color,border-color] duration-150 ease-out active:scale-[0.97] ${
                       isCurrent
                         ? 'bg-neutral-100 text-neutral-400 cursor-default border border-neutral-200'
                         : plan.priceCents === 0 || isDowngrade
-                          ? 'border border-neutral-300 bg-white text-dark-800 hover:bg-neutral-50 active:scale-[0.98] disabled:opacity-50'
-                          : 'bg-brand-500 text-white hover:bg-brand-600 shadow-xs active:scale-[0.98] disabled:opacity-50'
+                          ? 'border border-neutral-300 bg-white text-dark-800 hover:bg-neutral-50 disabled:opacity-50'
+                          : 'bg-brand-500 text-white hover:bg-brand-600 shadow-xs disabled:opacity-50'
                     }`}
                   >
                     {busyAction === plan.id ? (
@@ -597,6 +642,144 @@ function BillingPage() {
         })}
       </div>
 
+      {scalePlan && (
+        <div className="mt-8">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-xs font-bold uppercase tracking-wider text-neutral-400">Alto volume</span>
+            <div className="h-px flex-1 bg-neutral-200" />
+          </div>
+          <div
+            className={`relative rounded-xl p-6 md:p-8 border transition-[transform,border-color,box-shadow] duration-200 ease-out ${
+              entitlements.tier === 'scale' && entitlements.status === 'active' && !subscription?.cancelAtPeriodEnd
+                ? 'border-2 border-dark-800 bg-neutral-50/50'
+                : 'border border-neutral-200 bg-white hover:border-brand-300 hover:shadow-sm shadow-2xs'
+            }`}
+            style={{ animation: 'fadeInUp 400ms ease-out backwards', animationDelay: '180ms' }}
+          >
+            <div className="flex flex-col md:flex-row md:items-start gap-6 md:gap-10">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <h3 className="text-xl font-bold text-dark-800">{tierLabels[scalePlan.tier] ?? scalePlan.name}</h3>
+                  {entitlements.tier === 'scale' && entitlements.status === 'active' && !subscription?.cancelAtPeriodEnd && (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-dark-800 text-white">
+                      Atual
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-neutral-500 leading-relaxed max-w-xl">
+                  {scalePlan.description} Fila de envio dedicada por workspace, maior throughput e limites para operações que enviam dezenas de milhares de mensagens por mês.
+                </p>
+                <ul className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-neutral-600">
+                  {Object.entries(scalePlan.limits)
+                    .sort(([keyA], [keyB]) => {
+                      const indexA = LIMIT_ORDER.indexOf(keyA)
+                      const indexB = LIMIT_ORDER.indexOf(keyB)
+                      return (indexA === -1 ? 99 : indexA) - (indexB === -1 ? 99 : indexB)
+                    })
+                    .map(([key, value]) => {
+                      const item = formatLimitItem(key, value)
+                      return (
+                        <li key={key} className="flex items-start gap-2">
+                          {item.icon}
+                          <span className="leading-snug">
+                            {item.label} <strong className="font-semibold text-dark-800">{item.valueText}</strong>
+                          </span>
+                        </li>
+                      )
+                    })}
+                </ul>
+              </div>
+
+              <div className="md:w-64 shrink-0 flex flex-col justify-between gap-5 md:border-l md:border-neutral-100 md:pl-10">
+                <div>
+                  <span className="text-3xl font-extrabold text-dark-800 tracking-tight">
+                    {formatPrice(scalePlan.priceCents)}
+                  </span>
+                  <span className="text-xs font-semibold text-neutral-400">/mês</span>
+                </div>
+
+                {(() => {
+                  const isCurrentScale =
+                    entitlements.status === 'active' &&
+                    entitlements.tier === 'scale' &&
+                    !subscription?.cancelAtPeriodEnd &&
+                    paidActive
+                  const currentSortScale = currentPlan?.sortOrder ?? 0
+                  const isUpgradeScale = paidActive && scalePlan.sortOrder > currentSortScale
+                  const isDowngradeScale = paidActive && scalePlan.sortOrder < currentSortScale && scalePlan.priceCents > 0
+                  const needsConfirmScale = isDowngradeScale || (paidActive && scalePlan.priceCents === 0)
+
+                  return confirming === scalePlan.id ? (
+                    <div className="space-y-2">
+                      <p className="text-xs text-neutral-500 leading-snug">
+                        Os limites mudam agora e o valor é ajustado proporcionalmente na próxima fatura.
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleSubscribe(scalePlan)}
+                          disabled={busyAction === scalePlan.id}
+                          className="flex-1 h-9 rounded-md bg-dark-800 text-xs font-bold text-white hover:bg-dark-700 active:scale-[0.97] transition-[transform,background-color] duration-150 ease-out disabled:opacity-60"
+                        >
+                          {busyAction === scalePlan.id ? 'Aplicando…' : 'Confirmar'}
+                        </button>
+                        <button
+                          onClick={() => setConfirming(null)}
+                          className="h-9 px-3 rounded-md text-xs font-semibold text-neutral-500 hover:bg-neutral-100 active:scale-[0.97] transition-[transform,background-color] duration-150 ease-out"
+                        >
+                          Voltar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => (needsConfirmScale ? setConfirming(scalePlan.id) : handleSubscribe(scalePlan))}
+                      disabled={busyAction === scalePlan.id || isCurrentScale || !isOwner}
+                      className={`w-full h-10 rounded-md text-sm font-semibold flex items-center justify-center gap-2 transition-[transform,background-color,border-color] duration-150 ease-out active:scale-[0.97] ${
+                        isCurrentScale
+                          ? 'bg-neutral-100 text-neutral-400 cursor-default border border-neutral-200'
+                          : 'bg-brand-500 text-white hover:bg-brand-600 shadow-xs disabled:opacity-50'
+                      }`}
+                    >
+                      {busyAction === scalePlan.id ? (
+                        <>
+                          <span className="size-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                          <span>Processando…</span>
+                        </>
+                      ) : isCurrentScale ? (
+                        'Plano atual'
+                      ) : isUpgradeScale ? (
+                        <>
+                          <span>Fazer upgrade</span>
+                          <ArrowRight size={15} />
+                        </>
+                      ) : (
+                        <>
+                          <span>Assinar Scale</span>
+                          <ArrowRight size={15} />
+                        </>
+                      )}
+                    </button>
+                  )
+                })()}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes fadeInUp {
+          from {
+            opacity: 0;
+            transform: translateY(12px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
+
       {plans?.addons && plans.addons.length > 0 && (
         <section className="mt-10">
           <div className="flex items-center gap-2.5 pb-4 border-b border-neutral-200">
@@ -604,18 +787,18 @@ function BillingPage() {
             <div>
               <h2 className="text-lg font-bold text-dark-800">Add-ons</h2>
               <p className="text-xs text-neutral-500">
-                Amplie os limites do seu plano sem trocar de tier — cobrados mensalmente junto com a assinatura.
+                Amplie os limites do seu plano sem trocar de tier. Cobrados mensalmente junto com a assinatura.
               </p>
             </div>
           </div>
 
-          {!paidActive ? (
+          {(currentPlan?.priceCents ?? 0) === 0 ? (
             <div className="mt-4 rounded-xl bg-neutral-50 border border-dashed border-neutral-300 px-5 py-6 text-center">
               <p className="text-sm font-medium text-neutral-600">
-                Add-ons ficam disponíveis com um plano pago ativo.
+                Add-ons ficam disponíveis a partir do plano Starter.
               </p>
               <p className="text-xs text-neutral-400 mt-1">
-                Assine o Starter ou o Pro para expandir campanhas e assentos sob demanda.
+                Faça upgrade para expandir campanhas, créditos, conexões e assentos sob demanda.
               </p>
             </div>
           ) : (
@@ -669,7 +852,13 @@ function AddonCard({
   }, [currentQuantity])
 
   const dirty = quantity !== currentQuantity
-  const Icon = addon.key === 'extra_seats' ? Users : Send
+  const Icon =
+    addon.key === 'extra_seats' ? Users :
+    addon.key === 'extra_credits' ? Zap :
+    addon.key === 'extra_connections' ? Link2 :
+    addon.key === 'extra_automations' ? Workflow :
+    addon.key === 'extra_storage' ? HardDrive :
+    Send
 
   return (
     <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-2xs flex flex-col gap-4">

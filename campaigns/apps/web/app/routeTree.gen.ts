@@ -14,11 +14,13 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 import { Route as AppWorkspacesRouteImport } from './routes/_app/workspaces'
+import { Route as AppNotificationsRouteImport } from './routes/_app/notifications'
 import { Route as AppWorkspaceIdRouteImport } from './routes/_app/$workspaceId'
 import { Route as AppWorkspaceIdIndexRouteImport } from './routes/_app/$workspaceId/index'
 import { Route as AppInvitesTokenRouteImport } from './routes/_app/invites/$token'
 import { Route as AppWorkspaceIdSettingsRouteImport } from './routes/_app/$workspaceId/settings'
 import { Route as AppWorkspaceIdMembersRouteImport } from './routes/_app/$workspaceId/members'
+import { Route as AppWorkspaceIdFilesRouteImport } from './routes/_app/$workspaceId/files'
 import { Route as AppWorkspaceIdContactsRouteImport } from './routes/_app/$workspaceId/contacts'
 import { Route as AppWorkspaceIdConnectionsRouteImport } from './routes/_app/$workspaceId/connections'
 import { Route as AppWorkspaceIdBillingRouteImport } from './routes/_app/$workspaceId/billing'
@@ -52,6 +54,11 @@ const AppWorkspacesRoute = AppWorkspacesRouteImport.update({
   path: '/workspaces',
   getParentRoute: () => AppRoute,
 } as any)
+const AppNotificationsRoute = AppNotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppWorkspaceIdRoute = AppWorkspaceIdRouteImport.update({
   id: '/$workspaceId',
   path: '/$workspaceId',
@@ -75,6 +82,11 @@ const AppWorkspaceIdSettingsRoute = AppWorkspaceIdSettingsRouteImport.update({
 const AppWorkspaceIdMembersRoute = AppWorkspaceIdMembersRouteImport.update({
   id: '/members',
   path: '/members',
+  getParentRoute: () => AppWorkspaceIdRoute,
+} as any)
+const AppWorkspaceIdFilesRoute = AppWorkspaceIdFilesRouteImport.update({
+  id: '/files',
+  path: '/files',
   getParentRoute: () => AppWorkspaceIdRoute,
 } as any)
 const AppWorkspaceIdContactsRoute = AppWorkspaceIdContactsRouteImport.update({
@@ -128,12 +140,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/$workspaceId': typeof AppWorkspaceIdRouteWithChildren
+  '/notifications': typeof AppNotificationsRoute
   '/workspaces': typeof AppWorkspacesRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/$workspaceId/automations': typeof AppWorkspaceIdAutomationsRoute
   '/$workspaceId/billing': typeof AppWorkspaceIdBillingRoute
   '/$workspaceId/connections': typeof AppWorkspaceIdConnectionsRoute
   '/$workspaceId/contacts': typeof AppWorkspaceIdContactsRoute
+  '/$workspaceId/files': typeof AppWorkspaceIdFilesRoute
   '/$workspaceId/members': typeof AppWorkspaceIdMembersRoute
   '/$workspaceId/settings': typeof AppWorkspaceIdSettingsRoute
   '/invites/$token': typeof AppInvitesTokenRoute
@@ -146,12 +160,14 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/notifications': typeof AppNotificationsRoute
   '/workspaces': typeof AppWorkspacesRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/$workspaceId/automations': typeof AppWorkspaceIdAutomationsRoute
   '/$workspaceId/billing': typeof AppWorkspaceIdBillingRoute
   '/$workspaceId/connections': typeof AppWorkspaceIdConnectionsRoute
   '/$workspaceId/contacts': typeof AppWorkspaceIdContactsRoute
+  '/$workspaceId/files': typeof AppWorkspaceIdFilesRoute
   '/$workspaceId/members': typeof AppWorkspaceIdMembersRoute
   '/$workspaceId/settings': typeof AppWorkspaceIdSettingsRoute
   '/invites/$token': typeof AppInvitesTokenRoute
@@ -167,12 +183,14 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
   '/_app/$workspaceId': typeof AppWorkspaceIdRouteWithChildren
+  '/_app/notifications': typeof AppNotificationsRoute
   '/_app/workspaces': typeof AppWorkspacesRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/_app/$workspaceId/automations': typeof AppWorkspaceIdAutomationsRoute
   '/_app/$workspaceId/billing': typeof AppWorkspaceIdBillingRoute
   '/_app/$workspaceId/connections': typeof AppWorkspaceIdConnectionsRoute
   '/_app/$workspaceId/contacts': typeof AppWorkspaceIdContactsRoute
+  '/_app/$workspaceId/files': typeof AppWorkspaceIdFilesRoute
   '/_app/$workspaceId/members': typeof AppWorkspaceIdMembersRoute
   '/_app/$workspaceId/settings': typeof AppWorkspaceIdSettingsRoute
   '/_app/invites/$token': typeof AppInvitesTokenRoute
@@ -188,12 +206,14 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/$workspaceId'
+    | '/notifications'
     | '/workspaces'
     | '/auth/callback'
     | '/$workspaceId/automations'
     | '/$workspaceId/billing'
     | '/$workspaceId/connections'
     | '/$workspaceId/contacts'
+    | '/$workspaceId/files'
     | '/$workspaceId/members'
     | '/$workspaceId/settings'
     | '/invites/$token'
@@ -206,12 +226,14 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/notifications'
     | '/workspaces'
     | '/auth/callback'
     | '/$workspaceId/automations'
     | '/$workspaceId/billing'
     | '/$workspaceId/connections'
     | '/$workspaceId/contacts'
+    | '/$workspaceId/files'
     | '/$workspaceId/members'
     | '/$workspaceId/settings'
     | '/invites/$token'
@@ -226,12 +248,14 @@ export interface FileRouteTypes {
     | '/_app'
     | '/login'
     | '/_app/$workspaceId'
+    | '/_app/notifications'
     | '/_app/workspaces'
     | '/auth/callback'
     | '/_app/$workspaceId/automations'
     | '/_app/$workspaceId/billing'
     | '/_app/$workspaceId/connections'
     | '/_app/$workspaceId/contacts'
+    | '/_app/$workspaceId/files'
     | '/_app/$workspaceId/members'
     | '/_app/$workspaceId/settings'
     | '/_app/invites/$token'
@@ -286,6 +310,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppWorkspacesRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/notifications': {
+      id: '/_app/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof AppNotificationsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/$workspaceId': {
       id: '/_app/$workspaceId'
       path: '/$workspaceId'
@@ -319,6 +350,13 @@ declare module '@tanstack/react-router' {
       path: '/members'
       fullPath: '/$workspaceId/members'
       preLoaderRoute: typeof AppWorkspaceIdMembersRouteImport
+      parentRoute: typeof AppWorkspaceIdRoute
+    }
+    '/_app/$workspaceId/files': {
+      id: '/_app/$workspaceId/files'
+      path: '/files'
+      fullPath: '/$workspaceId/files'
+      preLoaderRoute: typeof AppWorkspaceIdFilesRouteImport
       parentRoute: typeof AppWorkspaceIdRoute
     }
     '/_app/$workspaceId/contacts': {
@@ -400,6 +438,7 @@ interface AppWorkspaceIdRouteChildren {
   AppWorkspaceIdBillingRoute: typeof AppWorkspaceIdBillingRoute
   AppWorkspaceIdConnectionsRoute: typeof AppWorkspaceIdConnectionsRoute
   AppWorkspaceIdContactsRoute: typeof AppWorkspaceIdContactsRoute
+  AppWorkspaceIdFilesRoute: typeof AppWorkspaceIdFilesRoute
   AppWorkspaceIdMembersRoute: typeof AppWorkspaceIdMembersRoute
   AppWorkspaceIdSettingsRoute: typeof AppWorkspaceIdSettingsRoute
   AppWorkspaceIdIndexRoute: typeof AppWorkspaceIdIndexRoute
@@ -413,6 +452,7 @@ const AppWorkspaceIdRouteChildren: AppWorkspaceIdRouteChildren = {
   AppWorkspaceIdBillingRoute: AppWorkspaceIdBillingRoute,
   AppWorkspaceIdConnectionsRoute: AppWorkspaceIdConnectionsRoute,
   AppWorkspaceIdContactsRoute: AppWorkspaceIdContactsRoute,
+  AppWorkspaceIdFilesRoute: AppWorkspaceIdFilesRoute,
   AppWorkspaceIdMembersRoute: AppWorkspaceIdMembersRoute,
   AppWorkspaceIdSettingsRoute: AppWorkspaceIdSettingsRoute,
   AppWorkspaceIdIndexRoute: AppWorkspaceIdIndexRoute,
@@ -428,12 +468,14 @@ const AppWorkspaceIdRouteWithChildren = AppWorkspaceIdRoute._addFileChildren(
 
 interface AppRouteChildren {
   AppWorkspaceIdRoute: typeof AppWorkspaceIdRouteWithChildren
+  AppNotificationsRoute: typeof AppNotificationsRoute
   AppWorkspacesRoute: typeof AppWorkspacesRoute
   AppInvitesTokenRoute: typeof AppInvitesTokenRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppWorkspaceIdRoute: AppWorkspaceIdRouteWithChildren,
+  AppNotificationsRoute: AppNotificationsRoute,
   AppWorkspacesRoute: AppWorkspacesRoute,
   AppInvitesTokenRoute: AppInvitesTokenRoute,
 }

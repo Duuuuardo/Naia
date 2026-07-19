@@ -5,8 +5,7 @@ import { getQueue, QUEUES } from '@naia/queue'
 import type { StatusWebhookJob } from '@naia/schemas'
 
 // Telegram por conta de usuário (MTProto) recebe eventos direto pelo cliente
-// no processo da API — não usa webhook. O opt-in/out vive no
-// telegram-user-manager. Só sobra o webhook de status do WhatsApp.
+// no session-host — não usa webhook. Só sobra o webhook de status do WhatsApp.
 export const webhookRoutes = new Elysia()
 
   // POST /webhooks/whatsapp/:connectionId — status de mensagem (Baileys)

@@ -16,8 +16,12 @@ export const FREE_ENTITLEMENTS: Entitlements = {
   status: 'active',
   seats: 1,
   connections: 1,
-  messagesPerMonth: 3,
+  creditsPerCycle: 3,
+  creditsBalance: 3,
   campaignsPerMonth: 1,
+  automations: 0,
+  storageBytes: 104_857_600,
+  maxFileSizeBytes: 5_242_880,
 }
 
 // Resolução local de acesso a workspace — antes era uma chamada cross-service
@@ -64,8 +68,12 @@ export async function resolveWorkspaceAccess(
       status: ent.status,
       seats: ent.seats,
       connections: ent.connections,
-      messagesPerMonth: ent.messagesPerMonth,
+      creditsPerCycle: ent.creditsPerCycle,
+      creditsBalance: ent.creditsBalance,
       campaignsPerMonth: ent.campaignsPerMonth,
+      automations: ent.automations,
+      storageBytes: ent.storageBytes,
+      maxFileSizeBytes: ent.maxFileSizeBytes,
     },
   }
 }

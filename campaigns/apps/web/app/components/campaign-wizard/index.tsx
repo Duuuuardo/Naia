@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
+import type { RolePermissionMap } from '@naia/schemas'
 import { ChevronLeft, ChevronRight, Save, Zap } from 'lucide-react'
 import {
   bulkUpsertContacts,
@@ -26,6 +27,8 @@ export function CampaignWizard({
   initialDraft,
   campaignId,
   canDispatch = true,
+  userId,
+  permissions,
 }: {
   workspaceId: string
   connections: WizardConnection[]
@@ -36,6 +39,8 @@ export function CampaignWizard({
   campaignId?: string
   /** false quando o status atual não permite disparar (ex: pausada) — só salva. */
   canDispatch?: boolean
+  userId: string
+  permissions: RolePermissionMap
 }) {
   const router = useRouter()
   const [draft, setDraft] = useState(initialDraft)
@@ -249,7 +254,7 @@ export function CampaignWizard({
             setFile={setFile}
           />
         )}
-        {step === 2 && <StepContent draft={draft} patch={patch} workspaceId={workspaceId} />}
+        {step === 2 && <StepContent draft={draft} patch={patch} workspaceId={workspaceId} userId={userId} permissions={permissions} />}
         {step === 3 && (
           <StepSettings
             draft={draft}
@@ -268,7 +273,7 @@ export function CampaignWizard({
       )}
 
       {/* Rodapé persistente */}
-      <div className="sticky bottom-0 -mx-4 flex flex-wrap items-center justify-between gap-3 border-t border-neutral-200 bg-neutral-0/95 px-4 py-3 backdrop-blur md:-mx-8 md:px-8">
+      <div className="sticky bottom-0 -mx-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-t border-neutral-200 bg-neutral-0/95 px-4 py-3 backdrop-blur md:-mx-8 md:px-8">
         {canDispatch ? (
           <label className="flex max-w-sm cursor-pointer select-none items-start gap-2 text-xs text-neutral-600">
             <input

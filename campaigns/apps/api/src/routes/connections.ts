@@ -1,37 +1,30 @@
 import { Elysia, t } from 'elysia'
-import { db, connections, contacts, contactIdentities } from '@naia/db'
+import { db, connections, contacts, contactIdentities, entitlements } from '@naia/db'
 import { eq, and, count } from 'drizzle-orm'
 import { canAddConnection } from '@naia/entitlements'
 import { sanitizeErrorMessage } from '@naia/schemas'
 import { authPlugin } from '../plugins/auth'
 import { resolveWorkspaceAccess } from '../lib/workspace-auth'
 import { generateId } from '../lib/crypto'
+import { isTelegramUserConfig, resolveApiCredentials } from '../lib/telegram-helpers'
 import {
   startWhatsAppSession,
-  getQRCode,
-  getSocketStatus,
-  disconnectWhatsApp,
-  fetchWhatsAppContacts,
-  fetchWhatsAppGroups,
-  getGroupParticipants,
-  resolveWhatsAppContactName,
-  enrichWhatsAppContactInfo,
-  batchEnrichWhatsAppContacts,
-} from '../lib/whatsapp-manager'
-import {
   startTelegramUserLogin,
-  connectExistingTelegramUser,
   submitTelegramCode,
   submitTelegramPassword,
-  getTelegramAuthState,
-  getTelegramUserStatus,
-  disconnectTelegramUser,
+  reconnectSession,
+  disconnectSession,
+  getSessionStatus,
+  fetchWhatsAppContacts,
+  fetchWhatsAppGroups,
   fetchTelegramUserContacts,
   fetchTelegramUserGroups,
+  getGroupParticipants,
   importTelegramGroupMembers,
-  isTelegramUserConfig,
-  resolveApiCredentials,
-} from '../lib/telegram-user-manager'
+  enrichWhatsAppContact,
+  batchEnrichWhatsAppContacts,
+  resolveWhatsAppContactName,
+} from '@naia/session-host-client'
 
 
 /**
@@ -61,6 +54,11 @@ function resolveParticipantPhone(p: { id: string; phoneNumber?: string | null; n
   return null
 }
 
+async function hostIdForWorkspace(workspaceId: string): Promise<'base' | 'scale'> {
+  const [ent] = await db.select({ tier: entitlements.tier }).from(entitlements).where(eq(entitlements.workspaceId, workspaceId)).limit(1)
+  return ent?.tier === 'scale' ? 'scale' : 'base'
+}
+
 export const connectionRoutes = new Elysia()
   .use(authPlugin)
 
@@ -78,16 +76,27 @@ export const connectionRoutes = new Elysia()
         .where(eq(connections.workspaceId, params.workspaceId))
         .orderBy(connections.createdAt)
 
+      const statuses = await Promise.all(
+        rows.map(async (c) => {
+          try {
+            return await getSessionStatus(c.id)
+          } catch {
+            return { socketStatus: 'disconnected' as const, qr: null, telegramAuth: null }
+          }
+        }),
+      )
+
       return {
-        connections: rows.map((c) => {
+        connections: rows.map((c, i) => {
+          const status = statuses[i]!
           const isTgUser = c.channel === 'telegram' && isTelegramUserConfig(c.config)
           return {
             ...c,
             config: undefined,
             kind: c.channel === 'telegram' ? ('user' as const) : null,
-            qr: c.status === 'disconnected' && c.channel === 'whatsapp' ? getQRCode(c.id) : null,
-            socketStatus: c.channel === 'whatsapp' ? getSocketStatus(c.id) : isTgUser ? getTelegramUserStatus(c.id) : null,
-            telegramAuth: isTgUser ? getTelegramAuthState(c.id) : null,
+            qr: c.status === 'disconnected' && c.channel === 'whatsapp' ? status.qr : null,
+            socketStatus: c.channel === 'whatsapp' ? status.socketStatus : isTgUser ? status.socketStatus : null,
+            telegramAuth: isTgUser ? status.telegramAuth : null,
           }
         }),
       }
@@ -132,7 +141,8 @@ export const connectionRoutes = new Elysia()
       })
 
       // Login MTProto em background — o frontend acompanha via telegramAuth
-      startTelegramUserLogin(connectionId).catch(console.error)
+      const hostId = await hostIdForWorkspace(params.workspaceId)
+      startTelegramUserLogin(connectionId, hostId).catch(console.error)
 
       const [conn] = await db.select().from(connections).where(eq(connections.id, connectionId)).limit(1)
       return { connection: { ...conn, config: undefined } }
@@ -161,9 +171,13 @@ export const connectionRoutes = new Elysia()
         .limit(1)
       if (!conn) { set.status = 404; return { message: 'Conexão não encontrada.' } }
 
-      const accepted = submitTelegramCode(conn.id, body.code)
-      if (!accepted) { set.status = 400; return { message: 'Nenhum login aguardando código para esta conexão.' } }
-      return { message: 'Código recebido — validando...' }
+      try {
+        await submitTelegramCode(conn.id, body.code)
+        return { message: 'Código recebido — validando...' }
+      } catch {
+        set.status = 400
+        return { message: 'Nenhum login aguardando código para esta conexão.' }
+      }
     },
     { body: t.Object({ code: t.String({ minLength: 1 }) }) },
   )
@@ -184,9 +198,13 @@ export const connectionRoutes = new Elysia()
         .limit(1)
       if (!conn) { set.status = 404; return { message: 'Conexão não encontrada.' } }
 
-      const accepted = submitTelegramPassword(conn.id, body.password)
-      if (!accepted) { set.status = 400; return { message: 'Nenhum login aguardando senha 2FA para esta conexão.' } }
-      return { message: 'Senha recebida — validando...' }
+      try {
+        await submitTelegramPassword(conn.id, body.password)
+        return { message: 'Senha recebida — validando...' }
+      } catch {
+        set.status = 400
+        return { message: 'Nenhum login aguardando senha 2FA para esta conexão.' }
+      }
     },
     { body: t.Object({ password: t.String({ minLength: 1 }) }) },
   )
@@ -220,7 +238,8 @@ export const connectionRoutes = new Elysia()
       })
 
       // Sessão Baileys em background (gera o QR code).
-      startWhatsAppSession(connectionId).catch(console.error)
+      const hostId = await hostIdForWorkspace(params.workspaceId)
+      startWhatsAppSession(connectionId, hostId).catch(console.error)
 
       const [conn] = await db.select().from(connections).where(eq(connections.id, connectionId)).limit(1)
       return { connection: { ...conn, config: undefined } }
@@ -245,14 +264,15 @@ export const connectionRoutes = new Elysia()
       if (!conn) { set.status = 404; return { message: 'Conexão não encontrada.' } }
 
       const isTgUser = conn.channel === 'telegram' && isTelegramUserConfig(conn.config)
+      const status = await getSessionStatus(conn.id).catch(() => ({ socketStatus: 'disconnected' as const, qr: null, telegramAuth: null }))
       return {
         connection: {
           ...conn,
           config: undefined,
           kind: conn.channel === 'telegram' ? ('user' as const) : null,
-          qr: conn.channel === 'whatsapp' ? getQRCode(conn.id) : null,
-          socketStatus: conn.channel === 'whatsapp' ? getSocketStatus(conn.id) : isTgUser ? getTelegramUserStatus(conn.id) : null,
-          telegramAuth: isTgUser ? getTelegramAuthState(conn.id) : null,
+          qr: conn.channel === 'whatsapp' ? status.qr : null,
+          socketStatus: conn.channel === 'whatsapp' ? status.socketStatus : isTgUser ? status.socketStatus : null,
+          telegramAuth: isTgUser ? status.telegramAuth : null,
         },
       }
     },
@@ -318,27 +338,11 @@ export const connectionRoutes = new Elysia()
         }
       }
 
-      if (isTgUser) {
-        // Reaproveita a sessão salva quando ainda válida; senão volta para o
-        // fluxo de login (o telefone e as credenciais ficam no config).
-        await disconnectTelegramUser(conn.id)
-        await db
-          .update(connections)
-          .set({ status: 'disconnected', updatedAt: new Date() })
-          .where(eq(connections.id, conn.id))
-        connectExistingTelegramUser(conn.id)
-          .then((ok) => { if (!ok) return startTelegramUserLogin(conn.id) })
-          .catch(console.error)
-        return { message: 'Reconexão iniciada.' }
+      try {
+        await reconnectSession(conn.id, { channel: conn.channel as 'whatsapp' | 'telegram' })
+      } catch (err) {
+        console.error(`[connections] falha ao reconectar ${conn.id}:`, err)
       }
-
-      await disconnectWhatsApp(conn.id)
-      await db
-        .update(connections)
-        .set({ status: 'disconnected', config: '{}', updatedAt: new Date() })
-        .where(eq(connections.id, conn.id))
-
-      startWhatsAppSession(conn.id).catch(console.error)
 
       return { message: 'Reconexão iniciada.' }
     },
@@ -361,10 +365,11 @@ export const connectionRoutes = new Elysia()
 
       if (!conn) { set.status = 404; return { message: 'Conexão não encontrada.' } }
 
-      if (conn.channel === 'whatsapp') {
-        await disconnectWhatsApp(conn.id)
-      } else if (conn.channel === 'telegram') {
-        await disconnectTelegramUser(conn.id, { logout: true })
+      const isTgUser = conn.channel === 'telegram' && isTelegramUserConfig(conn.config)
+      try {
+        await disconnectSession(conn.id, { channel: conn.channel as 'whatsapp' | 'telegram', logout: isTgUser })
+      } catch (err) {
+        console.error(`[connections] falha ao desconectar ${conn.id}:`, err)
       }
 
       await db.delete(connections).where(eq(connections.id, conn.id))
@@ -505,7 +510,7 @@ export const connectionRoutes = new Elysia()
         const enriched = enrichedMap.get(phoneOrId) || enrichedMap.get(`${phoneOrId}@s.whatsapp.net`)
         const isGeneric = (name: string) => !name || name.startsWith('Contato +') || name.startsWith('Contato ') || name.startsWith('Membro ') || name === phoneOrId || name === `+${phoneOrId}`
         const resolvedName = isWa
-          ? (enriched?.name && !isGeneric(enriched.name) ? enriched.name : resolveWhatsAppContactName(conn.id, phoneOrId, item.name || null))
+          ? (enriched?.name && !isGeneric(enriched.name) ? enriched.name : await resolveWhatsAppContactName(conn.id, phoneOrId, item.name || null))
           : (item.name || `Contato ${phoneOrId}`)
         const avatarUrl = enriched?.avatarUrl || item.avatarUrl || null
 
@@ -609,7 +614,7 @@ export const connectionRoutes = new Elysia()
         let groupSubject = group.subject
         if (isWa && groupId.endsWith('@g.us')) {
           try {
-            const enriched = await enrichWhatsAppContactInfo(conn.id, groupId, groupSubject, true)
+            const enriched = await enrichWhatsAppContact(conn.id, groupId, groupSubject)
             if (enriched.avatarUrl) avatarUrl = enriched.avatarUrl
             if (enriched.name && enriched.name !== `Contato +${groupId}`) groupSubject = enriched.name
           } catch {}
@@ -770,7 +775,7 @@ export const connectionRoutes = new Elysia()
         const isGenericName = (name: string) => !name || name.startsWith('Contato +') || name.startsWith('Contato ') || name.startsWith('Membro ') || name === phone || name === `+${phone}`
         const resolvedName = enriched?.name && !isGenericName(enriched.name)
           ? enriched.name
-          : resolveWhatsAppContactName(conn.id, p.id, p.name || null)
+          : await resolveWhatsAppContactName(conn.id, p.id, p.name || null)
         const avatarUrl = enriched?.avatarUrl || (p as any).avatarUrl || null
 
         const [existing] = await db

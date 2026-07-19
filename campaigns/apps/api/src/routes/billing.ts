@@ -49,7 +49,7 @@ export const billingRoutes = new Elysia()
             ...p,
             limits: {
               ...p.limits,
-              messagesPerMonth: 3,
+              creditsPerCycle: 3,
               campaignsPerMonth: 1,
             },
           }
