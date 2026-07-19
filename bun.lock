@@ -321,6 +321,18 @@
         "typescript": "^5",
       },
     },
+    "packages/vianova-email": {
+      "name": "@naia/vianova-email",
+      "version": "0.0.1",
+      "dependencies": {
+        "@naia/vianova-auth": "workspace:*",
+      },
+      "devDependencies": {
+        "@naia/config": "workspace:*",
+        "bun-types": "1.3.14",
+        "typescript": "5.9.3",
+      },
+    },
   },
   "packages": {
     "@babel/code-frame": ["@babel/code-frame@7.27.1", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.27.1", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-cjQ7ZlQ0Mv3b47hABuTevyTuYN4i+loJKGeV9flcCgIK37cCXRh+L1bd3iBHlynerhQ7BhCkn2BPbQUL+rGqFg=="],
@@ -548,6 +560,8 @@
     "@naia/ui": ["@naia/ui@workspace:packages/ui"],
 
     "@naia/vianova-auth": ["@naia/vianova-auth@workspace:packages/vianova-auth"],
+
+    "@naia/vianova-email": ["@naia/vianova-email@workspace:packages/vianova-email"],
 
     "@naia/web": ["@naia/web@workspace:campaigns/apps/web"],
 
