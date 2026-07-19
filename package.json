@@ -21,8 +21,8 @@
     "db:migrate": "turbo run db:migrate"
   },
   "devDependencies": {
-    "jose": "^6",
-    "turbo": "latest",
-    "typescript": "^5"
+    "jose": "6.2.3",
+    "turbo": "2.10.5",
+    "typescript": "5.9.3"
   }
 }
