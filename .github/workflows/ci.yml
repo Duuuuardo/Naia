@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  checks:
+    name: Typecheck and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install
+      - name: Typecheck all packages/apps
+        run: |
+          find apps packages campaigns/apps campaigns/packages crm/apps crm/packages -name package.json -not -path '*/node_modules/*' -print0 2>/dev/null |
+          while IFS= read -r -d '' pkg; do
+            dir=$(dirname "$pkg")
+            if jq -e '.scripts.typecheck' "$pkg" >/dev/null 2>&1; then
+              echo "==> typecheck $dir"
+              (cd "$dir" && bun run typecheck)
+            fi
+          done
+      - run: bun test

@@ -1,0 +1,131 @@
+name: naia-prod
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: naia
+      POSTGRES_USER: naia
+      POSTGRES_PASSWORD: ${NAIA_POSTGRES_PASSWORD}
+    volumes:
+      - naia_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U naia -d naia"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  crm-postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: crm
+      POSTGRES_USER: crm
+      POSTGRES_PASSWORD: ${NAIA_CRM_POSTGRES_PASSWORD}
+    volumes:
+      - naia_crm_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crm -d crm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - naia_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - naia_minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  landing:
+    image: ${REGISTRY}/naia-landing:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3301:3301"
+    env_file:
+      - ./.env
+
+  campaigns-api:
+    image: ${REGISTRY}/naia-campaigns-api:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4001:4001"
+    env_file:
+      - ./.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  campaigns-web:
+    image: ${REGISTRY}/naia-campaigns-web:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:3001"
+    env_file:
+      - ./.env
+    depends_on:
+      - campaigns-api
+
+  campaigns-worker:
+    image: ${REGISTRY}/naia-campaigns-worker:latest
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  crm-api:
+    image: ${REGISTRY}/naia-crm-api:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4002:4002"
+    env_file:
+      - ./.env
+    depends_on:
+      crm-postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  crm-web:
+    image: ${REGISTRY}/naia-crm-web:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3302:3302"
+    env_file:
+      - ./.env
+    depends_on:
+      - crm-api
+
+volumes:
+  naia_postgres_data:
+  naia_crm_postgres_data:
+  naia_redis_data:
+  naia_minio_data:
