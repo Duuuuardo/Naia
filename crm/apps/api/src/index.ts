@@ -1,35 +1,48 @@
 import { Elysia } from 'elysia'
 import { cors } from '@elysiajs/cors'
-import { swagger } from '@elysiajs/swagger'
 import logixlysia from 'logixlysia'
 import { errorSanitizerPlugin } from './plugins/error-sanitizer'
-import { loadProductConfig, getConfigValue } from './lib/config'
+import { createRateLimitPlugin } from './plugins/rate-limit'
+import { loadProductConfig } from './lib/config'
+import { requireEnv } from './lib/env'
+
+function buildCorsOrigin(): string | RegExp {
+  const isProduction = process.env.NODE_ENV === 'production'
+
+  if (!isProduction) {
+    return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
+  }
+
+  const configuredOrigin = requireEnv('CRM_WEB_URL')
+  return configuredOrigin
+}
 
 async function bootstrap() {
+  // Validate required secrets/config before starting.
+  requireEnv('CRM_DATABASE_URL')
+  requireEnv('VIANOVA_INTERNAL_SECRET')
+  requireEnv('NAIA_OIDC_CLIENT_ID')
+  requireEnv('NAIA_OIDC_CLIENT_SECRET')
+  requireEnv('VIANOVA_API_URL')
+  requireEnv('VIANOVA_WEB_URL')
+
   await loadProductConfig()
 
-  const corsOrigin =
-    process.env.NODE_ENV !== 'production'
-      ? /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
-      : getConfigValue<string>('app.url', process.env.CRM_WEB_URL ?? 'http://localhost:3302')
+  const isProduction = process.env.NODE_ENV === 'production'
+  const corsOrigin = buildCorsOrigin()
 
   const app = new Elysia()
     .use(errorSanitizerPlugin)
     .use(
-      cors({
-        origin: corsOrigin,
-        credentials: true,
+      createRateLimitPlugin({
+        windowMs: 60_000,
+        maxRequests: 120,
       }),
     )
     .use(
-      swagger({
-        documentation: {
-          info: {
-            title: 'Naia CRM API',
-            version: '0.0.1',
-            description: 'Multi-channel inbox and conversations for Naia CRM (Milestone 3).',
-          },
-        },
+      cors({
+        origin: corsOrigin,
+        credentials: true,
       }),
     )
     .use(
@@ -38,19 +51,18 @@ async function bootstrap() {
           service: 'crm-api',
           showStartupMessage: true,
           startupMessageFormat: 'banner',
-          showContextTree: true,
-          contextDepth: 2,
+          showContextTree: !isProduction,
+          contextDepth: isProduction ? 0 : 2,
           slowThreshold: 500,
           verySlowThreshold: 1000,
           timestamp: {
             translateTime: 'yyyy-mm-dd HH:MM:ss.SSS',
           },
-          ip: true,
+          ip: !isProduction,
         },
       }),
     )
-    .get('/health', () => ({ status: 'ok', service: 'crm-api' }))
-    .get('/config', () => ({ config: getConfigValue<Record<string, unknown>>('config', {}) }))
+    .get('/health', () => ({ status: 'ok' }))
     .listen(process.env.PORT ?? 4002)
 
   console.log(`crm-api rodando na porta ${app.server?.port}`)

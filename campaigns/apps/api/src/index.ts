@@ -3,6 +3,7 @@ import { cors } from '@elysiajs/cors'
 import { swagger } from '@elysiajs/swagger'
 import logixlysia from 'logixlysia'
 import { errorSanitizerPlugin } from './plugins/error-sanitizer'
+import { rateLimitPlugin } from './plugins/rate-limit'
 import { authPlugin } from './plugins/auth'
 import { authRoutes } from './routes/auth'
 import { workspaceRoutes } from './routes/workspaces'
@@ -20,6 +21,20 @@ import { billingRoutes } from './routes/billing'
 import { filesRoutes } from './routes/files'
 import { notificationRoutes } from './routes/notifications'
 import { loadProductConfig, getConfigValue } from './lib/config'
+import { getRequiredEnv, requireInProd } from './lib/env'
+
+function conditionalSwagger(isProduction: boolean) {
+  if (isProduction) return new Elysia()
+  return swagger({
+    documentation: {
+      info: {
+        title: 'Naia Campaigns API',
+        version: '0.0.1',
+        description: 'Workspace, contacts, connections and campaign dispatch for Naia Campaigns.',
+      },
+    },
+  })
+}
 
 process.on('unhandledRejection', (reason: any) => {
   console.error('[naia-api] Unhandled Rejection:', reason)
@@ -29,47 +44,59 @@ process.on('uncaughtException', (err: any) => {
   console.error('[naia-api] Uncaught Exception:', err)
 })
 
+function validateRequiredEnv() {
+  // Segredos: fallbacks nunca são aceitos — a aplicação não sobe sem eles.
+  getRequiredEnv('NAIA_INTERNAL_SECRET')
+  getRequiredEnv('VIANOVA_INTERNAL_SECRET')
+  getRequiredEnv('WHATSAPP_VERIFY_TOKEN')
+
+  // Endpoints obrigatórios para a API funcionar.
+  getRequiredEnv('VIANOVA_API_URL')
+
+  // Em produção a origem do frontend deve ser explícita — nunca localhost.
+  requireInProd('NAIA_WEB_URL')
+}
+
 async function bootstrap() {
   await loadProductConfig()
+  validateRequiredEnv()
 
-  const corsOrigin =
-    process.env.NODE_ENV !== 'production'
-      ? /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
-      : getConfigValue<string>('app.url', process.env.NAIA_WEB_URL ?? 'http://localhost:3001')
+  const isProduction = process.env.NODE_ENV === 'production'
+
+  const corsOrigin = isProduction
+    ? getConfigValue<string>('app.url', process.env.NAIA_WEB_URL!)
+    : /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
+
+  const rateLimitWindowMs = Number(process.env.RATE_LIMIT_WINDOW_MS ?? 60_000)
+  // Limite global por IP generoso: SPA carrega vários endpoints em paralelo
+  // ao trocar de aba pela sidebar. Ajustável via env.
+  const rateLimitMax = Number(process.env.RATE_LIMIT_MAX ?? 2_000)
+  const port = Number(process.env.PORT ?? 4001)
 
   const app = new Elysia()
     .use(errorSanitizerPlugin)
+    .use(rateLimitPlugin({ windowMs: rateLimitWindowMs, max: rateLimitMax, exclude: ['/auth/me', '/health'] }))
     .use(
       cors({
         origin: corsOrigin,
         credentials: true,
       }),
     )
-    .use(
-      swagger({
-        documentation: {
-          info: {
-            title: 'Naia Campaigns API',
-            version: '0.0.1',
-            description: 'Workspace, contacts, connections and campaign dispatch for Naia Campaigns.',
-          },
-        },
-      }),
-    )
+    .use(conditionalSwagger(isProduction))
     .use(
       logixlysia({
         config: {
           service: 'naia-api',
           showStartupMessage: true,
           startupMessageFormat: 'banner',
-          showContextTree: true,
-          contextDepth: 2,
+          showContextTree: !isProduction,
+          contextDepth: isProduction ? 0 : 2,
           slowThreshold: 500,
           verySlowThreshold: 1000,
           timestamp: {
             translateTime: 'yyyy-mm-dd HH:MM:ss.SSS',
           },
-          ip: true,
+          ip: !isProduction,
         },
       }),
     )
@@ -89,9 +116,8 @@ async function bootstrap() {
     .use(billingRoutes)
     .use(filesRoutes)
     .use(notificationRoutes)
-    .get('/health', () => ({ status: 'ok', service: 'naia-api' }))
-    .get('/config', () => ({ config: getConfigValue<Record<string, unknown>>('config', {}) }))
-    .listen(process.env.PORT ?? 4001)
+    .get('/health', () => ({ status: 'ok' }))
+    .listen(port)
 
   console.log(`naia-api rodando na porta ${app.server?.port}`)
   return app

@@ -64,4 +64,6 @@ jobs:
             git pull
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
-            docker system prune -f
+            # SECURITY: avoid `docker system prune -f` in automated deploys — it can
+            # delete resources still in use and offers no audit trail. Clean up images
+            # with a targeted, tagged prune or a separate scheduled job instead.

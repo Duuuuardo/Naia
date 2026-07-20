@@ -1,9 +1,10 @@
 import { Elysia, t } from 'elysia'
 import { authPlugin } from '../plugins/auth'
 import { resolveWorkspaceAccess } from '../lib/workspace-auth'
+import { getRequiredEnv } from '../lib/env'
 
-const VIANOVA_API_URL = process.env.VIANOVA_API_URL ?? 'http://localhost:5000'
-const VIANOVA_INTERNAL_SECRET = process.env.VIANOVA_INTERNAL_SECRET ?? 'vianova-internal-secret'
+const VIANOVA_API_URL = getRequiredEnv('VIANOVA_API_URL')
+const VIANOVA_INTERNAL_SECRET = getRequiredEnv('VIANOVA_INTERNAL_SECRET')
 
 const PRODUCT_SLUG = 'naia'
 
@@ -148,7 +149,8 @@ export const filesRoutes = new Elysia()
         return { message: 'Você não tem permissão para remover arquivos neste workspace.' }
       }
 
-      const res = await vianovaFetch(`/internal/files/${encodeURIComponent(params.fileId)}`, {
+      const deleteQuery = new URLSearchParams({ product_slug: PRODUCT_SLUG, workspace_id: params.workspaceId })
+      const res = await vianovaFetch(`/internal/files/${encodeURIComponent(params.fileId)}?${deleteQuery.toString()}`, {
         method: 'DELETE',
       })
       if (!res.ok) {
@@ -179,7 +181,8 @@ export const filesRoutes = new Elysia()
         return { message: 'Você não tem permissão para restaurar arquivos neste workspace.' }
       }
 
-      const res = await vianovaFetch(`/internal/files/${encodeURIComponent(params.fileId)}/restore`, {
+      const restoreQuery = new URLSearchParams({ product_slug: PRODUCT_SLUG, workspace_id: params.workspaceId })
+      const res = await vianovaFetch(`/internal/files/${encodeURIComponent(params.fileId)}/restore?${restoreQuery.toString()}`, {
         method: 'POST',
       })
       if (!res.ok) {

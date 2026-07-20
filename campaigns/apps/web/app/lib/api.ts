@@ -1,11 +1,19 @@
 import { createNaiaClient } from '@naia/client'
 
-const apiUrl = typeof window !== 'undefined'
-  ? (import.meta.env.VITE_NAIA_API_URL ?? 'http://localhost:4001')
-  : (process.env.NAIA_API_URL ?? 'http://localhost:4001')
+function requireEnv(name: string): string {
+  const value =
+    typeof window !== 'undefined' ? import.meta.env?.[name] : process.env[name]
+  if (!value || value.trim().length === 0) {
+    throw new Error(`[naia/web] ${name} is required`)
+  }
+  return value
+}
 
-export const API_URL = apiUrl
+export const API_URL =
+  typeof window !== 'undefined'
+    ? requireEnv('VITE_NAIA_API_URL')
+    : requireEnv('NAIA_API_URL')
 
-export function apiClient(token: string) {
-  return createNaiaClient(apiUrl, token)
+export function apiClient(token?: string) {
+  return createNaiaClient(API_URL, token)
 }

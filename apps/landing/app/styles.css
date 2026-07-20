@@ -39,6 +39,18 @@
     }
   }
 
+  @keyframes float-a {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33%       { transform: translate(22px, -28px) scale(1.05); }
+    66%       { transform: translate(-14px, 18px) scale(0.97); }
+  }
+
+  @keyframes float-b {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    40%       { transform: translate(-20px, -22px) scale(1.06); }
+    75%       { transform: translate(16px, 14px) scale(0.96); }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

@@ -3,9 +3,17 @@
 import { db, workspaces } from '@naia/db'
 import { eq } from 'drizzle-orm'
 
-const VIANOVA_API_URL = () => process.env.VIANOVA_API_URL ?? 'http://localhost:5000'
-const INTERNAL_SECRET = () => process.env.NAIA_INTERNAL_SECRET ?? 'change-me-internal-secret'
-export const NAIA_WEB_URL = () => process.env.NAIA_WEB_URL ?? 'http://localhost:3001'
+function requireEnv(name: string): string {
+  const value = process.env[name]
+  if (!value) {
+    throw new Error(`[session-host:vianova-notifications] Variável de ambiente obrigatória ausente: ${name}`)
+  }
+  return value
+}
+
+const VIANOVA_API_URL = requireEnv('VIANOVA_API_URL')
+const INTERNAL_SECRET = requireEnv('NAIA_INTERNAL_SECRET')
+export const NAIA_WEB_URL = requireEnv('NAIA_WEB_URL')
 
 export type VianovaNotificationType = 'billing' | 'security' | 'product' | 'marketing'
 
@@ -23,13 +31,13 @@ export interface VianovaNotificationInput {
 }
 
 export async function notifyVianovaUser(input: VianovaNotificationInput): Promise<{ id: string } | null> {
-  const url = `${VIANOVA_API_URL()}/internal/notifications`
+  const url = `${VIANOVA_API_URL}/internal/notifications`
   try {
     const res = await fetch(url, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-internal-secret': INTERNAL_SECRET(),
+        'x-internal-secret': INTERNAL_SECRET,
       },
       body: JSON.stringify({
         user_id: input.userId,

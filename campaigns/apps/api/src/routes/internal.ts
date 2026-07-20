@@ -1,6 +1,24 @@
 import { Elysia, t } from 'elysia'
-import { db, entitlements, revokedSessions, connections, members, invites, campaigns, campaignMessages, campaignConnections, automations, automationConnections } from '@naia/db'
-import { eq, and, sql, gte, asc } from 'drizzle-orm'
+import {
+  db,
+  entitlements,
+  revokedSessions,
+  connections,
+  members,
+  invites,
+  workspaces,
+  directoryUsers,
+  campaigns,
+  campaignMessages,
+  campaignRuns,
+  campaignConnections,
+  automations,
+  automationConnections,
+  productSettings,
+  workspaceSettings,
+  auditLogs,
+} from '@naia/db'
+import { eq, and, sql, gte, asc, desc, like } from 'drizzle-orm'
 import { verifyServiceToken } from '@naia/vianova-auth'
 import { canCreateCampaign, hasActiveSubscription } from '@naia/entitlements'
 import { dayKeyInTz, todayMonthDay } from '@naia/scheduling'
@@ -12,6 +30,10 @@ import { executeDueEnrollments } from '../lib/automation-engine'
 import { resolveCampaignTargets } from './contacts'
 import { replaceVariants } from './campaigns'
 import { generateId } from '../lib/crypto'
+import { getRequiredEnv, verifySecret } from '../lib/env'
+import { logAudit } from '../lib/audit'
+
+const NAIA_INTERNAL_SECRET = getRequiredEnv('NAIA_INTERNAL_SECRET')
 
 async function requireServiceScope(headers: { authorization?: string }, scope: string): Promise<boolean> {
   const token = headers.authorization?.replace(/^Bearer /, '')
@@ -196,8 +218,7 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
   .post(
     '/campaigns/:campaignId/start-run',
     async ({ params, body, headers, set }) => {
-      const secret = process.env.NAIA_INTERNAL_SECRET
-      if (secret && headers['x-internal-secret'] !== secret) {
+      if (!verifySecret(headers['x-internal-secret'], NAIA_INTERNAL_SECRET)) {
         set.status = 401; return { started: false as const, reason: 'Não autorizado.' }
       }
       try {
@@ -222,8 +243,7 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
   .post(
     '/automations/:automationId/evaluate',
     async ({ params, headers, set }) => {
-      const secret = process.env.NAIA_INTERNAL_SECRET
-      if (secret && headers['x-internal-secret'] !== secret) {
+      if (!verifySecret(headers['x-internal-secret'], NAIA_INTERNAL_SECRET)) {
         set.status = 401; return { evaluated: false as const, reason: 'Não autorizado.' }
       }
 
@@ -351,8 +371,7 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
   .post(
     '/automations/:automationId/execute-steps',
     async ({ params, body, headers, set }) => {
-      const secret = process.env.NAIA_INTERNAL_SECRET
-      if (secret && headers['x-internal-secret'] !== secret) {
+      if (!verifySecret(headers['x-internal-secret'], NAIA_INTERNAL_SECRET)) {
         set.status = 401; return { processed: 0, message: 'Não autorizado.' }
       }
       try {
@@ -399,8 +418,7 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
     async ({ headers, params, set }) => {
       const okRead = await requireServiceScope(headers, 'service:entitlements:read')
       const okWrite = await requireServiceScope(headers, 'service:entitlements:write')
-      const secret = process.env.NAIA_INTERNAL_SECRET
-      const okSecret = secret && headers['x-internal-secret'] === secret
+      const okSecret = verifySecret(headers['x-internal-secret'], NAIA_INTERNAL_SECRET)
       if (!okRead && !okWrite && !okSecret) {
         set.status = 401; return { message: 'Não autorizado.' }
       }
@@ -449,6 +467,713 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
           automations: automationCount?.count ?? 0,
         },
       }
+    },
+  )
+
+  // ============================================================
+  // Admin routes (Vianova admin panel → Naia Campaigns)
+  // ============================================================
+
+  .get(
+    '/admin/workspaces',
+    async ({ headers, query, set }) => {
+      const ok = await requireServiceScope(headers, 'service:admin:read')
+      if (!ok) { set.status = 401; return { message: 'Não autorizado.' } }
+
+      const page = query.page ?? 1
+      const limit = Math.min(query.limit ?? 25, 100)
+      const offset = (page - 1) * limit
+
+      const conditions = []
+      if (query.search) {
+        conditions.push(
+          sql`${workspaces.name} ILIKE ${`%${query.search}%`} OR ${workspaces.slug} ILIKE ${`%${query.search}%`}`,
+        )
+      }
+      if (query.owner_user_id) conditions.push(eq(workspaces.ownerUserId, query.owner_user_id))
+      if (query.organization_id) conditions.push(eq(workspaces.organizationId, query.organization_id))
+      if (query.tier) conditions.push(eq(entitlements.tier, query.tier))
+
+      const where = conditions.length > 0 ? and(...conditions) : undefined
+
+      const [rows, countRows] = await Promise.all([
+        db
+          .select({
+            workspace: workspaces,
+            entitlement: entitlements,
+            memberCount: sql<number>`count(${members.id})::int`,
+            connectionCount: sql<number>`count(distinct ${connections.id})::int`,
+            campaignCount: sql<number>`count(distinct ${campaigns.id})::int`,
+          })
+          .from(workspaces)
+          .leftJoin(entitlements, eq(workspaces.id, entitlements.workspaceId))
+          .leftJoin(members, eq(workspaces.id, members.workspaceId))
+          .leftJoin(connections, eq(workspaces.id, connections.workspaceId))
+          .leftJoin(campaigns, eq(workspaces.id, campaigns.workspaceId))
+          .where(where)
+          .groupBy(workspaces.id, entitlements.workspaceId)
+          .orderBy(desc(workspaces.createdAt))
+          .limit(limit)
+          .offset(offset),
+        db
+          .select({ count: sql<number>`count(distinct ${workspaces.id})::int` })
+          .from(workspaces)
+          .leftJoin(entitlements, eq(workspaces.id, entitlements.workspaceId))
+          .leftJoin(members, eq(workspaces.id, members.workspaceId))
+          .leftJoin(connections, eq(workspaces.id, connections.workspaceId))
+          .leftJoin(campaigns, eq(workspaces.id, campaigns.workspaceId))
+          .where(where),
+      ])
+
+      return {
+        workspaces: rows.map((r) => ({
+          ...r.workspace,
+          entitlement: r.entitlement,
+          memberCount: r.memberCount,
+          connectionCount: r.connectionCount,
+          campaignCount: r.campaignCount,
+        })),
+        pagination: {
+          page,
+          limit,
+          total: countRows[0]?.count ?? 0,
+          totalPages: Math.ceil((countRows[0]?.count ?? 0) / limit),
+        },
+      }
+    },
+    {
+      query: t.Object({
+        search: t.Optional(t.String()),
+        owner_user_id: t.Optional(t.String()),
+        organization_id: t.Optional(t.String()),
+        tier: t.Optional(t.String()),
+        page: t.Optional(t.Number({ minimum: 1 })),
+        limit: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
+      }),
+    },
+  )
+
+  .get(
+    '/admin/workspaces/:workspaceId',
+    async ({ headers, params, set }) => {
+      const ok = await requireServiceScope(headers, 'service:admin:read')
+      if (!ok) { set.status = 401; return { message: 'Não autorizado.' } }
+
+      const [workspace] = await db.select().from(workspaces).where(eq(workspaces.id, params.workspaceId)).limit(1)
+      if (!workspace) { set.status = 404; return { message: 'Workspace não encontrado.' } }
+
+      const [entitlement] = await db
+        .select()
+        .from(entitlements)
+        .where(eq(entitlements.workspaceId, params.workspaceId))
+        .limit(1)
+
+      const memberRows = await db
+        .select({ member: members, user: directoryUsers })
+        .from(members)
+        .leftJoin(directoryUsers, eq(members.userId, directoryUsers.id))
+        .where(eq(members.workspaceId, params.workspaceId))
+        .orderBy(members.createdAt)
+
+      const inviteRows = await db
+        .select()
+        .from(invites)
+        .where(eq(invites.workspaceId, params.workspaceId))
+        .orderBy(invites.createdAt)
+
+      return {
+        workspace,
+        entitlement: entitlement ?? null,
+        members: memberRows.map((r) => ({
+          ...r.member,
+          user: r.user,
+        })),
+        invites: inviteRows,
+      }
+    },
+  )
+
+  .get(
+    '/admin/workspaces/:workspaceId/campaigns',
+    async ({ headers, params, query, set }) => {
+      const ok = await requireServiceScope(headers, 'service:admin:read')
+      if (!ok) { set.status = 401; return { message: 'Não autorizado.' } }
+
+      const page = query.page ?? 1
+      const limit = Math.min(query.limit ?? 25, 100)
+      const offset = (page - 1) * limit
+
+      const [rows, countRows] = await Promise.all([
+        db
+          .select({
+            campaign: campaigns,
+            runCount: sql<number>`count(distinct ${campaignRuns.id})::int`,
+            messageCount: sql<number>`count(distinct ${campaignMessages.id})::int`,
+          })
+          .from(campaigns)
+          .leftJoin(campaignRuns, eq(campaigns.id, campaignRuns.campaignId))
+          .leftJoin(campaignMessages, eq(campaigns.id, campaignMessages.campaignId))
+          .where(eq(campaigns.workspaceId, params.workspaceId))
+          .groupBy(campaigns.id)
+          .orderBy(desc(campaigns.createdAt))
+          .limit(limit)
+          .offset(offset),
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(campaigns)
+          .where(eq(campaigns.workspaceId, params.workspaceId)),
+      ])
+
+      return {
+        campaigns: rows.map((r) => ({
+          ...r.campaign,
+          runCount: r.runCount,
+          messageCount: r.messageCount,
+        })),
+        pagination: {
+          page,
+          limit,
+          total: countRows[0]?.count ?? 0,
+          totalPages: Math.ceil((countRows[0]?.count ?? 0) / limit),
+        },
+      }
+    },
+    {
+      query: t.Object({
+        page: t.Optional(t.Number({ minimum: 1 })),
+        limit: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
+      }),
+    },
+  )
+
+  .get(
+    '/admin/workspaces/:workspaceId/connections',
+    async ({ headers, params, set }) => {
+      const ok = await requireServiceScope(headers, 'service:admin:read')
+      if (!ok) { set.status = 401; return { message: 'Não autorizado.' } }
+
+      const rows = await db
+        .select({
+          id: connections.id,
+          channel: connections.channel,
+          name: connections.name,
+          status: connections.status,
+          lastErrorAt: connections.lastErrorAt,
+          lastErrorMessage: connections.lastErrorMessage,
+          createdAt: connections.createdAt,
+          updatedAt: connections.updatedAt,
+        })
+        .from(connections)
+        .where(eq(connections.workspaceId, params.workspaceId))
+        .orderBy(connections.createdAt)
+
+      return { connections: rows }
+    },
+  )
+
+  // Configurações globais do produto — leitura/escrita pelo admin do Vianova.
+  .get('/admin/product-settings', async ({ headers, set }) => {
+    const ok = await requireServiceScope(headers, 'service:admin:read')
+    if (!ok) { set.status = 401; return { message: 'Não autorizado.' } }
+
+    const rows = await db.select().from(productSettings).orderBy(productSettings.key)
+    return { settings: rows }
+  })
+
+  .patch(
+    '/admin/product-settings',
+    async ({ headers, body, set }) => {
+      const ok = await requireServiceScope(headers, 'service:admin:write')
+      if (!ok) { set.status = 401; return { message: 'Não autorizado.' } }
+
+      const entries = Object.entries(body.settings)
+      if (entries.length === 0) {
+        set.status = 400
+        return { message: 'Nenhuma configuração enviada.' }
+      }
+
+      const now = new Date()
+      await db
+        .insert(productSettings)
+        .values(
+          entries.map(([key, value]) => ({
+            key,
+            value,
+            updatedByService: body.updated_by_service ?? 'vianova-admin',
+            updatedAt: now,
+          })),
+        )
+        .onConflictDoUpdate({
+          target: productSettings.key,
+          set: {
+            value: sql`excluded.value`,
+            updatedByService: body.updated_by_service ?? 'vianova-admin',
+            updatedAt: now,
+          },
+        })
+
+      return { updated: entries.map(([k]) => k) }
+    },
+    {
+      body: t.Object({
+        settings: t.Record(t.String(), t.Unknown()),
+        updated_by_service: t.Optional(t.String()),
+      }),
+    },
+  )
+
+  // Configurações por workspace — overrides de product_settings.
+  .get('/admin/workspaces/:workspaceId/settings', async ({ headers, params, set }) => {
+    const ok = await requireServiceScope(headers, 'service:admin:read')
+    if (!ok) { set.status = 401; return { message: 'Não autorizado.' } }
+
+    const [row] = await db
+      .select()
+      .from(workspaceSettings)
+      .where(eq(workspaceSettings.workspaceId, params.workspaceId))
+      .limit(1)
+
+    return { settings: row ?? { workspaceId: params.workspaceId, settings: {}, updatedByService: null, updatedAt: null } }
+  })
+
+  .patch(
+    '/admin/workspaces/:workspaceId/settings',
+    async ({ headers, params, body, set }) => {
+      const ok = await requireServiceScope(headers, 'service:admin:write')
+      if (!ok) { set.status = 401; return { message: 'Não autorizado.' } }
+
+      const entries = Object.entries(body.settings)
+      if (entries.length === 0) {
+        set.status = 400
+        return { message: 'Nenhuma configuração enviada.' }
+      }
+
+      // Merge parcial: preserva chaves existentes e atualiza/envia as novas.
+      const [existing] = await db
+        .select()
+        .from(workspaceSettings)
+        .where(eq(workspaceSettings.workspaceId, params.workspaceId))
+        .limit(1)
+
+      const merged: Record<string, unknown> = { ...(existing?.settings ?? {}) }
+      for (const [k, v] of entries) {
+        if (v === null) delete merged[k]
+        else merged[k] = v
+      }
+
+      const now = new Date()
+      const [row] = await db
+        .insert(workspaceSettings)
+        .values({
+          workspaceId: params.workspaceId,
+          settings: merged,
+          updatedByService: body.updated_by_service ?? 'vianova-admin',
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: workspaceSettings.workspaceId,
+          set: {
+            settings: merged,
+            updatedByService: body.updated_by_service ?? 'vianova-admin',
+            updatedAt: now,
+          },
+        })
+        .returning()
+
+      return { settings: row }
+    },
+    {
+      body: t.Object({
+        settings: t.Record(t.String(), t.Unknown()),
+        updated_by_service: t.Optional(t.String()),
+      }),
+    },
+  )
+
+  // Override manual de entitlement — usado pelo admin para desligar/reativar
+  // um workspace sem depender do ciclo de billing.
+  .post(
+    '/admin/workspaces/:workspaceId/entitlements',
+    async ({ headers, params, body, set }) => {
+      const ok = await requireServiceScope(headers, 'service:admin:write')
+      if (!ok) { set.status = 401; return { message: 'Não autorizado.' } }
+
+      const [workspace] = await db.select().from(workspaces).where(eq(workspaces.id, params.workspaceId)).limit(1)
+      if (!workspace) { set.status = 404; return { message: 'Workspace não encontrado.' } }
+
+      const update: Record<string, unknown> = {}
+      if (body.tier !== undefined) update.tier = body.tier
+      if (body.status !== undefined) update.status = body.status
+      if (body.seats !== undefined) update.seats = body.seats
+      if (body.connections !== undefined) update.connections = body.connections
+      if (body.credits_per_cycle !== undefined) update.creditsPerCycle = body.credits_per_cycle
+      if (body.credits_balance !== undefined) update.creditsBalance = body.credits_balance
+      if (body.campaigns_per_month !== undefined) update.campaignsPerMonth = body.campaigns_per_month
+      if (body.automations !== undefined) update.automations = body.automations
+      if (body.storage_bytes !== undefined) update.storageBytes = body.storage_bytes
+      if (body.max_file_size_bytes !== undefined) update.maxFileSizeBytes = body.max_file_size_bytes
+      update.updatedAt = new Date()
+
+      const [entitlement] = await db
+        .insert(entitlements)
+        .values({
+          workspaceId: params.workspaceId,
+          tier: body.tier ?? 'free',
+          status: body.status ?? 'active',
+          seats: body.seats ?? 1,
+          connections: body.connections ?? 1,
+          creditsPerCycle: body.credits_per_cycle ?? 0,
+          creditsBalance: body.credits_balance ?? 0,
+          campaignsPerMonth: body.campaigns_per_month ?? 1,
+          automations: body.automations ?? 0,
+          storageBytes: body.storage_bytes ?? 0,
+          maxFileSizeBytes: body.max_file_size_bytes ?? 0,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: entitlements.workspaceId,
+          set: update,
+        })
+        .returning()
+
+      return { entitlement }
+    },
+    {
+      body: t.Object({
+        tier: t.Optional(t.String()),
+        status: t.Optional(t.String()),
+        seats: t.Optional(t.Number()),
+        connections: t.Optional(t.Number()),
+        credits_per_cycle: t.Optional(t.Number()),
+        credits_balance: t.Optional(t.Number()),
+        campaigns_per_month: t.Optional(t.Number()),
+        automations: t.Optional(t.Number()),
+        storage_bytes: t.Optional(t.Number()),
+        max_file_size_bytes: t.Optional(t.Number()),
+      }),
+    },
+  )
+
+  // Suspende um workspace (status de entitlement -> suspended).
+  .post(
+    '/admin/workspaces/:workspaceId/suspend',
+    async ({ headers, params, body, set }) => {
+      const ok = await requireServiceScope(headers, 'service:admin:write')
+      if (!ok) { set.status = 401; return { message: 'Não autorizado.' } }
+
+      const [workspace] = await db.select().from(workspaces).where(eq(workspaces.id, params.workspaceId)).limit(1)
+      if (!workspace) { set.status = 404; return { message: 'Workspace não encontrado.' } }
+
+      const [entitlement] = await db
+        .insert(entitlements)
+        .values({
+          workspaceId: params.workspaceId,
+          tier: 'free',
+          status: 'suspended',
+          seats: 1,
+          connections: 0,
+          creditsPerCycle: 0,
+          creditsBalance: 0,
+          campaignsPerMonth: 0,
+          automations: 0,
+          storageBytes: 0,
+          maxFileSizeBytes: 0,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: entitlements.workspaceId,
+          set: { status: 'suspended', updatedAt: new Date() },
+        })
+        .returning()
+
+      await logAudit({
+        actorUserId: body.actor_user_id ?? 'vianova-admin',
+        action: 'workspace:suspend',
+        resourceType: 'workspace',
+        resourceId: params.workspaceId,
+        workspaceId: params.workspaceId,
+        metadata: { reason: body.reason ?? null },
+        ip: body.actor_ip ?? null,
+        userAgent: body.actor_user_agent ?? null,
+      })
+
+      return { suspended: true as const, entitlement }
+    },
+    {
+      body: t.Object({
+        actor_user_id: t.Optional(t.String()),
+        reason: t.Optional(t.String()),
+        actor_ip: t.Optional(t.String()),
+        actor_user_agent: t.Optional(t.String()),
+      }),
+    },
+  )
+
+  // Reativa um workspace suspenso (status de entitlement -> active).
+  .post(
+    '/admin/workspaces/:workspaceId/reactivate',
+    async ({ headers, params, body, set }) => {
+      const ok = await requireServiceScope(headers, 'service:admin:write')
+      if (!ok) { set.status = 401; return { message: 'Não autorizado.' } }
+
+      const [workspace] = await db.select().from(workspaces).where(eq(workspaces.id, params.workspaceId)).limit(1)
+      if (!workspace) { set.status = 404; return { message: 'Workspace não encontrado.' } }
+
+      const [entitlement] = await db
+        .insert(entitlements)
+        .values({
+          workspaceId: params.workspaceId,
+          tier: 'free',
+          status: 'active',
+          seats: 1,
+          connections: 1,
+          creditsPerCycle: 3,
+          creditsBalance: 3,
+          campaignsPerMonth: 1,
+          automations: 0,
+          storageBytes: 0,
+          maxFileSizeBytes: 0,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: entitlements.workspaceId,
+          set: { status: 'active', updatedAt: new Date() },
+        })
+        .returning()
+
+      await logAudit({
+        actorUserId: body.actor_user_id ?? 'vianova-admin',
+        action: 'workspace:reactivate',
+        resourceType: 'workspace',
+        resourceId: params.workspaceId,
+        workspaceId: params.workspaceId,
+        metadata: { reason: body.reason ?? null },
+        ip: body.actor_ip ?? null,
+        userAgent: body.actor_user_agent ?? null,
+      })
+
+      return { reactivated: true as const, entitlement }
+    },
+    {
+      body: t.Object({
+        actor_user_id: t.Optional(t.String()),
+        reason: t.Optional(t.String()),
+        actor_ip: t.Optional(t.String()),
+        actor_user_agent: t.Optional(t.String()),
+      }),
+    },
+  )
+
+  // Transfere a titularidade de um workspace para outro usuário.
+  // O novo dono precisa ser membro do workspace; o antigo dono vira admin.
+  .post(
+    '/admin/workspaces/:workspaceId/transfer-ownership',
+    async ({ headers, params, body, set }) => {
+      const ok = await requireServiceScope(headers, 'service:admin:write')
+      if (!ok) { set.status = 401; return { message: 'Não autorizado.' } }
+
+      const [workspace] = await db.select().from(workspaces).where(eq(workspaces.id, params.workspaceId)).limit(1)
+      if (!workspace) { set.status = 404; return { message: 'Workspace não encontrado.' } }
+
+      if (workspace.ownerUserId === body.new_owner_user_id) {
+        set.status = 400
+        return { message: 'O novo dono já é o dono atual do workspace.' }
+      }
+
+      const [newOwnerMember] = await db
+        .select()
+        .from(members)
+        .where(and(eq(members.workspaceId, params.workspaceId), eq(members.userId, body.new_owner_user_id)))
+        .limit(1)
+
+      if (!newOwnerMember) {
+        set.status = 400
+        return { message: 'O novo dono deve ser um membro do workspace.' }
+      }
+
+      const previousOwnerId = workspace.ownerUserId
+
+      await db.transaction(async (tx) => {
+        await tx
+          .update(members)
+          .set({ role: 'owner' })
+          .where(and(eq(members.workspaceId, params.workspaceId), eq(members.userId, body.new_owner_user_id)))
+
+        if (previousOwnerId !== body.new_owner_user_id) {
+          await tx
+            .update(members)
+            .set({ role: 'admin' })
+            .where(and(eq(members.workspaceId, params.workspaceId), eq(members.userId, previousOwnerId)))
+        }
+
+        await tx
+          .update(workspaces)
+          .set({ ownerUserId: body.new_owner_user_id, updatedAt: new Date() })
+          .where(eq(workspaces.id, params.workspaceId))
+      })
+
+      const [updatedWorkspace] = await db.select().from(workspaces).where(eq(workspaces.id, params.workspaceId)).limit(1)
+
+      await logAudit({
+        actorUserId: body.actor_user_id ?? 'vianova-admin',
+        action: 'workspace:transfer_ownership',
+        resourceType: 'workspace',
+        resourceId: params.workspaceId,
+        workspaceId: params.workspaceId,
+        metadata: { previousOwnerUserId: previousOwnerId, newOwnerUserId: body.new_owner_user_id },
+        ip: body.actor_ip ?? null,
+        userAgent: body.actor_user_agent ?? null,
+      })
+
+      return { transferred: true as const, workspace: updatedWorkspace }
+    },
+    {
+      body: t.Object({
+        new_owner_user_id: t.String({ minLength: 1 }),
+        actor_user_id: t.Optional(t.String()),
+        actor_ip: t.Optional(t.String()),
+        actor_user_agent: t.Optional(t.String()),
+      }),
+    },
+  )
+
+  // Remove um membro do workspace. O dono não pode ser removido.
+  .post(
+    '/admin/workspaces/:workspaceId/members/:userId/remove',
+    async ({ headers, params, body, set }) => {
+      const ok = await requireServiceScope(headers, 'service:admin:write')
+      if (!ok) { set.status = 401; return { message: 'Não autorizado.' } }
+
+      const [workspace] = await db.select().from(workspaces).where(eq(workspaces.id, params.workspaceId)).limit(1)
+      if (!workspace) { set.status = 404; return { message: 'Workspace não encontrado.' } }
+
+      if (workspace.ownerUserId === params.userId) {
+        set.status = 400
+        return { message: 'Não é possível remover o dono do workspace. Transfira a titularidade primeiro.' }
+      }
+
+      const [member] = await db
+        .select()
+        .from(members)
+        .where(and(eq(members.workspaceId, params.workspaceId), eq(members.userId, params.userId)))
+        .limit(1)
+
+      if (!member) { set.status = 404; return { message: 'Membro não encontrado.' } }
+
+      await db.delete(members).where(eq(members.id, member.id))
+
+      await logAudit({
+        actorUserId: body.actor_user_id ?? 'vianova-admin',
+        action: 'workspace:member:remove',
+        resourceType: 'workspace_member',
+        resourceId: params.userId,
+        workspaceId: params.workspaceId,
+        metadata: { role: member.role },
+        ip: body.actor_ip ?? null,
+        userAgent: body.actor_user_agent ?? null,
+      })
+
+      return { removed: true as const }
+    },
+    {
+      body: t.Object({
+        actor_user_id: t.Optional(t.String()),
+        actor_ip: t.Optional(t.String()),
+        actor_user_agent: t.Optional(t.String()),
+      }),
+    },
+  )
+
+  // Cancela um convite pendente.
+  .post(
+    '/admin/workspaces/:workspaceId/invites/:inviteId/cancel',
+    async ({ headers, params, body, set }) => {
+      const ok = await requireServiceScope(headers, 'service:admin:write')
+      if (!ok) { set.status = 401; return { message: 'Não autorizado.' } }
+
+      const [workspace] = await db.select().from(workspaces).where(eq(workspaces.id, params.workspaceId)).limit(1)
+      if (!workspace) { set.status = 404; return { message: 'Workspace não encontrado.' } }
+
+      const [invite] = await db
+        .select()
+        .from(invites)
+        .where(and(eq(invites.id, params.inviteId), eq(invites.workspaceId, params.workspaceId)))
+        .limit(1)
+
+      if (!invite) { set.status = 404; return { message: 'Convite não encontrado.' } }
+      if (invite.status !== 'pending') {
+        set.status = 400
+        return { message: 'Só é possível cancelar convites pendentes.' }
+      }
+
+      const [updatedInvite] = await db
+        .update(invites)
+        .set({ status: 'cancelled' })
+        .where(eq(invites.id, params.inviteId))
+        .returning()
+
+      await logAudit({
+        actorUserId: body.actor_user_id ?? 'vianova-admin',
+        action: 'workspace:invite:cancel',
+        resourceType: 'workspace_invite',
+        resourceId: params.inviteId,
+        workspaceId: params.workspaceId,
+        metadata: { email: invite.email, role: invite.role },
+        ip: body.actor_ip ?? null,
+        userAgent: body.actor_user_agent ?? null,
+      })
+
+      return { cancelled: true as const, invite: updatedInvite }
+    },
+    {
+      body: t.Object({
+        actor_user_id: t.Optional(t.String()),
+        actor_ip: t.Optional(t.String()),
+        actor_user_agent: t.Optional(t.String()),
+      }),
+    },
+  )
+
+  // Audit logs de um workspace (usado pela aba "Visão geral" do admin).
+  .get(
+    '/admin/workspaces/:workspaceId/audit-logs',
+    async ({ headers, params, query, set }) => {
+      const ok = await requireServiceScope(headers, 'service:admin:read')
+      if (!ok) { set.status = 401; return { message: 'Não autorizado.' } }
+
+      const page = query.page ?? 1
+      const limit = Math.min(query.limit ?? 25, 100)
+      const offset = (page - 1) * limit
+
+      const [rows, countRows] = await Promise.all([
+        db
+          .select()
+          .from(auditLogs)
+          .where(eq(auditLogs.workspaceId, params.workspaceId))
+          .orderBy(desc(auditLogs.createdAt))
+          .limit(limit)
+          .offset(offset),
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(auditLogs)
+          .where(eq(auditLogs.workspaceId, params.workspaceId)),
+      ])
+
+      return {
+        logs: rows,
+        pagination: {
+          page,
+          limit,
+          total: countRows[0]?.count ?? 0,
+          totalPages: Math.ceil((countRows[0]?.count ?? 0) / limit),
+        },
+      }
+    },
+    {
+      query: t.Object({
+        page: t.Optional(t.Number({ minimum: 1 })),
+        limit: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
+      }),
     },
   )
 

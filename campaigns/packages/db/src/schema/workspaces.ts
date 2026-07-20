@@ -62,6 +62,21 @@ export const invites = pgTable('invites', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })
 
+// Auditoria de ações administrativas originadas no painel da Vianova.
+// actorUserId é o id do admin no Vianova (não existe usuário no Naia).
+export const auditLogs = pgTable('audit_logs', {
+  id: text('id').primaryKey(),
+  actorUserId: text('actor_user_id').notNull(),
+  action: text('action').notNull(),
+  resourceType: text('resource_type').notNull(),
+  resourceId: text('resource_id'),
+  workspaceId: text('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
+  metadata: jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+  ip: text('ip'),
+  userAgent: text('user_agent'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+})
+
 // Entitlement local — única forma de escrita é POST /internal/entitlements
 // (token de serviço do Vianova). Nunca calculado por lógica de billing própria.
 export const entitlements = pgTable('entitlements', {
@@ -101,6 +116,29 @@ export const directoryUsers = pgTable('directory_users', {
   name: text('name').notNull(),
   picture: text('picture'),
   pictureFrame: text('picture_frame'),
+  // Contador vitalício: sobe quando o usuário cria um workspace free,
+  // nunca desce — impede recriação após deleção para burlar limite.
+  freeWorkspacesCreated: integer('free_workspaces_created').notNull().default(0),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
+// Configurações globais do produto — editáveis pelo painel admin do Vianova.
+// Chave/valor com JSON livre; schema mínimo garante type-safety nos consumers.
+export const productSettings = pgTable('product_settings', {
+  key: text('key').primaryKey(),
+  value: jsonb('value').$type<unknown>().notNull().default({}),
+  description: text('description'),
+  updatedByService: text('updated_by_service'),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
+// Configurações por workspace — overrides de product_settings ou flags custom.
+export const workspaceSettings = pgTable('workspace_settings', {
+  workspaceId: text('workspace_id')
+    .primaryKey()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  settings: jsonb('settings').$type<Record<string, unknown>>().notNull().default({}),
+  updatedByService: text('updated_by_service'),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
@@ -109,3 +147,6 @@ export type Member = typeof members.$inferSelect
 export type Invite = typeof invites.$inferSelect
 export type EntitlementRow = typeof entitlements.$inferSelect
 export type DirectoryUser = typeof directoryUsers.$inferSelect
+export type ProductSetting = typeof productSettings.$inferSelect
+export type WorkspaceSetting = typeof workspaceSettings.$inferSelect
+export type AuditLog = typeof auditLogs.$inferSelect

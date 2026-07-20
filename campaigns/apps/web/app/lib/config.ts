@@ -12,6 +12,12 @@ export async function loadProductConfig(): Promise<ConfigMap> {
     return productConfig
   }
 
+  if (!internalSecret) {
+    console.warn('[config] VIANOVA_INTERNAL_SECRET not set, using empty config')
+    productConfig = {}
+    return productConfig
+  }
+
   const environment =
     process.env.NODE_ENV === 'production' ? 'production' : process.env.NODE_ENV === 'staging' ? 'staging' : 'development'
 

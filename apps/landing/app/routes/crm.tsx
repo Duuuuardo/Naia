@@ -375,8 +375,20 @@ function Waitlist() {
 
 function FinalCta() {
   return (
-    <section className="border-t border-neutral-200 bg-dark-800">
-      <div className="mx-auto flex max-w-6xl flex-col items-center px-6 py-20 text-center md:py-24">
+    <section className="relative [overflow:clip] bg-dark-800">
+      <div aria-hidden="true" className="pointer-events-none -mb-px">
+        <svg viewBox="0 0 1440 56" preserveAspectRatio="none" className="w-full h-10 md:h-14 block" fill="#f9fafb">
+          <path d="M0,36 Q120,8 300,28 Q480,48 640,16 Q800,-14 960,22 Q1120,58 1280,30 Q1380,14 1440,24 L1440,0 L0,0 Z" />
+        </svg>
+      </div>
+
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 [mask-image:linear-gradient(to_bottom,transparent_0%,black_25%)]">
+        <div className="absolute top-[12%] left-[-8%] h-[420px] w-[420px] rounded-full bg-brand-500 opacity-[0.13] blur-3xl motion-safe:[animation:float-a_9s_ease-in-out_infinite]" />
+        <div className="absolute bottom-[-12%] right-[2%] h-80 w-80 rounded-full bg-brand-400 opacity-[0.09] blur-3xl motion-safe:[animation:float-b_13s_ease-in-out_infinite]" />
+        <div className="absolute top-[35%] left-[45%] h-52 w-52 rounded-full bg-brand-600 opacity-[0.07] blur-2xl motion-safe:[animation:float-a_17s_ease-in-out_3s_infinite]" />
+      </div>
+
+      <div className="relative mx-auto flex max-w-6xl flex-col items-center px-6 py-20 text-center md:py-24">
         <NaiaIcon size={40} />
         <h2 className="mt-6 max-w-xl text-3xl font-bold tracking-tight text-white md:text-4xl">
           Venda no disparo. Atenda na conversa.
@@ -392,13 +404,19 @@ function FinalCta() {
           <ArrowRight size={18} aria-hidden="true" />
         </a>
       </div>
+
+      <div aria-hidden="true" className="pointer-events-none -mt-px">
+        <svg viewBox="0 0 1440 48" preserveAspectRatio="none" className="w-full h-8 md:h-12 block" fill="#ffffff">
+          <path d="M0,24 Q200,48 400,20 Q600,-8 800,28 Q1000,56 1200,18 Q1340,0 1440,20 L1440,48 L0,48 Z" />
+        </svg>
+      </div>
     </section>
   )
 }
 
 function Footer() {
   return (
-    <footer className="border-t border-neutral-200 bg-neutral-0">
+    <footer className="bg-neutral-0">
       <div className="mx-auto max-w-6xl px-6 py-12">
         <div className="flex flex-col justify-between gap-8 md:flex-row md:items-start">
           <div>

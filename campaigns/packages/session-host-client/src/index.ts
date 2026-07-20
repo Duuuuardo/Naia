@@ -5,6 +5,14 @@ const REDIS_KEY_PREFIX = 'naia:session-host:'
 
 type HostId = 'base' | 'scale'
 
+function requireEnv(name: string): string {
+  const value = process.env[name]
+  if (!value) {
+    throw new Error(`[@naia/session-host-client] Variável de ambiente obrigatória ausente: ${name}`)
+  }
+  return value
+}
+
 export async function resolveHostForConnection(connectionId: string): Promise<HostId | null> {
   const redis = getRedis()
   const value = await redis.get(`${REDIS_KEY_PREFIX}${connectionId}`)
@@ -14,9 +22,9 @@ export async function resolveHostForConnection(connectionId: string): Promise<Ho
 
 export function getSessionHostUrl(hostId: HostId): string {
   if (hostId === 'scale') {
-    return process.env.SESSION_HOST_SCALE_URL ?? 'http://localhost:4011'
+    return requireEnv('SESSION_HOST_SCALE_URL')
   }
-  return process.env.SESSION_HOST_BASE_URL ?? 'http://localhost:4010'
+  return requireEnv('SESSION_HOST_BASE_URL')
 }
 
 export async function resolveSessionHostUrl(connectionId: string): Promise<string> {
@@ -25,7 +33,7 @@ export async function resolveSessionHostUrl(connectionId: string): Promise<strin
 }
 
 function getSecret(): string {
-  return process.env.NAIA_INTERNAL_SECRET ?? ''
+  return requireEnv('NAIA_INTERNAL_SECRET')
 }
 
 async function post<T>(url: string, body: unknown): Promise<T> {

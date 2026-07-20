@@ -156,7 +156,7 @@ export async function connectExistingTelegramUser(connectionId: string): Promise
           type: 'product',
           title: 'Telegram desconectado',
           body: `A conexão "${connInfo.name}" do Telegram expirou. Faça login novamente para continuar os envios.`,
-          actionUrl: `${NAIA_WEB_URL()}/${connInfo.workspaceId}/connections`,
+          actionUrl: `${NAIA_WEB_URL}/${connInfo.workspaceId}/connections`,
           actionLabel: 'Reconectar',
           metadata: { connectionId, connectionName: connInfo.name, channel: connInfo.channel, reason: 'telegram_session_expired' },
         }, 'emailOnConnectionDisconnected').catch((err) => console.error('[telegram-user] falha ao notificar desconexão:', err))
@@ -192,7 +192,7 @@ export async function connectExistingTelegramUser(connectionId: string): Promise
         type: 'product',
         title: 'Telegram com erro',
         body: `A conexão "${connInfo.name}" do Telegram falhou ao conectar. Verifique as configurações.`,
-        actionUrl: `${NAIA_WEB_URL()}/${connInfo.workspaceId}/connections`,
+        actionUrl: `${NAIA_WEB_URL}/${connInfo.workspaceId}/connections`,
         actionLabel: 'Ver conexões',
         metadata: { connectionId, connectionName: connInfo.name, channel: connInfo.channel, reason: 'telegram_connection_error' },
       }, 'emailOnConnectionDisconnected').catch((err) => console.error('[telegram-user] falha ao notificar erro:', err))
@@ -286,7 +286,7 @@ export async function startTelegramUserLogin(connectionId: string): Promise<void
     telegramClientMap.set(connectionId, { status: 'connected', client })
     registerOptCommandHandler(connectionId, client)
     await persistSession(connectionId, config, client)
-    console.log(`[telegram-user] Sessão ${connectionId} autenticada (${config.phone}).`)
+    console.log(`[telegram-user] Sessão ${connectionId} autenticada.`)
   } catch (err) {
     const message = translateLoginError(err)
     clearPendingLogin(connectionId)

@@ -9,8 +9,16 @@ import { db, campaigns, automations } from '@naia/db'
 import { sql, eq, and } from 'drizzle-orm'
 import { dayKeyInTz, isPastTimeOfDay } from '@naia/scheduling'
 
-const API_URL = process.env.NAIA_API_URL ?? 'http://localhost:4001'
-const INTERNAL_SECRET = process.env.NAIA_INTERNAL_SECRET ?? ''
+function requireEnv(name: string): string {
+  const value = process.env[name]
+  if (!value) {
+    throw new Error(`[worker:scheduler] Variável de ambiente obrigatória ausente: ${name}`)
+  }
+  return value
+}
+
+const API_URL = requireEnv('NAIA_API_URL')
+const INTERNAL_SECRET = requireEnv('NAIA_INTERNAL_SECRET')
 
 async function callInternal(path: string, body: unknown): Promise<{ ok: boolean; status: number }> {
   const res = await fetch(`${API_URL}${path}`, {

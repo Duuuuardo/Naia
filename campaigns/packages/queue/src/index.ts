@@ -1,6 +1,14 @@
 import { Queue, Worker, type Processor, type WorkerOptions, type JobsOptions } from 'bullmq'
 import IORedis from 'ioredis'
 
+function requireEnv(name: string): string {
+  const value = process.env[name]
+  if (!value) {
+    throw new Error(`[@naia/queue] Variável de ambiente obrigatória ausente: ${name}`)
+  }
+  return value
+}
+
 export const QUEUES = {
   TELEGRAM_OUTBOUND_BASE: 'telegram-outbound-base',
   WHATSAPP_OUTBOUND_BASE: 'whatsapp-outbound-base',
@@ -29,7 +37,7 @@ let connection: IORedis | null = null
 
 export function getRedis(): IORedis {
   if (!connection) {
-    connection = new IORedis(process.env.NAIA_REDIS_URL ?? 'redis://localhost:6381', {
+    connection = new IORedis(requireEnv('NAIA_REDIS_URL'), {
       maxRetriesPerRequest: null,
     })
   }

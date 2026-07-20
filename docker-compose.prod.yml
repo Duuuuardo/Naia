@@ -3,6 +3,11 @@ name: naia-prod
 networks:
   novaplatform:
     external: true
+  # Rede interna isolada: banco, Redis e MinIO só são alcançáveis pelos
+  # serviços do Naia que se conectam explicitamente a ela.
+  naia-internal:
+    driver: bridge
+    internal: true
 
 services:
   postgres:
@@ -19,6 +24,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - naia-internal
 
   crm-postgres:
     image: postgres:16-alpine
@@ -34,20 +41,25 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - naia-internal
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${NAIA_REDIS_PASSWORD}"]
     volumes:
       - naia_redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${NAIA_REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - naia-internal
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-07-17T22-54-18Z
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -60,6 +72,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - naia-internal
 
   landing:
     image: ${REGISTRY}/naia-landing:latest
@@ -67,7 +81,6 @@ services:
     ports:
       - "127.0.0.1:3301:3301"
     networks:
-      default: {}
       novaplatform:
         aliases:
           - naia-landing
@@ -80,10 +93,10 @@ services:
     ports:
       - "127.0.0.1:4001:4001"
     networks:
-      default: {}
       novaplatform:
         aliases:
           - naia-campaigns-api
+      naia-internal:
     env_file:
       - ./.env
     depends_on:
@@ -100,7 +113,6 @@ services:
     ports:
       - "127.0.0.1:3001:3001"
     networks:
-      default: {}
       novaplatform:
         aliases:
           - naia-campaigns-web
@@ -114,6 +126,8 @@ services:
     restart: unless-stopped
     env_file:
       - ./.env
+    networks:
+      - naia-internal
     depends_on:
       postgres:
         condition: service_healthy
@@ -126,10 +140,10 @@ services:
     ports:
       - "127.0.0.1:4002:4002"
     networks:
-      default: {}
       novaplatform:
         aliases:
           - naia-crm-api
+      naia-internal:
     env_file:
       - ./.env
     depends_on:
@@ -144,7 +158,6 @@ services:
     ports:
       - "127.0.0.1:3302:3302"
     networks:
-      default: {}
       novaplatform:
         aliases:
           - naia-crm-web

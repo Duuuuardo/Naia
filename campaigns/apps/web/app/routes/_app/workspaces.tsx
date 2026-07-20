@@ -59,14 +59,33 @@ function getInitials(name: string) {
     .toUpperCase()
 }
 
+const INDUSTRIES = [
+  'Varejo / E-commerce',
+  'Saúde / Bem-estar',
+  'Educação / Cursos',
+  'Imobiliário',
+  'Serviços / Consultoria',
+  'Alimentação / Restaurantes',
+  'Beleza / Estética',
+  'Tecnologia',
+  'Financeiro / Seguros',
+  'Eventos / Entretenimento',
+  'Outro',
+]
+
 function CreateWorkspaceModal({
   onClose,
   onCreated,
+  needsUpgrade,
 }: {
   onClose: () => void
   onCreated: (ws: Workspace) => void
+  needsUpgrade: boolean
 }) {
   const [name, setName] = useState('')
+  const [industry, setIndustry] = useState('')
+  const [description, setDescription] = useState('')
+  const [agreed, setAgreed] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -80,13 +99,14 @@ function CreateWorkspaceModal({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [onClose])
 
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!name.trim()) return
+    if (!name.trim() || !industry || !agreed) return
     setError(null)
     setLoading(true)
-    const result = await createWorkspace({ data: { name: name.trim() } })
+    const result = await createWorkspace({
+      data: { name: name.trim(), industry, description: description.trim() || undefined },
+    })
     setLoading(false)
     if ('error' in result) {
       setError(result.error ?? 'Erro ao criar workspace.')
@@ -117,7 +137,7 @@ function CreateWorkspaceModal({
           <div className="p-6 space-y-4 flex-1">
             <div>
               <label htmlFor="ws-name" className="block text-sm font-medium text-dark-800 mb-1.5">
-                Nome
+                Nome do workspace <span className="text-error-500">*</span>
               </label>
               <input
                 ref={inputRef}
@@ -127,19 +147,82 @@ function CreateWorkspaceModal({
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Minha Empresa"
                 required
+                maxLength={80}
                 className="w-full h-10 px-3.5 rounded-md border border-neutral-300 text-sm font-medium text-dark-800 placeholder:text-neutral-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all"
               />
             </div>
 
-            <p className="text-xs text-neutral-400">
-              Inicia no plano Grátis (3 envios/mês).
-            </p>
+            <div>
+              <label htmlFor="ws-industry" className="block text-sm font-medium text-dark-800 mb-1.5">
+                Área de atuação <span className="text-error-500">*</span>
+              </label>
+              <select
+                id="ws-industry"
+                value={industry}
+                onChange={(e) => setIndustry(e.target.value)}
+                required
+                className="w-full h-10 px-3.5 rounded-md border border-neutral-300 text-sm text-dark-800 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all bg-white appearance-none"
+                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
+              >
+                <option value="">Selecione…</option>
+                {INDUSTRIES.map((i) => (
+                  <option key={i} value={i}>{i}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="ws-description" className="block text-sm font-medium text-dark-800 mb-1.5">
+                Descrição <span className="text-neutral-400 font-normal">(opcional)</span>
+              </label>
+              <textarea
+                id="ws-description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="O que esse workspace faz ou representa…"
+                rows={2}
+                maxLength={300}
+                className="w-full px-3.5 py-2.5 rounded-md border border-neutral-300 text-sm text-dark-800 placeholder:text-neutral-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all resize-none"
+              />
+            </div>
+
+            <label className="flex items-start gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={agreed}
+                onChange={(e) => setAgreed(e.target.checked)}
+                className="mt-0.5 shrink-0 size-4 rounded border-neutral-300 accent-brand-500 cursor-pointer"
+              />
+              <span className="text-xs text-neutral-500 leading-relaxed">
+                Concordo com os{' '}
+                <a href="https://vianova.software/terms" target="_blank" rel="noopener noreferrer" className="text-brand-500 hover:text-brand-600 font-medium underline-offset-2 hover:underline">
+                  Termos de Uso
+                </a>{' '}
+                e a{' '}
+                <a href="https://vianova.software/privacy" target="_blank" rel="noopener noreferrer" className="text-brand-500 hover:text-brand-600 font-medium underline-offset-2 hover:underline">
+                  Política de Privacidade
+                </a>.
+              </span>
+            </label>
 
             {error && (
               <div className="rounded-md bg-red-50 border border-red-200 px-3.5 py-2.5 text-sm font-medium text-error-500 flex items-center gap-2">
                 <X size={16} className="shrink-0" />
                 <span>{error}</span>
               </div>
+            )}
+
+            {needsUpgrade ? (
+              <div className="rounded-md bg-amber-50 border border-amber-200 px-3.5 py-2.5 flex items-start gap-2">
+                <Shield size={14} className="shrink-0 mt-0.5 text-amber-600" />
+                <p className="text-xs text-amber-700 leading-relaxed">
+                  Este workspace será criado sem uso disponível. Para enviar campanhas, você precisará fazer upgrade.
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-neutral-400">
+                Inicia no plano Grátis: 3 envios/mês, 1 conexão incluída.
+              </p>
             )}
           </div>
 
@@ -153,7 +236,7 @@ function CreateWorkspaceModal({
             </button>
             <button
               type="submit"
-              disabled={loading || !name.trim()}
+              disabled={loading || !name.trim() || !industry || !agreed}
               className="flex-1 h-10 rounded-md bg-brand-500 text-white text-sm font-semibold hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all shadow-sm flex items-center justify-center gap-2"
             >
               {loading ? (
@@ -163,7 +246,7 @@ function CreateWorkspaceModal({
                 </>
               ) : (
                 <>
-                  <span>Criar</span>
+                  <span>Criar workspace</span>
                   <ArrowRight size={15} />
                 </>
               )}
@@ -409,6 +492,7 @@ function WorkspacesPage() {
         <CreateWorkspaceModal
           onClose={() => setShowCreate(false)}
           onCreated={handleCreated}
+          needsUpgrade={workspaces.some((ws) => ws.role === 'owner')}
         />
       )}
     </div>

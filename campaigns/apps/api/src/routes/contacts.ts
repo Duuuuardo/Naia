@@ -1,5 +1,5 @@
 import { Elysia, t } from 'elysia'
-import { db, contacts, contactIdentities, contactTags, campaignMessages, connections } from '@naia/db'
+import { db, contacts, contactIdentities, contactTags, campaignMessages, campaigns, connections } from '@naia/db'
 import { eq, and, or, ilike, sql, inArray, arrayOverlaps } from 'drizzle-orm'
 import { sanitizeErrorMessage } from '@naia/schemas'
 import { matchesBirthdayToday, todayMonthDay, DEFAULT_TIMEZONE } from '@naia/scheduling'
@@ -125,11 +125,15 @@ export function buildContactsQuery(workspaceId: string, filter: SegmentFilter) {
     )
   }
   if (filter.type === 'custom') {
+    const field = filter.field
+    if (!/^[a-zA-Z0-9_-]{1,64}$/.test(field)) {
+      throw new Error('Campo customizado inválido.')
+    }
     return db.select().from(contacts).where(
       and(
         eq(contacts.workspaceId, workspaceId),
         eq(contacts.isGroup, false),
-        sql`${contacts.customFields}::jsonb->>${filter.field} = ${filter.value}`,
+        sql`${contacts.customFields}::jsonb->>${field} = ${filter.value}`,
       ),
     )
   }
@@ -1219,8 +1223,29 @@ export const contactRoutes = new Elysia()
         return { message: 'Nenhum ID fornecido.' }
       }
 
-      await db.delete(contactIdentities).where(inArray(contactIdentities.contactId, body.ids))
-      await db.delete(campaignMessages).where(inArray(campaignMessages.contactId, body.ids))
+      await db
+        .delete(contactIdentities)
+        .where(
+          and(
+            inArray(contactIdentities.contactId, body.ids),
+            eq(contactIdentities.workspaceId, params.workspaceId),
+          ),
+        )
+
+      const workspaceCampaignIds = db
+        .select({ id: campaigns.id })
+        .from(campaigns)
+        .where(eq(campaigns.workspaceId, params.workspaceId))
+
+      await db
+        .delete(campaignMessages)
+        .where(
+          and(
+            inArray(campaignMessages.contactId, body.ids),
+            inArray(campaignMessages.campaignId, workspaceCampaignIds),
+          ),
+        )
+
       await db
         .delete(contacts)
         .where(and(inArray(contacts.id, body.ids), eq(contacts.workspaceId, params.workspaceId)))

@@ -22,7 +22,15 @@ import {
 
 const TERMINAL_RUN = ['completed', 'failed', 'cancelled', 'skipped_quota'] as const
 
-const NAIA_WEB_URL = () => process.env.NAIA_WEB_URL ?? 'http://localhost:3001'
+function getRequiredEnv(name: string): string {
+  const value = process.env[name]
+  if (!value || value.trim().length === 0) {
+    throw new Error(`[worker/pacer] ${name} is required`)
+  }
+  return value
+}
+
+const NAIA_WEB_URL = () => getRequiredEnv('NAIA_WEB_URL')
 
 // Sem conexão saudável o run estaciona e reavalia — só falha de vez após o teto.
 // Cobre queda de conexão no meio do envio (ex: WhatsApp reconectando).

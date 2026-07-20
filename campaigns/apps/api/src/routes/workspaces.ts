@@ -1,14 +1,15 @@
 import { Elysia, t } from 'elysia'
-import { db, workspaces, members, entitlements } from '@naia/db'
-import { eq } from 'drizzle-orm'
+import { db, workspaces, members, entitlements, directoryUsers } from '@naia/db'
+import { eq, sql } from 'drizzle-orm'
 import { DEFAULT_ROLE_PERMISSIONS, PERMISSION_KEYS } from '@naia/schemas'
 import type { RolePermissionMap, WorkspaceRolePermissions } from '@naia/schemas'
 import { authPlugin } from '../plugins/auth'
 import { resolveWorkspaceAccess } from '../lib/workspace-auth'
 import { generateId } from '../lib/crypto'
+import { getRequiredEnv } from '../lib/env'
 
-const VIANOVA_API_URL = process.env.VIANOVA_API_URL ?? 'http://localhost:5000'
-const VIANOVA_INTERNAL_SECRET = process.env.VIANOVA_INTERNAL_SECRET ?? 'vianova-internal-secret'
+const VIANOVA_API_URL = getRequiredEnv('VIANOVA_API_URL')
+const VIANOVA_INTERNAL_SECRET = getRequiredEnv('VIANOVA_INTERNAL_SECRET')
 const PRODUCT_SLUG = 'naia'
 
 async function ensureVianovaFreeSubscription(workspace: { id: string; name: string; ownerUserId: string; organizationId: string | null }) {
@@ -80,6 +81,18 @@ export const workspaceRoutes = new Elysia()
     async ({ session, body, set }) => {
       if (!session) { set.status = 401; return { message: 'Não autenticado.' } }
 
+      // Primeiro workspace free recebe o plano gratuito real.
+      // Workspaces adicionais nascem zerados (0 créditos, 0 conexões, 0 campanhas)
+      // e ficam bloqueados até upgrade — o contador nunca decrementa, logo
+      // excluir e recriar não restaura o free plan.
+      const [userRecord] = await db
+        .select({ freeWorkspacesCreated: directoryUsers.freeWorkspacesCreated })
+        .from(directoryUsers)
+        .where(eq(directoryUsers.id, session.userId))
+        .limit(1)
+
+      const isFirstFreeWorkspace = !userRecord || userRecord.freeWorkspacesCreated === 0
+
       const baseSlug = slugify(body.name) || 'workspace'
       let slug = baseSlug
       let suffix = 1
@@ -96,6 +109,8 @@ export const workspaceRoutes = new Elysia()
         slug,
         ownerUserId: session.userId,
         organizationId: body.organizationId ?? null,
+        description: body.description ?? null,
+        industry: body.industry ?? null,
       })
 
       await db.insert(members).values({
@@ -105,26 +120,47 @@ export const workspaceRoutes = new Elysia()
         role: 'owner',
       })
 
-      await db.insert(entitlements).values({
-        workspaceId: id,
-        tier: 'free',
-        status: 'active',
-        seats: 1,
-        connections: 1,
-        creditsPerCycle: 3,
-        creditsBalance: 3,
-        campaignsPerMonth: 1,
-        automations: 0,
-      })
+      await db.insert(entitlements).values(
+        isFirstFreeWorkspace
+          ? {
+              workspaceId: id,
+              tier: 'free',
+              status: 'active',
+              seats: 1,
+              connections: 1,
+              creditsPerCycle: 3,
+              creditsBalance: 3,
+              campaignsPerMonth: 1,
+              automations: 0,
+            }
+          : {
+              workspaceId: id,
+              tier: 'free',
+              status: 'inactive',
+              seats: 1,
+              connections: 0,
+              creditsPerCycle: 0,
+              creditsBalance: 0,
+              campaignsPerMonth: 0,
+              automations: 0,
+            },
+      )
 
-      // Registra o workspace no Vianova para que entitlements (storage, addons,
-      // etc.) sejam sincronizados a partir do catálogo de planos.
-      await ensureVianovaFreeSubscription({
-        id,
-        name: body.name,
-        ownerUserId: session.userId,
-        organizationId: body.organizationId ?? null,
-      })
+      // Só registra no Vianova (e garante subscription free) para o primeiro workspace.
+      if (isFirstFreeWorkspace) {
+        await ensureVianovaFreeSubscription({
+          id,
+          name: body.name,
+          ownerUserId: session.userId,
+          organizationId: body.organizationId ?? null,
+        })
+      }
+
+      // Incrementa o contador vitalício — sobe sempre, nunca desce.
+      await db
+        .update(directoryUsers)
+        .set({ freeWorkspacesCreated: sql`${directoryUsers.freeWorkspacesCreated} + 1` })
+        .where(eq(directoryUsers.id, session.userId))
 
       const [workspace] = await db.select().from(workspaces).where(eq(workspaces.id, id)).limit(1)
       const [entitlement] = await db.select().from(entitlements).where(eq(entitlements.workspaceId, id)).limit(1)
@@ -134,6 +170,8 @@ export const workspaceRoutes = new Elysia()
       body: t.Object({
         name: t.String({ minLength: 1 }),
         organizationId: t.Optional(t.String()),
+        description: t.Optional(t.String({ maxLength: 300 })),
+        industry: t.Optional(t.String()),
       }),
     },
   )

@@ -1,9 +1,31 @@
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose'
 
-const VIANOVA_API_URL = process.env.VIANOVA_API_URL ?? 'http://localhost:5000'
-const VIANOVA_WEB_URL = process.env.VIANOVA_WEB_URL ?? 'http://localhost:3000'
-const CLIENT_ID = process.env.NAIA_OIDC_CLIENT_ID ?? 'naia'
-const CLIENT_SECRET = process.env.NAIA_OIDC_CLIENT_SECRET ?? 'naia-dev-secret'
+function requireEnv(name: string): string {
+  const value = process.env[name]
+  if (!value || value.trim().length === 0) {
+    throw new Error(`[vianova-auth] ${name} is required`)
+  }
+  return value
+}
+
+const VIANOVA_API_URL = requireEnv('VIANOVA_API_URL')
+const VIANOVA_WEB_URL = requireEnv('VIANOVA_WEB_URL')
+
+function requireClientId(): string {
+  const value = process.env.NAIA_OIDC_CLIENT_ID
+  if (!value) {
+    throw new Error('[vianova-auth] NAIA_OIDC_CLIENT_ID is required')
+  }
+  return value
+}
+
+function requireClientSecret(): string {
+  const value = process.env.NAIA_OIDC_CLIENT_SECRET
+  if (!value) {
+    throw new Error('[vianova-auth] NAIA_OIDC_CLIENT_SECRET is required')
+  }
+  return value
+}
 
 // Cacheado pelo próprio jose (por URL) — sem round-trip ao Vianova a cada
 // verificação de token, só quando o cache do JWKS expira/precisa de um `kid`
@@ -14,7 +36,7 @@ const jwks = createRemoteJWKSet(new URL(`${VIANOVA_API_URL}/.well-known/jwks.jso
 
 export function buildAuthorizeUrl(opts: { redirectUri: string; state: string }): string {
   const url = new URL(`${VIANOVA_API_URL}/oidc/authorize`)
-  url.searchParams.set('client_id', CLIENT_ID)
+  url.searchParams.set('client_id', requireClientId())
   url.searchParams.set('redirect_uri', opts.redirectUri)
   url.searchParams.set('response_type', 'code')
   url.searchParams.set('state', opts.state)
@@ -40,8 +62,8 @@ export async function exchangeCodeForToken(
     body: JSON.stringify({
       grant_type: 'authorization_code',
       code,
-      client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET,
+      client_id: requireClientId(),
+      client_secret: requireClientSecret(),
       redirect_uri: redirectUri,
     }),
   })
@@ -72,7 +94,7 @@ export async function verifyUserToken(token: string): Promise<VianovaUser | null
   try {
     const { payload } = await jwtVerify(token, jwks, {
       issuer: VIANOVA_API_URL,
-      audience: CLIENT_ID,
+      audience: requireClientId(),
     })
 
     if (!payload.sub || typeof payload.sid !== 'string') return null
@@ -101,7 +123,7 @@ export async function verifyServiceToken(
   try {
     const { payload } = await jwtVerify(token, jwks, {
       issuer: VIANOVA_API_URL,
-      audience: CLIENT_ID,
+      audience: requireClientId(),
       subject: 'vianova-service',
     })
     return payload.scope === expectedScope
@@ -118,7 +140,7 @@ export async function introspectToken(token: string): Promise<
   const res = await fetch(`${VIANOVA_API_URL}/oidc/introspect`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ token, client_id: CLIENT_ID, client_secret: CLIENT_SECRET }),
+    body: JSON.stringify({ token, client_id: requireClientId(), client_secret: requireClientSecret() }),
   })
   if (!res.ok) return { active: false }
   const data = (await res.json()) as JWTPayload & { active: boolean }
@@ -140,4 +162,4 @@ export function manageBillingUrl(): string {
   return `${VIANOVA_WEB_URL}/billing`
 }
 
-export { VIANOVA_API_URL, VIANOVA_WEB_URL, CLIENT_ID }
+export { VIANOVA_API_URL, VIANOVA_WEB_URL }

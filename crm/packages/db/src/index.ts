@@ -2,8 +2,11 @@ import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import * as schema from './schema'
 
-const connectionString =
-  process.env.CRM_DATABASE_URL ?? 'postgres://crm:crm_secret@localhost:5436/crm'
+const connectionString = process.env.CRM_DATABASE_URL
+
+if (!connectionString) {
+  throw new Error('[crm/db] CRM_DATABASE_URL is required')
+}
 
 const client = postgres(connectionString)
 

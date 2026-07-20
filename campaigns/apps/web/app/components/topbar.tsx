@@ -2,6 +2,7 @@ import { Link, useRouter } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 import { ChevronRight, Inbox, LayoutGrid, LogOut, Megaphone, UserRound, Zap } from 'lucide-react'
 import { logout } from '../lib/vianova'
+import { requireEnv } from '../lib/env'
 
 import { Avatar } from './ui'
 import { NotificationBell } from './notification-bell'
@@ -157,8 +158,8 @@ function ProfileMenu({
   )
 }
 
-const VIANOVA_WEB_URL = import.meta.env.VITE_VIANOVA_WEB_URL ?? 'http://localhost:3000'
-const CRM_WEB_URL = import.meta.env.VITE_CRM_WEB_URL ?? 'http://localhost:3302'
+const VIANOVA_WEB_URL = requireEnv('VITE_VIANOVA_WEB_URL')
+const CRM_WEB_URL = requireEnv('VITE_CRM_WEB_URL')
 
 function ProductSwitcher() {
   const [open, setOpen] = useState(false)

@@ -34,15 +34,79 @@ import {
   isTelegramUserConfig,
 } from './lib/telegram-user-manager'
 
+function requireEnv(name: string): string {
+  const value = process.env[name]
+  if (!value) {
+    throw new Error(`[session-host] Variável de ambiente obrigatória ausente: ${name}`)
+  }
+  return value
+}
+
+const INTERNAL_SECRET = requireEnv('NAIA_INTERNAL_SECRET')
 const hostId = getHostId()
 
 function requireInternalSecret(headers: Record<string, string | undefined>, set: { status?: number | string | undefined }): boolean {
-  const secret = process.env.NAIA_INTERNAL_SECRET
-  if (secret && headers['x-internal-secret'] !== secret) {
+  const header = headers['x-internal-secret']
+  if (!header || header !== INTERNAL_SECRET) {
     set.status = 401
     return false
   }
   return true
+}
+
+// Rate limiting em memória por IP + rota. Em produção com múltiplas réplicas
+// deve-se trocar por store compartilhado (Redis), mas este é o mínimo seguro
+// para o session-host single-instance.
+type RateWindow = { count: number; resetAt: number }
+const rateLimitMap = new Map<string, RateWindow>()
+const RATE_LIMIT_WINDOW_MS = 60_000
+const RATE_LIMIT_MAX = 120
+
+function rateLimitKey(ip: string, path: string): string {
+  return `${ip}:${path}`
+}
+
+function isRateLimited(ip: string, path: string): boolean {
+  const now = Date.now()
+  const key = rateLimitKey(ip, path)
+  const window = rateLimitMap.get(key)
+  if (!window || now >= window.resetAt) {
+    rateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS })
+    return false
+  }
+  window.count++
+  return window.count > RATE_LIMIT_MAX
+}
+
+function cleanupRateLimitMap(): void {
+  const now = Date.now()
+  for (const [key, window] of rateLimitMap) {
+    if (now >= window.resetAt) rateLimitMap.delete(key)
+  }
+}
+
+setInterval(cleanupRateLimitMap, RATE_LIMIT_WINDOW_MS)
+
+function parseAllowedOrigins(): string[] | null {
+  const raw = process.env.NAIA_ALLOWED_ORIGINS
+  if (!raw) return null
+  return raw.split(',').map((o) => o.trim()).filter(Boolean)
+}
+
+function buildCorsOrigin(): string | string[] | RegExp | false {
+  const isProd = process.env.NODE_ENV === 'production'
+  const allowed = parseAllowedOrigins()
+
+  if (isProd) {
+    if (!allowed || allowed.length === 0) {
+      throw new Error('[session-host] NAIA_ALLOWED_ORIGINS deve estar configurado em produção')
+    }
+    return allowed
+  }
+
+  // Em dev, se houver configuração explícita, respeita-a; senão permite localhost.
+  if (allowed && allowed.length > 0) return allowed
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
 }
 
 function isBaileysCancelError(err: any): boolean {
@@ -67,12 +131,16 @@ process.on('uncaughtException', (err: any) => {
 })
 
 const app = new Elysia()
+  .onBeforeHandle(({ request, set }) => {
+    const ip = request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip') ?? 'unknown'
+    if (isRateLimited(ip, new URL(request.url).pathname)) {
+      set.status = 429
+      return { message: 'Muitas requisições. Tente novamente mais tarde.' }
+    }
+  })
   .use(
     cors({
-      origin:
-        process.env.NODE_ENV !== 'production'
-          ? /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
-          : false,
+      origin: buildCorsOrigin(),
       credentials: true,
     }),
   )
@@ -142,6 +210,11 @@ const app = new Elysia()
 
   .group('/sessions', (app) =>
     app
+      .onBeforeHandle(({ headers, set }) => {
+        if (!requireInternalSecret(headers, set)) {
+          return { message: 'Não autorizado.' }
+        }
+      })
       .post('/whatsapp/:connectionId/start', async ({ params }) => {
         await startWhatsAppSession(params.connectionId)
         await registerConnection(params.connectionId, hostId)

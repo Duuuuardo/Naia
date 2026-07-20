@@ -19,8 +19,9 @@ import {
   markNotificationRead,
   type NotificationItem,
 } from '../../lib/actions'
+import { requireEnv } from '../../lib/env'
 
-const VIANOVA_WEB_URL = import.meta.env.VITE_VIANOVA_WEB_URL ?? 'http://localhost:3000'
+const VIANOVA_WEB_URL = requireEnv('VITE_VIANOVA_WEB_URL')
 
 export const Route = createFileRoute('/_app/notifications')({
   loader: async () => {

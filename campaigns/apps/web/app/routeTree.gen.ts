@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthErrorRouteImport } from './routes/auth/error'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 import { Route as AppWorkspacesRouteImport } from './routes/_app/workspaces'
 import { Route as AppNotificationsRouteImport } from './routes/_app/notifications'
@@ -42,6 +43,11 @@ const AppRoute = AppRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthErrorRoute = AuthErrorRouteImport.update({
+  id: '/auth/error',
+  path: '/auth/error',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
@@ -143,6 +149,7 @@ export interface FileRoutesByFullPath {
   '/notifications': typeof AppNotificationsRoute
   '/workspaces': typeof AppWorkspacesRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/auth/error': typeof AuthErrorRoute
   '/$workspaceId/automations': typeof AppWorkspaceIdAutomationsRoute
   '/$workspaceId/billing': typeof AppWorkspaceIdBillingRoute
   '/$workspaceId/connections': typeof AppWorkspaceIdConnectionsRoute
@@ -163,6 +170,7 @@ export interface FileRoutesByTo {
   '/notifications': typeof AppNotificationsRoute
   '/workspaces': typeof AppWorkspacesRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/auth/error': typeof AuthErrorRoute
   '/$workspaceId/automations': typeof AppWorkspaceIdAutomationsRoute
   '/$workspaceId/billing': typeof AppWorkspaceIdBillingRoute
   '/$workspaceId/connections': typeof AppWorkspaceIdConnectionsRoute
@@ -186,6 +194,7 @@ export interface FileRoutesById {
   '/_app/notifications': typeof AppNotificationsRoute
   '/_app/workspaces': typeof AppWorkspacesRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/auth/error': typeof AuthErrorRoute
   '/_app/$workspaceId/automations': typeof AppWorkspaceIdAutomationsRoute
   '/_app/$workspaceId/billing': typeof AppWorkspaceIdBillingRoute
   '/_app/$workspaceId/connections': typeof AppWorkspaceIdConnectionsRoute
@@ -209,6 +218,7 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/workspaces'
     | '/auth/callback'
+    | '/auth/error'
     | '/$workspaceId/automations'
     | '/$workspaceId/billing'
     | '/$workspaceId/connections'
@@ -229,6 +239,7 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/workspaces'
     | '/auth/callback'
+    | '/auth/error'
     | '/$workspaceId/automations'
     | '/$workspaceId/billing'
     | '/$workspaceId/connections'
@@ -251,6 +262,7 @@ export interface FileRouteTypes {
     | '/_app/notifications'
     | '/_app/workspaces'
     | '/auth/callback'
+    | '/auth/error'
     | '/_app/$workspaceId/automations'
     | '/_app/$workspaceId/billing'
     | '/_app/$workspaceId/connections'
@@ -271,6 +283,7 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
+  AuthErrorRoute: typeof AuthErrorRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -294,6 +307,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/error': {
+      id: '/auth/error'
+      path: '/auth/error'
+      fullPath: '/auth/error'
+      preLoaderRoute: typeof AuthErrorRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth/callback': {
@@ -487,6 +507,7 @@ const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
   AuthCallbackRoute: AuthCallbackRoute,
+  AuthErrorRoute: AuthErrorRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

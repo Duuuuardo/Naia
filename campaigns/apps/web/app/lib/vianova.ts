@@ -6,10 +6,20 @@ import { getCookie, setCookie, deleteCookie } from '@tanstack/react-start/server
 // aqui roda só no servidor (createServerFn): o segredo do client OIDC nunca
 // chega ao bundle do browser.
 
-const vianovaApiUrl = () => process.env.VIANOVA_API_URL ?? 'http://localhost:5000'
-const naiaWebUrl = () => process.env.NAIA_WEB_URL ?? 'http://localhost:3001'
-const clientId = () => process.env.NAIA_OIDC_CLIENT_ID ?? 'naia'
-const clientSecret = () => process.env.NAIA_OIDC_CLIENT_SECRET ?? 'naia-dev-secret'
+function requireEnv(name: string): string {
+  const value = process.env[name]
+  if (!value || value.trim().length === 0) {
+    throw new Error(`[naia/web] ${name} is required`)
+  }
+  return value
+}
+
+const vianovaApiUrl = () => requireEnv('VIANOVA_API_URL')
+const naiaWebUrl = () => requireEnv('NAIA_WEB_URL')
+const clientId = () => requireEnv('NAIA_OIDC_CLIENT_ID')
+const clientSecret = () => requireEnv('NAIA_OIDC_CLIENT_SECRET')
+
+const isProduction = process.env.NODE_ENV === 'production'
 
 export const SESSION_COOKIE = 'naia_session'
 const REDIRECT_URI = () => `${naiaWebUrl()}/auth/callback`
@@ -47,6 +57,7 @@ export const completeLogin = createServerFn()
     setCookie(SESSION_COOKIE, tokenData.access_token, {
       httpOnly: true,
       sameSite: 'lax',
+      secure: isProduction,
       path: '/',
       maxAge: tokenData.expires_in ?? 3600,
     })

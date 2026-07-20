@@ -5,6 +5,10 @@ import { canAddSeat } from '@naia/entitlements'
 import { authPlugin } from '../plugins/auth'
 import { resolveWorkspaceAccess } from '../lib/workspace-auth'
 import { generateId, generateToken } from '../lib/crypto'
+import { getRequiredEnv } from '../lib/env'
+
+const VIANOVA_WEB_URL = getRequiredEnv('VIANOVA_WEB_URL')
+const NAIA_WEB_URL = getRequiredEnv('NAIA_WEB_URL')
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -51,7 +55,7 @@ export const inviteRoutes = new Elysia()
       const check = canAddSeat(ctx.entitlements, projectedSeats)
       if (!check.allowed) {
         set.status = 403
-        return { message: check.reason, upgradeUrl: `${process.env.VIANOVA_WEB_URL ?? 'http://localhost:3000'}/billing` }
+        return { message: check.reason, upgradeUrl: `${VIANOVA_WEB_URL}/billing` }
       }
 
       const token = generateToken()
@@ -68,11 +72,10 @@ export const inviteRoutes = new Elysia()
       })
 
       const [workspace] = await db.select({ name: workspaces.name }).from(workspaces).where(eq(workspaces.id, params.workspaceId)).limit(1)
-      const inviteUrl = `${process.env.NAIA_WEB_URL ?? 'http://localhost:3001'}/invites/${token}`
+      const inviteUrl = `${NAIA_WEB_URL}/invites/${token}`
 
-      // Sem SMTP configurado neste estágio — link de convite fica logado pra
-      // uso manual em dev (mesma convenção do Vianova pra emails).
-      console.log(`[invite:dev] ${body.email} convidado para "${workspace?.name}" → ${inviteUrl}`)
+      // Sem SMTP configurado neste estágio — loga só metadata, nunca email/link.
+      console.log(`[invite:dev] convite criado para workspace ${params.workspaceId}`)
 
       const [invite] = await db.select().from(invites).where(eq(invites.id, id)).limit(1)
       return { invite, inviteUrl }

@@ -8,10 +8,14 @@ export const Route = createFileRoute('/auth/callback')({
   }),
   loaderDeps: ({ search }) => ({ code: search.code, state: search.state }),
   loader: async ({ deps }) => {
-    if (!deps.code) throw redirect({ to: '/login' })
+    if (!deps.code) {
+      throw redirect({ to: '/auth/error', search: { reason: 'missing_code' } })
+    }
 
     const result = await completeLogin({ data: { code: deps.code, state: deps.state } })
-    if (!result.ok) throw redirect({ to: '/login' })
+    if (!result.ok) {
+      throw redirect({ to: '/auth/error', search: { reason: 'token_exchange_failed' } })
+    }
 
     throw redirect({ href: result.redirectTo })
   },

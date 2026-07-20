@@ -76,6 +76,7 @@ export const InviteStatus = Type.Union([
   Type.Literal('pending'),
   Type.Literal('accepted'),
   Type.Literal('expired'),
+  Type.Literal('cancelled'),
 ])
 export type InviteStatus = Static<typeof InviteStatus>
 

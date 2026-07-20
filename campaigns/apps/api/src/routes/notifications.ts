@@ -1,10 +1,11 @@
 import { Elysia, t } from 'elysia'
 import { authPlugin } from '../plugins/auth'
+import { getRequiredEnv } from '../lib/env'
 
-const VIANOVA_API_URL = () => process.env.VIANOVA_API_URL ?? 'http://localhost:5000'
+const VIANOVA_API_URL = getRequiredEnv('VIANOVA_API_URL')
 
 async function vianovaFetch(path: string, rawToken: string, init?: RequestInit) {
-  const url = `${VIANOVA_API_URL()}${path}`
+  const url = `${VIANOVA_API_URL}${path}`
   return fetch(url, {
     ...init,
     headers: {

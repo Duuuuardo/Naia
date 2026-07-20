@@ -94,7 +94,15 @@ function buildTriggerJson(type: AutomationType, triggerTag: string | undefined, 
   return '{}'
 }
 
-const PUBLIC_API_URL = process.env.NAIA_PUBLIC_API_URL ?? process.env.NAIA_API_URL ?? 'http://localhost:4001'
+function getPublicApiUrl(): string {
+  const value = process.env.NAIA_PUBLIC_API_URL || process.env.NAIA_API_URL
+  if (!value || value.trim().length === 0) {
+    throw new Error('[automations] NAIA_PUBLIC_API_URL or NAIA_API_URL is required')
+  }
+  return value
+}
+
+const PUBLIC_API_URL = getPublicApiUrl()
 
 /** Campos derivados que a UI consome (URL do webhook, tag do gatilho). */
 function presentAutomation<T extends { id: string; type: string; triggerJson: string }>(automation: T) {

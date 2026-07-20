@@ -2,6 +2,14 @@
 // exclusivo de avatares). Wrapper fino sobre o S3Client nativo do Bun; usado
 // pela API (presign/validação) e pelo worker (bytes pra envio multipart).
 
+function requireEnv(name: string): string {
+  const value = process.env[name]
+  if (!value) {
+    throw new Error(`[@naia/storage] Variável de ambiente obrigatória ausente: ${name}`)
+  }
+  return value
+}
+
 // Tipo estrutural do Bun.S3Client — evita `import from 'bun'`, que quebraria o
 // typecheck do web quando os tipos deste package vazam pela cadeia do Eden.
 type S3ClientLike = {
@@ -26,10 +34,10 @@ function getClient(): S3ClientLike {
     const bun = (globalThis as { Bun?: BunS3 }).Bun
     if (!bun) throw new Error('@naia/storage requer o runtime Bun')
     client = new bun.S3Client({
-      endpoint: process.env.NAIA_S3_ENDPOINT ?? 'http://localhost:9102',
-      bucket: process.env.NAIA_S3_BUCKET ?? 'naia-campaigns',
-      accessKeyId: process.env.NAIA_S3_ACCESS_KEY ?? 'naia',
-      secretAccessKey: process.env.NAIA_S3_SECRET_KEY ?? 'naia_secret_minio',
+      endpoint: requireEnv('NAIA_S3_ENDPOINT'),
+      bucket: requireEnv('NAIA_S3_BUCKET'),
+      accessKeyId: requireEnv('NAIA_S3_ACCESS_KEY'),
+      secretAccessKey: requireEnv('NAIA_S3_SECRET_KEY'),
     })
   }
   return client

@@ -22,13 +22,14 @@ import {
   Zap,
 } from 'lucide-react'
 import { fetchPlans, fetchManageBillingUrl } from '../../../lib/actions'
+import { requireEnv } from '../../../lib/env'
 
 export const Route = createFileRoute('/_app/$workspaceId/billing')({
   loader: () => fetchPlans(),
   component: BillingPage,
 })
 
-const VIANOVA_API_URL = () => import.meta.env.VITE_VIANOVA_API_URL ?? 'http://localhost:5000'
+const VIANOVA_API_URL = () => requireEnv('VITE_VIANOVA_API_URL')
 
 const tierLabels: Record<string, string> = {
   free: 'Grátis',

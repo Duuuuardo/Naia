@@ -612,7 +612,7 @@ export async function startWhatsAppSession(connectionId: string): Promise<void> 
             type: 'product',
             title: 'WhatsApp desconectado',
             body: `A conexão "${connInfo.name}" do WhatsApp foi desconectada. Reconecte para continuar os envios.`,
-            actionUrl: `${NAIA_WEB_URL()}/${connInfo.workspaceId}/connections`,
+            actionUrl: `${NAIA_WEB_URL}/${connInfo.workspaceId}/connections`,
             actionLabel: 'Reconectar',
             metadata: { connectionId, connectionName: connInfo.name, channel: connInfo.channel, reason: 'whatsapp_disconnected' },
           }, 'emailOnConnectionDisconnected').catch((err) => console.error('[whatsapp-manager] falha ao notificar desconexão:', err))

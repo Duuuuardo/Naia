@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { getCookie } from '@tanstack/react-start/server'
 import { requireApi } from './session.server'
 import { SESSION_COOKIE } from './vianova'
+import { requireEnv } from './env'
 
 // ─── Workspaces ──────────────────────────────────────────────────────────────
 
@@ -21,10 +22,14 @@ export const fetchWorkspace = createServerFn()
   })
 
 export const createWorkspace = createServerFn()
-  .validator((data: { name: string }) => data)
+  .validator((data: { name: string; industry?: string; description?: string }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    const { data: res, error } = await api.workspaces.post({ name: data.name })
+    const { data: res, error } = await api.workspaces.post({
+      name: data.name,
+      industry: data.industry,
+      description: data.description,
+    })
     if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao criar workspace.' }
     return { workspace: res?.workspace }
   })
@@ -830,7 +835,7 @@ export const uploadWorkspaceFile = createServerFn({ method: 'POST' })
     const form = new FormData()
     form.append('file', data.file)
 
-    const apiUrl = process.env.NAIA_API_URL ?? 'http://localhost:4001'
+    const apiUrl = requireEnv('NAIA_API_URL')
     const res = await fetch(`${apiUrl}/workspaces/${encodeURIComponent(data.workspaceId)}/files/upload`, {
       method: 'POST',
       headers: { authorization: `Bearer ${token}` },
@@ -867,7 +872,7 @@ export const uploadCampaignMedia = createServerFn({ method: 'POST' })
     const form = new FormData()
     form.append('file', data.file)
 
-    const apiUrl = process.env.NAIA_API_URL ?? 'http://localhost:4001'
+    const apiUrl = requireEnv('NAIA_API_URL')
     const res = await fetch(`${apiUrl}/workspaces/${encodeURIComponent(data.workspaceId)}/files/upload`, {
       method: 'POST',
       headers: { authorization: `Bearer ${token}` },

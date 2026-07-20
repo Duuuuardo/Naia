@@ -27,3 +27,14 @@ jobs:
             fi
           done
       - run: bun test
+      # SECURITY GATES (structure only — enable when tools are configured):
+      # - name: Lint for hardcoded secrets
+      #   run: bunx secretlint "**/*" || true
+      # - name: Dependency audit
+      #   run: bun audit
+      # - name: Static security scan (Trivy/Snyk)
+      #   run: |
+      #     trivy filesystem --scanners vuln,secret,misconfig .
+      #     # or snyk test
+      # - name: Container image scan
+      #   run: trivy image ghcr.io/${{ github.repository_owner }}/naia-crm-api:latest

@@ -6,6 +6,7 @@ import {
   ScrollRestoration,
 } from '@tanstack/react-router'
 import '../styles.css'
+import { loadProductConfig } from '../lib/config'
 
 export const Route = createRootRoute({
   head: () => ({
@@ -16,6 +17,10 @@ export const Route = createRootRoute({
       { name: 'description', content: 'Disparo de mensagens em massa via Telegram e WhatsApp.' },
     ],
   }),
+  beforeLoad: async () => {
+    await loadProductConfig()
+    return {}
+  },
   component: RootComponent,
 })
 
