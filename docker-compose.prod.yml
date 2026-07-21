@@ -101,6 +101,11 @@ services:
       naia-internal:
     env_file:
       - ./.env
+    # Sobrescreve os valores localhost do .env: em prod os session-hosts são
+    # containers próprios, alcançáveis pelo nome de serviço na rede docker.
+    environment:
+      - SESSION_HOST_BASE_URL=http://session-host-base:4010
+      - SESSION_HOST_SCALE_URL=http://session-host-scale:4011
     depends_on:
       postgres:
         condition: service_healthy
@@ -130,6 +135,11 @@ services:
     restart: unless-stopped
     env_file:
       - ./.env
+    # Aponta para os session-hosts pelo nome de serviço (o .env usa localhost,
+    # que dentro do container é o próprio worker).
+    environment:
+      - SESSION_HOST_BASE_URL=http://session-host-base:4010
+      - SESSION_HOST_SCALE_URL=http://session-host-scale:4011
     networks:
       # Precisa da rede compartilhada (novaplatform) para alcançar o
       # vianova-config-server no boot; naia-internal dá acesso a banco/redis.
@@ -139,6 +149,59 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+
+  # Hosts de sessão WhatsApp/Telegram (Baileys/MTProto). São donos das conexões
+  # e mantêm o auth-state em disco — por isso o volume persistente (senão cada
+  # restart derruba a sessão e exige novo QR). Ficam na naia-internal (banco/
+  # redis/minio) e na novaplatform (egress para VIANOVA_API_URL público e para
+  # a API/worker os alcançarem pelo nome de serviço).
+  session-host-base:
+    image: ${REGISTRY}/naia-campaigns-session-host:latest
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    environment:
+      - HOST_ID=base
+      - PORT=4010
+      - NAIA_SESSIONS_DIR=/data/sessions
+      - SESSION_HOST_BASE_URL=http://session-host-base:4010
+      - SESSION_HOST_SCALE_URL=http://session-host-scale:4011
+    volumes:
+      - naia_session_base_data:/data/sessions
+    networks:
+      novaplatform:
+      naia-internal:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  session-host-scale:
+    image: ${REGISTRY}/naia-campaigns-session-host:latest
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    environment:
+      - HOST_ID=scale
+      - PORT=4011
+      - NAIA_SESSIONS_DIR=/data/sessions
+      - SESSION_HOST_BASE_URL=http://session-host-base:4010
+      - SESSION_HOST_SCALE_URL=http://session-host-scale:4011
+    volumes:
+      - naia_session_scale_data:/data/sessions
+    networks:
+      novaplatform:
+      naia-internal:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
         condition: service_healthy
 
   crm-api:
@@ -180,3 +243,5 @@ volumes:
   naia_crm_postgres_data:
   naia_redis_data:
   naia_minio_data:
+  naia_session_base_data:
+  naia_session_scale_data:

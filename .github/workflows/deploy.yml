@@ -28,6 +28,8 @@ jobs:
             image: naia-campaigns-web
           - app: campaigns/apps/worker
             image: naia-campaigns-worker
+          - app: campaigns/apps/session-host
+            image: naia-campaigns-session-host
           - app: crm/apps/api
             image: naia-crm-api
           - app: crm/apps/web
