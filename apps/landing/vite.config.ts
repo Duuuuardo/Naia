@@ -7,7 +7,7 @@ import tsConfigPaths from 'vite-tsconfig-paths'
 export default defineConfig({
   plugins: [
     tsConfigPaths({ projects: ['./tsconfig.json'] }),
-    tanstackStart({ srcDirectory: 'app', server: { preset: 'bun' } }),
+    tanstackStart({ srcDirectory: 'app' }),
     react(),
     tailwindcss(),
   ],
