@@ -165,6 +165,7 @@ services:
       - HOST_ID=base
       - PORT=4010
       - NAIA_SESSIONS_DIR=/data/sessions
+      - NAIA_ALLOWED_ORIGINS=https://campaigns.naia.website,https://crm.naia.website
       - SESSION_HOST_BASE_URL=http://session-host-base:4010
       - SESSION_HOST_SCALE_URL=http://session-host-scale:4011
     volumes:
@@ -189,6 +190,7 @@ services:
       - HOST_ID=scale
       - PORT=4011
       - NAIA_SESSIONS_DIR=/data/sessions
+      - NAIA_ALLOWED_ORIGINS=https://campaigns.naia.website,https://crm.naia.website
       - SESSION_HOST_BASE_URL=http://session-host-base:4010
       - SESSION_HOST_SCALE_URL=http://session-host-scale:4011
     volumes:
