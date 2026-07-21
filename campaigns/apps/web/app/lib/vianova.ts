@@ -14,7 +14,7 @@ function requireEnv(name: string): string {
   return value
 }
 
-const vianovaApiUrl = () => requireEnv('VIANOVA_API_URL')
+const vianovaApiUrl = () => process.env.VIANOVA_API_INTERNAL_URL || requireEnv('VIANOVA_API_URL')
 const naiaWebUrl = () => requireEnv('NAIA_WEB_URL')
 const clientId = () => requireEnv('NAIA_OIDC_CLIENT_ID')
 const clientSecret = () => requireEnv('NAIA_OIDC_CLIENT_SECRET')
