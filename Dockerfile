@@ -18,8 +18,12 @@ ARG APP
 ENV NODE_ENV=production
 ENV APP=${APP}
 
-COPY --from=base /app/${APP}/dist ./dist
+# API apps output to dist/index.js, web/landing apps output to .output/server/index.mjs
+COPY --from=base /app/${APP} ./app_src
+RUN ([ -d ./app_src/dist ] && cp -r ./app_src/dist ./dist || true) && \
+    ([ -d ./app_src/.output ] && cp -r ./app_src/.output ./.output || true) && \
+    rm -rf ./app_src
 COPY --from=base /app/node_modules ./node_modules
 
 EXPOSE 3000
-CMD ["sh", "-c", "bun dist/index.js"]
+CMD ["sh", "-c", "if [ -f .output/server/index.mjs ]; then bun .output/server/index.mjs; else bun dist/index.js; fi"]
