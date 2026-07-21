@@ -33,22 +33,25 @@ export function createVianovaConfigClient({ baseUrl, serviceToken, internalSecre
       let lastError: unknown
 
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        let response: Response
         try {
-          const response = await fetch(url, { headers })
-
-          if (!response.ok) {
-            const body = await response.text()
-            throw new Error(`config-server error ${response.status}: ${body}`)
-          }
-
-          const json = (await response.json()) as { config: ConfigMap }
-          return json.config
+          response = await fetch(url, { headers })
         } catch (err) {
+          // Network error: config-server ainda não está no ar — retry
           lastError = err
           if (attempt === maxAttempts) break
           console.log(`[config] waiting for config-server... (${attempt}/${maxAttempts})`)
           await sleep(delayMs)
+          continue
         }
+
+        if (!response.ok) {
+          const body = await response.text()
+          throw new Error(`config-server error ${response.status}: ${body}`)
+        }
+
+        const json = (await response.json()) as { config: ConfigMap }
+        return json.config
       }
 
       throw lastError
