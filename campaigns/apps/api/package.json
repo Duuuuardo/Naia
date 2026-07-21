@@ -24,7 +24,6 @@
     "@naia/storage": "workspace:*",
     "@naia/vianova-auth": "workspace:*",
     "@naia/vianova-config": "workspace:*",
-    "@naia/feature-flags": "workspace:*",
     "drizzle-orm": "^0.44",
     "elysia": "^1",
     "logixlysia": "^6.6.0",

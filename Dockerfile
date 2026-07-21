@@ -9,7 +9,7 @@ ENV NODE_ENV=production
 
 # Copy full source (workspace resolution needs real package dirs).
 COPY . .
-RUN bun install --production
+RUN bun install --frozen-lockfile
 RUN bun run --cwd ${APP} build
 
 FROM oven/bun:1.3.14-slim AS runtime
