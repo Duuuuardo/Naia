@@ -27,23 +27,12 @@ export const REFRESH_COOKIE = 'naia_refresh'
 
 const REDIRECT_URI = () => `${naiaWebUrl()}/auth/callback`
 
-function cookieBase() {
-  const cookieDomain = process.env.NAIA_COOKIE_DOMAIN
-  return {
-    httpOnly: true,
-    sameSite: 'lax' as const,
-    secure: isProduction,
-    path: '/',
-    ...(cookieDomain ? { domain: cookieDomain } : {}),
-  }
-}
-
-function setSessionCookie(accessToken: string, expiresIn: number) {
-  setCookie(SESSION_COOKIE, accessToken, { ...cookieBase(), maxAge: expiresIn })
-}
-
-function setRefreshCookie(refreshToken: string, expiresIn: number) {
-  setCookie(REFRESH_COOKIE, refreshToken, { ...cookieBase(), maxAge: expiresIn })
+// Retorna a URL do endpoint end_session do Vianova. Isomorphic (sem imports
+// server-only) — pode ser chamado de qualquer contexto.
+export function buildEndSessionUrl(): string {
+  const url = new URL(`${vianovaApiPublicUrl()}/oidc/end_session`)
+  url.searchParams.set('post_logout_redirect_uri', `${naiaWebUrl()}/login`)
+  return url.toString()
 }
 
 export const buildLoginUrl = createServerFn()
@@ -81,9 +70,12 @@ export const completeLogin = createServerFn()
     }
     if (!tokenData.access_token) return { ok: false as const }
 
-    setSessionCookie(tokenData.access_token, tokenData.expires_in ?? 3600)
+    const cookieDomain = process.env.NAIA_COOKIE_DOMAIN
+    const base = { httpOnly: true, sameSite: 'lax' as const, secure: isProduction, path: '/', ...(cookieDomain ? { domain: cookieDomain } : {}) }
+
+    setCookie(SESSION_COOKIE, tokenData.access_token, { ...base, maxAge: tokenData.expires_in ?? 3600 })
     if (tokenData.refresh_token) {
-      setRefreshCookie(tokenData.refresh_token, tokenData.refresh_token_expires_in ?? 30 * 24 * 3600)
+      setCookie(REFRESH_COOKIE, tokenData.refresh_token, { ...base, maxAge: tokenData.refresh_token_expires_in ?? 30 * 24 * 3600 })
     }
 
     return {
@@ -92,11 +84,11 @@ export const completeLogin = createServerFn()
     }
   })
 
-// Renova silenciosamente o access token usando o refresh token.
+// Tenta renovar o access token usando o refresh token armazenado no cookie.
 // Retorna o novo access token ou null se o refresh token expirou/foi revogado.
-// Chame ANTES de redirecionar para /login — se retornar um token, o usuário
-// continua sem precisar autenticar de novo.
-export async function tryRefreshSession(): Promise<string | null> {
+// Wrapped em createServerFn para que o bundler remova o código server-only
+// (getCookie/setCookie) do bundle do cliente.
+export const tryRefreshSession = createServerFn().handler(async (): Promise<string | null> => {
   const refreshToken = getCookie(REFRESH_COOKIE)
   if (!refreshToken) return null
 
@@ -127,23 +119,16 @@ export async function tryRefreshSession(): Promise<string | null> {
     return null
   }
 
-  setSessionCookie(tokenData.access_token, tokenData.expires_in ?? 3600)
+  const cookieDomain = process.env.NAIA_COOKIE_DOMAIN
+  const base = { httpOnly: true, sameSite: 'lax' as const, secure: isProduction, path: '/', ...(cookieDomain ? { domain: cookieDomain } : {}) }
+
+  setCookie(SESSION_COOKIE, tokenData.access_token, { ...base, maxAge: tokenData.expires_in ?? 3600 })
   if (tokenData.refresh_token) {
-    setRefreshCookie(tokenData.refresh_token, tokenData.refresh_token_expires_in ?? 30 * 24 * 3600)
+    setCookie(REFRESH_COOKIE, tokenData.refresh_token, { ...base, maxAge: tokenData.refresh_token_expires_in ?? 30 * 24 * 3600 })
   }
 
   return tokenData.access_token
-}
-
-// Retorna a URL do endpoint end_session do Vianova para o browser navegar até
-// lá e encerrar a sessão SSO. É o único jeito de garantir single sign-out
-// correto: o browser leva o vianova_session cookie até o Vianova, que o revoga
-// e dispara o webhook session:revoked para todos os produtos.
-export function buildEndSessionUrl(): string {
-  const url = new URL(`${vianovaApiPublicUrl()}/oidc/end_session`)
-  url.searchParams.set('post_logout_redirect_uri', `${naiaWebUrl()}/login`)
-  return url.toString()
-}
+})
 
 export const logout = createServerFn().handler(async () => {
   deleteCookie(SESSION_COOKIE)
