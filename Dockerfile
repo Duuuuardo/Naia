@@ -18,6 +18,10 @@ RUN if [ -f ${APP}/dist/server/server.js ]; then \
   bun build dist/server/server.js --bundle --target bun --outfile /tmp/server.js && \
   mv /tmp/server.js dist/server/server.js; \
 fi
+# For campaigns API: build migrate script runnable via docker exec.
+RUN if [ "${APP}" = "campaigns/apps/api" ]; then \
+  bun build campaigns/apps/api/src/migrate.ts --bundle --target bun --outfile campaigns/apps/api/dist/migrate.js; \
+fi
 
 FROM oven/bun:1.3.14-slim AS runtime
 WORKDIR /app
@@ -26,6 +30,8 @@ ENV NODE_ENV=production
 ENV APP=${APP}
 
 COPY --from=base /app/${APP}/dist ./dist
+# Migration SQL files — needed at runtime by migrate.js.
+COPY --from=base /app/campaigns/packages/db/drizzle ./drizzle
 # docker-serve.mjs: static-file server + SSR fallback for web apps.
 COPY docker-serve.mjs ./docker-serve.mjs
 
