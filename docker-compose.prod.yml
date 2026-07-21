@@ -131,7 +131,10 @@ services:
     env_file:
       - ./.env
     networks:
-      - naia-internal
+      # Precisa da rede compartilhada (novaplatform) para alcançar o
+      # vianova-config-server no boot; naia-internal dá acesso a banco/redis.
+      novaplatform:
+      naia-internal:
     depends_on:
       postgres:
         condition: service_healthy
