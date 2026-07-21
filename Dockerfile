@@ -26,12 +26,8 @@ ENV NODE_ENV=production
 ENV APP=${APP}
 
 COPY --from=base /app/${APP}/dist ./dist
-
-# Web apps: wrap the {fetch} handler export with Bun.serve().
-# API apps: dist/index.js is already a standalone server.
-RUN if [ -f dist/server/server.js ]; then \
-  printf 'const port=parseInt(process.env.PORT||"3000");\nconst {default:h}=await import("./dist/server/server.js");\nBun.serve({port,fetch:h.fetch});\nconsole.log("Listening on port "+port);\n' > bun-serve.mjs; \
-fi
+# docker-serve.mjs: static-file server + SSR fallback for web apps.
+COPY docker-serve.mjs ./docker-serve.mjs
 
 EXPOSE 3000
-CMD ["sh", "-c", "if [ -f bun-serve.mjs ]; then bun bun-serve.mjs; else bun dist/index.js; fi"]
+CMD ["sh", "-c", "if [ -f dist/server/server.js ]; then bun docker-serve.mjs; else bun dist/index.js; fi"]
