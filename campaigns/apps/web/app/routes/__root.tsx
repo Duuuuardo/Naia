@@ -6,7 +6,6 @@ import {
   ScrollRestoration,
 } from '@tanstack/react-router'
 import '../styles.css'
-import { loadProductConfig } from '../lib/config'
 
 export const Route = createRootRoute({
   head: () => ({
@@ -24,10 +23,6 @@ export const Route = createRootRoute({
       { rel: 'manifest', href: '/site.webmanifest' },
     ],
   }),
-  beforeLoad: async () => {
-    await loadProductConfig()
-    return {}
-  },
   component: RootComponent,
 })
 

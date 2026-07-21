@@ -1,15 +1,9 @@
 @import "tailwindcss";
 @import "@naia/config/tailwind/base.css";
 
-@layer base {
-  @font-face {
-    font-family: 'Plus Jakarta Sans';
-    font-style: normal;
-    font-weight: 300 800;
-    font-display: swap;
-    src: url('https://fonts.gstatic.com/s/plusjakartasans/v8/LDIbaomQNQcsA88c7O9yZ4KMCoOg4IA6-91aHEjcWuA_KU7NSg.woff2') format('woff2');
-  }
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&display=swap');
 
+@layer base {
   html {
     font-family: var(--font-sans);
     color: var(--color-dark-800);
