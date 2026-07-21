@@ -1,4 +1,4 @@
-import { Link, useRouter, type ErrorComponentProps } from '@tanstack/react-router'
+import { Link, useMatch, useRouter, type ErrorComponentProps } from '@tanstack/react-router'
 import { House, RefreshCw } from 'lucide-react'
 import type { ReactNode } from 'react'
 
@@ -6,6 +6,10 @@ import type { ReactNode } from 'react'
  * Telas de erro da marca Naia. O elemento-assinatura deriva do logo (ondas =
  * mensagens em movimento): no 404 a onda se dissolve em pontos — a rota some;
  * no 500 a onda perde o ritmo e vira linha reta — algo parou de pulsar.
+ *
+ * Duas variantes: a página inteira (rotas sem shell) e a embutida, usada como
+ * notFoundComponent/errorComponent de layouts logados — sem logo (a topbar já
+ * tem a marca) e sem fundo próprio, para herdar o fundo do conteúdo.
  */
 
 const BRAND = '#DD5973'
@@ -43,6 +47,7 @@ function WaveFlatline() {
 }
 
 function ErrorShell({
+  embedded = false,
   signature,
   code,
   title,
@@ -50,6 +55,7 @@ function ErrorShell({
   actions,
   detail,
 }: {
+  embedded?: boolean
   signature: ReactNode
   code: string
   title: string
@@ -58,7 +64,11 @@ function ErrorShell({
   detail?: ReactNode
 }) {
   return (
-    <main className="err-page flex min-h-dvh flex-col items-center justify-center bg-neutral-50 px-6 py-16 text-center">
+    <main
+      className={`err-page flex flex-col items-center justify-center px-6 text-center ${
+        embedded ? 'min-h-[60vh] py-12' : 'min-h-dvh bg-neutral-50 py-16'
+      }`}
+    >
       <style>{`
         @media (prefers-reduced-motion: no-preference) {
           .err-page [data-err-item] {
@@ -75,15 +85,15 @@ function ErrorShell({
           }
         }
       `}</style>
-      <img
-        src="/brand/naia-logo-dark.png"
-        alt="Naia"
-        className="h-6 w-auto"
-        data-err-item="0"
-      />
-      <div className="mt-14" data-err-item="1">
-        {signature}
-      </div>
+      {!embedded && (
+        <img
+          src="/brand/naia-logo-dark.png"
+          alt="Naia"
+          className="mb-14 h-6 w-auto"
+          data-err-item="0"
+        />
+      )}
+      <div data-err-item="1">{signature}</div>
       <p
         className="mt-8 font-mono text-xs font-semibold tracking-[0.2em] text-brand-500"
         data-err-item="2"
@@ -112,9 +122,10 @@ const primaryBtn =
 const quietLink =
   'inline-flex items-center gap-1.5 text-sm font-medium text-neutral-500 underline-offset-4 transition-colors duration-150 hover:text-dark-800 hover:underline'
 
-export function NotFoundPage() {
+function NotFoundContent({ embedded = false }: { embedded?: boolean }) {
   return (
     <ErrorShell
+      embedded={embedded}
       signature={<WaveLost />}
       code="ERRO 404"
       title="Página não encontrada"
@@ -129,11 +140,16 @@ export function NotFoundPage() {
   )
 }
 
-export function ErrorPage({ error, reset }: ErrorComponentProps) {
+function ErrorContent({
+  embedded = false,
+  error,
+  reset,
+}: { embedded?: boolean } & ErrorComponentProps) {
   const router = useRouter()
 
   return (
     <ErrorShell
+      embedded={embedded}
       signature={<WaveFlatline />}
       code="ERRO 500"
       title="Algo deu errado"
@@ -165,4 +181,25 @@ export function ErrorPage({ error, reset }: ErrorComponentProps) {
       }
     />
   )
+}
+
+export function NotFoundPage() {
+  return <NotFoundContent />
+}
+
+export function NotFoundEmbedded() {
+  return <NotFoundContent embedded />
+}
+
+export function ErrorPage(props: ErrorComponentProps) {
+  // Erros em rotas filhas do shell do workspace renderizam dentro do Outlet do
+  // layout — nesse caso usa a variante embutida para herdar o fundo do
+  // conteúdo e não repetir a marca que a topbar já mostra.
+  const match = useMatch({ strict: false })
+  const insideShell = String(match.routeId).startsWith('/_app/$workspaceId/')
+  return <ErrorContent embedded={insideShell} {...props} />
+}
+
+export function ErrorEmbedded(props: ErrorComponentProps) {
+  return <ErrorContent embedded {...props} />
 }

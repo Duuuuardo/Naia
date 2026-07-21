@@ -1,6 +1,7 @@
 import { createFileRoute, Link, Outlet, redirect, useRouteContext } from '@tanstack/react-router'
 import { CreditCard, Files, House, Megaphone, Plug, Settings, Users, UsersRound, Workflow } from 'lucide-react'
 import type { PermissionKey, RolePermissionMap } from '@naia/schemas'
+import { NotFoundEmbedded } from '../../components/error-pages'
 import { Topbar } from '../../components/topbar'
 import { MobileNav } from '../../components/mobile-nav'
 import { VerifyEmailBanner } from '../../components/verify-email-banner'
@@ -18,6 +19,7 @@ export const Route = createFileRoute('/_app/$workspaceId')({
     }
   },
   component: WorkspaceLayout,
+  notFoundComponent: NotFoundEmbedded,
 })
 
 const navItems: {
