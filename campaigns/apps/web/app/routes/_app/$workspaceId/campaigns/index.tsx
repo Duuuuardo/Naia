@@ -16,8 +16,9 @@ import {
 } from 'lucide-react'
 import { fetchCampaigns } from '../../../../lib/actions'
 import { Card, EmptyState, PageHeader, StatusBadge, ChannelBadge } from '../../../../components/ui'
+import { createHeadConfig } from '../../lib/seo'
 
-export const Route = createFileRoute('/_app/$workspaceId/campaigns/')({
+export const Route = createFileRoute('/_app/$workspaceId/campaigns/')({ head: () => createHeadConfig('Campanhas — Naia Campanhas'),
   loader: ({ params }) => fetchCampaigns({ data: params.workspaceId }),
   component: CampaignsPage,
 })

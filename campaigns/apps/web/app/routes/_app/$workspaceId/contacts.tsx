@@ -40,9 +40,10 @@ import {
   syncContactGroupMembers,
 } from '../../../lib/actions'
 import { Button } from '../../../components/ui'
+import { createHeadConfig } from '../../lib/seo'
 
 
-export const Route = createFileRoute('/_app/$workspaceId/contacts')({
+export const Route = createFileRoute('/_app/$workspaceId/contacts')({ head: () => createHeadConfig('Contatos — Naia Campanhas'),
   loader: ({ params }) => fetchContacts({ data: { workspaceId: params.workspaceId } }),
   component: ContactsPage,
 })

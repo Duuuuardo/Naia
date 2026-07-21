@@ -39,8 +39,9 @@ import {
   importGroupMembers,
 } from '../../../lib/actions'
 import { Button, StatusBadge, ChannelBadge, formatChannelName } from '../../../components/ui'
+import { createHeadConfig } from '../../lib/seo'
 
-export const Route = createFileRoute('/_app/$workspaceId/connections')({
+export const Route = createFileRoute('/_app/$workspaceId/connections')({ head: () => createHeadConfig('Conexões — Naia Campanhas'),
   loader: ({ params }) => fetchConnections({ data: params.workspaceId }),
   component: ConnectionsPage,
 })

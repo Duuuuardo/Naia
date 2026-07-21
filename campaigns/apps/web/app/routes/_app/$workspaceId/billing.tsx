@@ -23,8 +23,9 @@ import {
 } from 'lucide-react'
 import { fetchPlans, fetchManageBillingUrl } from '../../../lib/actions'
 import { requireEnv } from '../../../lib/env'
+import { createHeadConfig } from '../../lib/seo'
 
-export const Route = createFileRoute('/_app/$workspaceId/billing')({
+export const Route = createFileRoute('/_app/$workspaceId/billing')({ head: () => createHeadConfig('Cobrança — Naia Campanhas'),
   loader: () => fetchPlans(),
   component: BillingPage,
 })

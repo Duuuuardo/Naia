@@ -18,6 +18,45 @@ import {
 import { NaiaIcon } from '@naia/ui'
 
 export const Route = createFileRoute('/crm')({
+  head: () => ({
+    meta: [
+      { title: 'Naia CRM — Inbox Unificado para Atendimento Multicanal' },
+      {
+        name: 'description',
+        content:
+          'Todas as respostas das suas campanhas num inbox só. Atribuição por atendente, histórico completo e integração nativa com WhatsApp e Telegram.',
+      },
+      { property: 'og:title', content: 'Naia CRM' },
+      {
+        property: 'og:description',
+        content: 'Inbox unificado para atendimento multicanal com WhatsApp e Telegram.',
+      },
+      { property: 'og:url', content: 'https://naia.website/crm' },
+      { property: 'og:image', content: 'https://naia.website/og-image.png' },
+      { name: 'twitter:title', content: 'Naia CRM' },
+      {
+        name: 'twitter:description',
+        content: 'Inbox unificado para atendimento multicanal com WhatsApp e Telegram.',
+      },
+    ],
+    links: [
+      { rel: 'canonical', href: 'https://naia.website/crm' },
+    ],
+    scripts: [
+      {
+        type: 'application/ld+json',
+        children: JSON.stringify({
+          '@context': 'https://schema.org',
+          '@type': 'SoftwareApplication',
+          name: 'Naia CRM',
+          applicationCategory: 'BusinessApplication',
+          operatingSystem: 'Web',
+          url: 'https://crm.naia.website',
+          description: 'Inbox unificado para atendimento multicanal com WhatsApp e Telegram.',
+        }),
+      },
+    ],
+  }),
   component: CrmLanding,
 })
 

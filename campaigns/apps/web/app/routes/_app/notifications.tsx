@@ -20,10 +20,11 @@ import {
   type NotificationItem,
 } from '../../lib/actions'
 import { requireEnv } from '../../lib/env'
+import { createHeadConfig } from '../../lib/seo'
 
 const VIANOVA_WEB_URL = requireEnv('VITE_VIANOVA_WEB_URL')
 
-export const Route = createFileRoute('/_app/notifications')({
+export const Route = createFileRoute('/_app/notifications')({ head: () => createHeadConfig('Notificações — Naia Campanhas'),
   loader: async () => {
     try {
       const [notifications, unread] = await Promise.all([

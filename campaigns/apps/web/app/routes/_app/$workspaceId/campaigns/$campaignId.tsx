@@ -27,8 +27,9 @@ import {
 } from '../../../../lib/actions'
 import { Button, Card, ErrorNote, PageHeader, Stat, StatusBadge, ChannelBadge } from '../../../../components/ui'
 import { WEEKDAY_LABELS } from '../../../../components/campaign-wizard/types'
+import { createHeadConfig } from '../../lib/seo'
 
-export const Route = createFileRoute('/_app/$workspaceId/campaigns/$campaignId')({
+export const Route = createFileRoute('/_app/$workspaceId/campaigns/$campaignId')({ head: () => createHeadConfig('Campanha — Naia Campanhas'),
   loader: async ({ params }) => {
     const result = await fetchCampaign({ data: { workspaceId: params.workspaceId, campaignId: params.campaignId } })
     if (!result?.campaign) throw redirect({ to: '/$workspaceId/campaigns', params: { workspaceId: params.workspaceId } })

@@ -15,6 +15,13 @@ export const Route = createRootRoute({
       { name: 'viewport', content: 'width=device-width, initial-scale=1' },
       { title: 'Naia Campanhas' },
       { name: 'description', content: 'Disparo de mensagens em massa via Telegram e WhatsApp.' },
+      { name: 'theme-color', content: '#DD5973' },
+      { name: 'robots', content: 'noindex, nofollow' },
+    ],
+    links: [
+      { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+      { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
+      { rel: 'manifest', href: '/site.webmanifest' },
     ],
   }),
   beforeLoad: async () => {

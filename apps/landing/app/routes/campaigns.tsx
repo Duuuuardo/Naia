@@ -18,6 +18,49 @@ import {
 import { NaiaIcon } from '@naia/ui'
 
 export const Route = createFileRoute('/campaigns')({
+  head: () => ({
+    meta: [
+      { title: 'Naia Campanhas — Disparo em Massa no WhatsApp e Telegram' },
+      {
+        name: 'description',
+        content:
+          'Envie campanhas em massa para contatos no WhatsApp e Telegram com opt-in nativo, status por mensagem e envio em lotes. Sem risco de bloqueio.',
+      },
+      { property: 'og:title', content: 'Naia Campanhas' },
+      {
+        property: 'og:description',
+        content:
+          'Disparo em massa no WhatsApp e Telegram com opt-in nativo e status por mensagem.',
+      },
+      { property: 'og:url', content: 'https://naia.website/campaigns' },
+      { property: 'og:image', content: 'https://naia.website/og-image.png' },
+      { name: 'twitter:title', content: 'Naia Campanhas' },
+      {
+        name: 'twitter:description',
+        content:
+          'Disparo em massa no WhatsApp e Telegram com opt-in nativo e status por mensagem.',
+      },
+    ],
+    links: [
+      { rel: 'canonical', href: 'https://naia.website/campaigns' },
+    ],
+    scripts: [
+      {
+        type: 'application/ld+json',
+        children: JSON.stringify({
+          '@context': 'https://schema.org',
+          '@type': 'SoftwareApplication',
+          name: 'Naia Campanhas',
+          applicationCategory: 'BusinessApplication',
+          operatingSystem: 'Web',
+          url: 'https://campaigns.naia.website',
+          offers: { '@type': 'Offer', price: '97', priceCurrency: 'BRL' },
+          description:
+            'Envie campanhas em massa no WhatsApp e Telegram com opt-in nativo e status por mensagem.',
+        }),
+      },
+    ],
+  }),
   component: CampaignsLanding,
 })
 

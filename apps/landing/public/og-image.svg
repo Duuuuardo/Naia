@@ -1,0 +1,28 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#ffffff" />
+
+  <!-- Background -->
+  <defs>
+    <linearGradient id="bg-grad" x1="0" y1="0" x2="1200" y2="630">
+      <stop offset="0%" stopColor="#FFFFFF" />
+      <stop offset="100%" stopColor="#F9FAFB" />
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg-grad)" />
+
+  <!-- Logo marca (escalado) -->
+  <g transform="translate(600, 180)">
+    <!-- Duas ondas escaladas para ~140px viewBox -->
+    <path d="M40 160c40-70 80-70 120 0s80 70 120 0" stroke="#DD5973" strokeWidth="40" strokeLinecap="round" />
+    <path d="M40 80c40-70 80-70 120 0s80 70 120 0" stroke="#3D4355" strokeWidth="40" strokeLinecap="round" opacity="0.9" />
+  </g>
+
+  <!-- Tagline -->
+  <text x="600" y="420" fontFamily="'Plus Jakarta Sans', sans-serif" fontSize="52" fontWeight="700" textAnchor="middle" fill="#3D4355">
+    Campanhas em massa e CRM
+  </text>
+  <text x="600" y="480" fontFamily="'Plus Jakarta Sans', sans-serif" fontSize="40" fontWeight="400" textAnchor="middle" fill="#6B7280">
+    Dois produtos, uma marca
+  </text>
+</svg>

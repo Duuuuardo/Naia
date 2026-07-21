@@ -3,8 +3,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Briefcase, Building2, Camera, CheckCircle2, Mail, MapPin, ShieldAlert, Trash2 } from 'lucide-react'
 import { updateWorkspaceSettings, fetchNotificationPreferences, updateNotificationPreferences, type NotificationPreferences } from '../../../lib/actions'
 import { Button, Card, ErrorNote, PageHeader } from '../../../components/ui'
+import { createHeadConfig } from '../../lib/seo'
 
-export const Route = createFileRoute('/_app/$workspaceId/settings')({
+export const Route = createFileRoute('/_app/$workspaceId/settings')({ head: () => createHeadConfig('Configurações — Naia Campanhas'),
   component: SettingsPage,
 })
 

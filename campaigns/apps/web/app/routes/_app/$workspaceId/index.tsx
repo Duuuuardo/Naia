@@ -21,8 +21,9 @@ import {
 import { fetchDashboardStats, fetchSendsTimeseries } from '../../../lib/actions'
 import { StatusBadge, ChannelBadge } from '../../../components/ui'
 import { SendsTimeseriesCard } from '../../../components/charts'
+import { createHeadConfig } from '../../lib/seo'
 
-export const Route = createFileRoute('/_app/$workspaceId/')({
+export const Route = createFileRoute('/_app/$workspaceId/')({ head: () => createHeadConfig('Início — Naia Campanhas'),
   loader: async ({ params }) => {
     const [stats, timeseries] = await Promise.all([
       fetchDashboardStats({ data: params.workspaceId }),
