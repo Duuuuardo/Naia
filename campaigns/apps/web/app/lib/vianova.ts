@@ -7,7 +7,10 @@ import { getCookie, setCookie, deleteCookie } from '@tanstack/react-start/server
 // chega ao bundle do browser.
 
 function requireEnv(name: string): string {
-  const value = process.env[name]
+  // process.env works on the server (Bun/Node); import.meta.env is the Vite
+  // object baked into the client bundle — needed because Vite only replaces
+  // import.meta.env.VITE_* statically, not process.env[dynamicKey].
+  const value = process.env[name] ?? (import.meta.env as Record<string, string>)[name]
   if (!value || value.trim().length === 0) {
     throw new Error(`[naia/web] ${name} is required`)
   }

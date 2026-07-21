@@ -10,13 +10,16 @@ ENV NODE_ENV=production
 # Copy full source (workspace resolution needs real package dirs).
 COPY . .
 RUN bun install --frozen-lockfile
-# VITE_ vars are baked into the client bundle at build time.
-# Defaults are the production URLs; override via --build-arg if needed.
+# VITE_ vars are baked into the client bundle at build time AND read at runtime
+# by server-side TanStack Start code via process.env. Defaults are production
+# URLs; override via --build-arg if needed.
 ARG VITE_NAIA_API_URL=https://api.campaigns.naia.website
+ARG VITE_NAIA_WEB_URL=https://campaigns.naia.website
 ARG VITE_VIANOVA_API_URL=https://api.vianova.software
 ARG VITE_VIANOVA_WEB_URL=https://app.vianova.software
 ARG VITE_CRM_WEB_URL=https://crm.naia.website
 ENV VITE_NAIA_API_URL=$VITE_NAIA_API_URL
+ENV VITE_NAIA_WEB_URL=$VITE_NAIA_WEB_URL
 ENV VITE_VIANOVA_API_URL=$VITE_VIANOVA_API_URL
 ENV VITE_VIANOVA_WEB_URL=$VITE_VIANOVA_WEB_URL
 ENV VITE_CRM_WEB_URL=$VITE_CRM_WEB_URL
@@ -36,8 +39,18 @@ fi
 FROM oven/bun:1.3.14-slim AS runtime
 WORKDIR /app
 ARG APP
+ARG VITE_NAIA_API_URL=https://api.campaigns.naia.website
+ARG VITE_NAIA_WEB_URL=https://campaigns.naia.website
+ARG VITE_VIANOVA_API_URL=https://api.vianova.software
+ARG VITE_VIANOVA_WEB_URL=https://app.vianova.software
+ARG VITE_CRM_WEB_URL=https://crm.naia.website
 ENV NODE_ENV=production
 ENV APP=${APP}
+ENV VITE_NAIA_API_URL=$VITE_NAIA_API_URL
+ENV VITE_NAIA_WEB_URL=$VITE_NAIA_WEB_URL
+ENV VITE_VIANOVA_API_URL=$VITE_VIANOVA_API_URL
+ENV VITE_VIANOVA_WEB_URL=$VITE_VIANOVA_WEB_URL
+ENV VITE_CRM_WEB_URL=$VITE_CRM_WEB_URL
 
 COPY --from=base /app/${APP}/dist ./dist
 # Migration SQL files — needed at runtime by migrate.js.
