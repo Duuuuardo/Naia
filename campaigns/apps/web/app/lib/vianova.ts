@@ -14,9 +14,9 @@ function requireEnv(name: string): string {
   return value
 }
 
-const vianovaApiUrl = () => process.env.VIANOVA_API_INTERNAL_URL || requireEnv('VIANOVA_API_URL')
-const vianovaApiPublicUrl = () => requireEnv('VIANOVA_API_URL')
-const naiaWebUrl = () => requireEnv('NAIA_WEB_URL')
+const vianovaApiUrl = () => process.env.VIANOVA_API_INTERNAL_URL || requireEnv('VITE_VIANOVA_API_URL')
+const vianovaApiPublicUrl = () => requireEnv('VITE_VIANOVA_API_URL')
+const naiaWebUrl = () => requireEnv('VITE_NAIA_WEB_URL')
 const clientId = () => requireEnv('NAIA_OIDC_CLIENT_ID')
 const clientSecret = () => requireEnv('NAIA_OIDC_CLIENT_SECRET')
 
@@ -140,8 +140,8 @@ export const logout = createServerFn().handler(async () => {
 })
 
 export function manageBillingUrl(): string {
-  return `${requireEnv('VIANOVA_WEB_URL')}/billing`
+  return `${requireEnv('VITE_VIANOVA_WEB_URL')}/billing`
 }
 
-export const VIANOVA_API_URL = requireEnv('VIANOVA_API_URL')
-export const VIANOVA_WEB_URL = requireEnv('VIANOVA_WEB_URL')
+export const VIANOVA_API_URL = requireEnv('VITE_VIANOVA_API_URL')
+export const VIANOVA_WEB_URL = requireEnv('VITE_VIANOVA_WEB_URL')
