@@ -15,6 +15,7 @@ function requireEnv(name: string): string {
 }
 
 const vianovaApiUrl = () => process.env.VIANOVA_API_INTERNAL_URL || requireEnv('VIANOVA_API_URL')
+const vianovaApiPublicUrl = () => requireEnv('VIANOVA_API_URL')
 const naiaWebUrl = () => requireEnv('NAIA_WEB_URL')
 const clientId = () => requireEnv('NAIA_OIDC_CLIENT_ID')
 const clientSecret = () => requireEnv('NAIA_OIDC_CLIENT_SECRET')
@@ -27,7 +28,7 @@ const REDIRECT_URI = () => `${naiaWebUrl()}/auth/callback`
 export const buildLoginUrl = createServerFn()
   .validator((data: { redirectTo?: string }) => data)
   .handler(async ({ data }) => {
-    const url = new URL(`${vianovaApiUrl()}/oidc/authorize`)
+    const url = new URL(`${vianovaApiPublicUrl()}/oidc/authorize`)
     url.searchParams.set('client_id', clientId())
     url.searchParams.set('redirect_uri', REDIRECT_URI())
     url.searchParams.set('response_type', 'code')
