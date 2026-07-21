@@ -59,7 +59,7 @@ services:
       - naia-internal
 
   minio:
-    image: minio/minio:RELEASE.2025-07-17T22-54-18Z
+    image: minio/minio:latest
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
