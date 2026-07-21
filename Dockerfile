@@ -10,6 +10,16 @@ ENV NODE_ENV=production
 # Copy full source (workspace resolution needs real package dirs).
 COPY . .
 RUN bun install --frozen-lockfile
+# VITE_ vars are baked into the client bundle at build time.
+# Defaults are the production URLs; override via --build-arg if needed.
+ARG VITE_NAIA_API_URL=https://api.campaigns.naia.website
+ARG VITE_VIANOVA_API_URL=https://api.vianova.software
+ARG VITE_VIANOVA_WEB_URL=https://app.vianova.software
+ARG VITE_CRM_WEB_URL=https://crm.naia.website
+ENV VITE_NAIA_API_URL=$VITE_NAIA_API_URL
+ENV VITE_VIANOVA_API_URL=$VITE_VIANOVA_API_URL
+ENV VITE_VIANOVA_WEB_URL=$VITE_VIANOVA_WEB_URL
+ENV VITE_CRM_WEB_URL=$VITE_CRM_WEB_URL
 RUN bun run --cwd ${APP} build
 # Bundle web app server into a single self-contained file so the runtime stage
 # needs no node_modules. API apps already produce a standalone dist/index.js.
