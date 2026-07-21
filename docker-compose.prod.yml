@@ -84,6 +84,8 @@ services:
       novaplatform:
         aliases:
           - naia-landing
+    environment:
+      - PORT=3301
     env_file:
       - ./.env
 
@@ -116,6 +118,8 @@ services:
       novaplatform:
         aliases:
           - naia-campaigns-web
+    environment:
+      - PORT=3001
     env_file:
       - ./.env
     depends_on:
@@ -161,6 +165,8 @@ services:
       novaplatform:
         aliases:
           - naia-crm-web
+    environment:
+      - PORT=3302
     env_file:
       - ./.env
     depends_on:
