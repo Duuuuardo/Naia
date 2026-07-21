@@ -63,3 +63,56 @@ export const billingRoutes = new Elysia()
 
   // GET /billing/manage-url — "gerenciar assinatura" sempre redireciona ao Vianova.
   .get('/billing/manage-url', () => ({ url: manageBillingUrl() }))
+
+  // GET /billing/subscription — proxy autenticado para a subscription atual do workspace.
+  .get('/billing/subscription', async ({ query, set, session, rawToken }) => {
+    if (!session) {
+      set.status = 401
+      return { error: 'Unauthorized' }
+    }
+    const { product_slug, workspace_id } = query as { product_slug?: string; workspace_id?: string }
+    if (!product_slug || !workspace_id) {
+      set.status = 400
+      return { error: 'Missing required query parameters' }
+    }
+    try {
+      const res = await fetch(`${VIANOVA_API_URL}/billing/subscription?product_slug=${product_slug}&workspace_id=${workspace_id}`, {
+        headers: { authorization: `Bearer ${rawToken}` },
+      })
+      if (!res.ok) {
+        set.status = res.status
+        return { error: 'Failed to fetch subscription from Vianova' }
+      }
+      return await res.json()
+    } catch {
+      set.status = 500
+      return { error: 'Internal server error' }
+    }
+  })
+
+  // POST /billing/checkout — proxy do checkout para o Vianova usando o JWT do usuário.
+  // Evita a necessidade de SameSite=None no vianova_session cross-site.
+  .post('/billing/checkout', async ({ body, set, session, rawToken }) => {
+    if (!session) {
+      set.status = 401
+      return { error: 'Unauthorized' }
+    }
+    try {
+      const res = await fetch(`${VIANOVA_API_URL}/billing/checkout`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${rawToken}`,
+        },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        set.status = res.status
+        return await res.json().catch(() => ({ error: 'Billing checkout failed' }))
+      }
+      return await res.json()
+    } catch {
+      set.status = 500
+      return { error: 'Internal server error' }
+    }
+  })

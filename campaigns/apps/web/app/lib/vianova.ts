@@ -54,12 +54,14 @@ export const completeLogin = createServerFn()
     const tokenData = (await res.json()) as { access_token?: string; expires_in?: number }
     if (!tokenData.access_token) return { ok: false as const }
 
+    const cookieDomain = process.env.NAIA_COOKIE_DOMAIN
     setCookie(SESSION_COOKIE, tokenData.access_token, {
       httpOnly: true,
       sameSite: 'lax',
       secure: isProduction,
       path: '/',
       maxAge: tokenData.expires_in ?? 3600,
+      ...(cookieDomain ? { domain: cookieDomain } : {}),
     })
 
     return {

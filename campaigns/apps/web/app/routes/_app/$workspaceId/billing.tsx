@@ -135,11 +135,12 @@ function formatLimitItem(key: string, value: number) {
 
 const LIMIT_ORDER = ['creditsPerCycle', 'campaignsPerMonth', 'automations', 'connections', 'seats', 'storageBytes', 'maxFileSizeBytes']
 
-// Chamadas de billing vão direto ao Vianova (cross-origin, cookie de sessão
-// do Vianova) — única exceção documentada ao Eden Treaty; ver
-// docs/architecture.md, "Portal de billing".
+// Todas as chamadas de billing passam pelo proxy do Naia API usando o JWT da
+// sessão — sem precisar de cookie cross-site para o Vianova.
 async function vianovaBilling(path: string, init?: RequestInit) {
-  const res = await fetch(`${VIANOVA_API_URL()}${path}`, {
+  const naiaApiUrl = import.meta.env.VITE_NAIA_API_URL
+
+  const res = await fetch(`${naiaApiUrl}${path}`, {
     credentials: 'include',
     headers: { 'content-type': 'application/json' },
     ...init,
