@@ -12,7 +12,6 @@ import {
   X,
   Zap,
 } from 'lucide-react'
-import { NaiaIcon } from '@naia/ui'
 
 export const Route = createFileRoute('/')({
   component: Landing,
@@ -463,7 +462,7 @@ function FinalCta() {
 
       {/* Content */}
       <div className="relative mx-auto flex max-w-6xl flex-col items-center px-6 py-20 text-center md:py-24">
-        <NaiaIcon size={40} />
+        <img src="/brand/naia-mark.png" alt="Naia" className="h-12 w-auto" />
         <h2 className="mt-6 max-w-xl text-3xl font-bold tracking-tight text-white md:text-4xl">
           Venda no disparo. Atenda na conversa.
         </h2>
