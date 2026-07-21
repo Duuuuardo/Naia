@@ -407,6 +407,13 @@ export const campaignRoutes = new Elysia()
       if (!ctx) { set.status = 401; return { message: 'Não autenticado.' } }
       if (!ctx.permissions.campaigns) { set.status = 403; return { message: 'Seu papel não tem acesso a esta área do workspace.' } }
 
+      // Email não confirmado não bloqueia o login, mas bloqueia disparo —
+      // conta sem email verificado no Vianova não coloca mensagens na rua.
+      if (!session?.emailVerified) {
+        set.status = 403
+        return { message: 'Confirme o email da sua conta Vianova para disparar campanhas. Se já confirmou, saia e entre novamente.' }
+      }
+
       const subCheck = hasActiveSubscription(ctx.entitlements)
       if (!subCheck.allowed) { set.status = 403; return { message: subCheck.reason } }
 

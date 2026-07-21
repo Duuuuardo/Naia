@@ -85,6 +85,9 @@ export interface VianovaUser {
   picture: string | null
   pictureFrame: string | null
   sid: string
+  // Claim OIDC padrão — false enquanto o usuário não confirmar o link de email.
+  // Use para limitar funcionalidades sensíveis (ex.: disparo de campanhas).
+  emailVerified: boolean
 }
 
 // Verificação 100% local via JWKS — nenhum round-trip ao Vianova no caminho
@@ -107,6 +110,7 @@ export async function verifyUserToken(token: string): Promise<VianovaUser | null
       picture: typeof payload.picture === 'string' ? payload.picture : null,
       pictureFrame: typeof payload.picture_frame === 'string' ? payload.picture_frame : null,
       sid: payload.sid,
+      emailVerified: payload.email_verified === true,
     }
   } catch {
     return null

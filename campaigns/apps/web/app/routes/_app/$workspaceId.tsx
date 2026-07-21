@@ -3,6 +3,7 @@ import { CreditCard, Files, House, Megaphone, Plug, Settings, Users, UsersRound,
 import type { PermissionKey, RolePermissionMap } from '@naia/schemas'
 import { Topbar } from '../../components/topbar'
 import { MobileNav } from '../../components/mobile-nav'
+import { VerifyEmailBanner } from '../../components/verify-email-banner'
 import { fetchWorkspace } from '../../lib/actions'
 
 export const Route = createFileRoute('/_app/$workspaceId')({
@@ -56,6 +57,7 @@ function WorkspaceLayout() {
         workspaceId={workspaceId}
         mobileNav={<MobileNav workspaceId={workspaceId} items={visibleItems} />}
       />
+      {user.emailVerified === false && <VerifyEmailBanner email={user.email} />}
       <div className="flex-1 flex max-w-6xl w-full mx-auto">
         <aside className="hidden md:block w-48 shrink-0 border-r border-neutral-200 py-8 pr-4">
           <nav className="space-y-0.5">

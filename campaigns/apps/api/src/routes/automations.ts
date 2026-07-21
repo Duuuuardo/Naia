@@ -222,6 +222,13 @@ export const automationRoutes = new Elysia()
       const automationCheck = canCreateAutomation(ctx.entitlements, activeCount)
       if (!automationCheck.allowed) { set.status = 403; return { message: automationCheck.reason } }
 
+      // Automação ativa envia mensagens sozinha — exige email confirmado no
+      // Vianova, igual ao disparo de campanhas.
+      if ((body.active ?? true) && !session?.emailVerified) {
+        set.status = 403
+        return { message: 'Confirme o email da sua conta Vianova para ativar automações. Se já confirmou, saia e entre novamente.' }
+      }
+
       const id = generateId()
       await db.insert(automations).values({
         id,
@@ -290,6 +297,10 @@ export const automationRoutes = new Elysia()
       if (shapeError) { set.status = 400; return { message: shapeError } }
 
       if (body.active === true && !existing.active) {
+        if (!session?.emailVerified) {
+          set.status = 403
+          return { message: 'Confirme o email da sua conta Vianova para ativar automações. Se já confirmou, saia e entre novamente.' }
+        }
         const activeCount = await countActiveAutomations(params.workspaceId)
         const activationCheck = canActivateAutomation(ctx.entitlements, activeCount)
         if (!activationCheck.allowed) { set.status = 403; return { message: activationCheck.reason } }

@@ -14,6 +14,7 @@
     "@tanstack/react-router": "^1",
     "react": "^19",
     "react-dom": "^19",
+    "lucide-react": "^1.24.0",
     "@crm/client": "workspace:*",
     "@naia/vianova-config": "workspace:*"
   },

@@ -6,7 +6,7 @@
 // controle por run.
 
 import { db, campaigns, campaignRuns, campaignMessages, campaignConnections, campaignVariants, campaignVariantMedia, mediaAssets, connections, contacts, entitlements, automationEnrollments, workspaces } from '@naia/db'
-import { eq, and, sql, asc, desc, inArray } from 'drizzle-orm'
+import { eq, and, gt, sql, asc, desc, inArray } from 'drizzle-orm'
 import { getQueue, QUEUES, defaultJobOptions, getOutboundQueueName } from '@naia/queue'
 import type { PacerJob, SendMessageJob, Schedule, Speed, MediaRef, SpeedChannel } from '@naia/schemas'
 import { notifyWorkspaceOwner } from '../lib/vianova-notifications'
@@ -273,12 +273,24 @@ export async function handlePacerStep(job: PacerJob): Promise<void> {
 
   await db.update(campaignMessages).set({ connectionId: connection.id, updatedAt: now }).where(eq(campaignMessages.id, claimed.id))
 
-  // Decremento atômico — o crédito é consumido ao despachar, não ao entregar.
-  // GREATEST evita saldo negativo em caso de corrida entre pacers paralelos.
-  await db
+  // Débito atômico e condicional — o crédito é a autoridade final de cota no
+  // momento do envio. O UPDATE só decrementa se ainda houver saldo (> 0);
+  // se nada foi debitado (saldo já zerado, inclusive por corrida entre runs
+  // ou pacers paralelos do mesmo workspace), a mensagem NÃO sai. Isso impede
+  // que lotes super-enfileirados na largada do run estourem o saldo contratado
+  // — a fatia de cota em launchRun é só um pré-filtro best-effort; este gate é
+  // quem realmente segura o limite.
+  const debited = await db
     .update(entitlements)
-    .set({ creditsBalance: sql`GREATEST(${entitlements.creditsBalance} - 1, 0)`, updatedAt: now })
-    .where(eq(entitlements.workspaceId, campaign.workspaceId))
+    .set({ creditsBalance: sql`${entitlements.creditsBalance} - 1`, updatedAt: now })
+    .where(and(eq(entitlements.workspaceId, campaign.workspaceId), gt(entitlements.creditsBalance, 0)))
+    .returning({ creditsBalance: entitlements.creditsBalance })
+
+  if (debited.length === 0) {
+    await markMessageFailed(claimed.id, runId, campaignId, 'Créditos de disparo esgotados.')
+    await enqueuePacerStep(runId, campaignId, job.sentInBurst, 1_000)
+    return
+  }
 
   // Campanha de automação: variáveis do evento que inscreveu o contato na
   // régua (ex: {{cart_url}} do webhook) entram como custom fields na renderização

@@ -19,6 +19,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
         name: session.name,
         picture: session.picture,
         pictureFrame: session.pictureFrame,
+        emailVerified: session.emailVerified,
       },
     }
   })

@@ -27,8 +27,47 @@ const isProduction = process.env.NODE_ENV === 'production'
 
 export const SESSION_COOKIE = 'naia_session'
 export const REFRESH_COOKIE = 'naia_refresh'
+// Cookie de transação do login: guarda o state (anti-CSRF), o PKCE code_verifier
+// e o destino pós-login. httpOnly, vida curta, consumido uma única vez no callback.
+const OIDC_TX_COOKIE = 'naia_oidc_tx'
+const OIDC_TX_TTL_SECONDS = 600
 
 const REDIRECT_URI = () => `${naiaWebUrl()}/auth/callback`
+
+// Só aceita caminho interno. Bloqueia protocol-relative (//evil, /\evil), que o
+// browser trata como URL absoluta — senão o `state`/redirect vira open redirect.
+function safeRedirectPath(path: string | undefined): string {
+  if (!path || !path.startsWith('/')) return '/'
+  if (path.startsWith('//') || path.startsWith('/\\')) return '/'
+  return path
+}
+
+function base64url(bytes: Uint8Array): string {
+  return Buffer.from(bytes).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+function randomToken(): string {
+  const bytes = new Uint8Array(32)
+  crypto.getRandomValues(bytes)
+  return base64url(bytes)
+}
+
+async function pkceChallenge(verifier: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))
+  return base64url(new Uint8Array(digest))
+}
+
+function oidcTxCookieOptions() {
+  const cookieDomain = process.env.NAIA_COOKIE_DOMAIN
+  return {
+    httpOnly: true,
+    sameSite: 'lax' as const,
+    secure: isProduction,
+    path: '/',
+    maxAge: OIDC_TX_TTL_SECONDS,
+    ...(cookieDomain ? { domain: cookieDomain } : {}),
+  }
+}
 
 // Retorna a URL do endpoint end_session do Vianova. Isomorphic (sem imports
 // server-only) — pode ser chamado de qualquer contexto.
@@ -41,17 +80,46 @@ export function buildEndSessionUrl(): string {
 export const buildLoginUrl = createServerFn()
   .validator((data: { redirectTo?: string }) => data)
   .handler(async ({ data }) => {
+    // state aleatório (não é mais o caminho de redirect) amarra o callback a
+    // este browser; PKCE amarra a troca do código a este mesmo início de fluxo.
+    const state = randomToken()
+    const verifier = randomToken()
+    const challenge = await pkceChallenge(verifier)
+    const redirectTo = safeRedirectPath(data.redirectTo)
+
+    setCookie(OIDC_TX_COOKIE, JSON.stringify({ state, verifier, redirectTo }), oidcTxCookieOptions())
+
     const url = new URL(`${vianovaApiPublicUrl()}/oidc/authorize`)
     url.searchParams.set('client_id', clientId())
     url.searchParams.set('redirect_uri', REDIRECT_URI())
     url.searchParams.set('response_type', 'code')
-    url.searchParams.set('state', data.redirectTo && data.redirectTo.startsWith('/') ? data.redirectTo : '/')
+    url.searchParams.set('state', state)
+    url.searchParams.set('code_challenge', challenge)
+    url.searchParams.set('code_challenge_method', 'S256')
     return url.toString()
   })
 
 export const completeLogin = createServerFn()
   .validator((data: { code: string; state?: string }) => data)
   .handler(async ({ data }) => {
+    // Consome o cookie de transação uma única vez, aconteça o que acontecer.
+    const txRaw = getCookie(OIDC_TX_COOKIE)
+    deleteCookie(OIDC_TX_COOKIE, { path: '/' })
+    if (!txRaw) return { ok: false as const }
+
+    let tx: { state?: string; verifier?: string; redirectTo?: string }
+    try {
+      tx = JSON.parse(txRaw)
+    } catch {
+      return { ok: false as const }
+    }
+
+    // Anti-CSRF: o state que voltou do Vianova tem que ser exatamente o que
+    // gravamos no início do fluxo neste browser. Sem isso, um code injetado por
+    // atacante (login CSRF / code injection) é rejeitado aqui.
+    if (!tx.state || !data.state || tx.state !== data.state) return { ok: false as const }
+    if (!tx.verifier) return { ok: false as const }
+
     const res = await fetch(`${vianovaApiUrl()}/oidc/token`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -61,6 +129,7 @@ export const completeLogin = createServerFn()
         client_id: clientId(),
         client_secret: clientSecret(),
         redirect_uri: REDIRECT_URI(),
+        code_verifier: tx.verifier,
       }),
     })
 
@@ -83,7 +152,7 @@ export const completeLogin = createServerFn()
 
     return {
       ok: true as const,
-      redirectTo: data.state && data.state.startsWith('/') ? data.state : '/',
+      redirectTo: safeRedirectPath(tx.redirectTo),
     }
   })
 
