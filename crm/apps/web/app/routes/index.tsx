@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { createHeadConfig } from '../../lib/seo'
+import { createHeadConfig } from '../lib/seo'
 
 export const Route = createFileRoute('/')({ head: () => createHeadConfig('Naia CRM'),
   component: Home,
