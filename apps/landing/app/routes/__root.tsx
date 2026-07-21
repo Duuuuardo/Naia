@@ -40,10 +40,9 @@ export const Route = createRootRoute({
       { name: 'twitter:image', content: 'https://naia.website/og-image.png' },
     ],
     links: [
-      { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
-      { rel: 'icon', type: 'image/png', href: '/favicon.png' },
-      { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
-      { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
+      { rel: 'icon', type: 'image/png', href: '/favicon.png?v=2' },
+      { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico?v=2' },
+      { rel: 'apple-touch-icon', href: '/apple-touch-icon.png?v=2' },
       { rel: 'manifest', href: '/site.webmanifest' },
       { rel: 'canonical', href: 'https://naia.website' },
     ],
