@@ -25,8 +25,10 @@ export function Topbar({
   const router = useRouter()
 
   async function handleLogout() {
-    await logout()
-    router.navigate({ to: '/login' })
+    const { endSessionUrl } = await logout()
+    // Navega para o end_session do Vianova — revoga a sessão SSO e redireciona
+    // de volta ao /login da Naia via post_logout_redirect_uri.
+    window.location.href = endSessionUrl
   }
 
   const low = credits && credits.perCycle > 0 && credits.balance / credits.perCycle <= 0.1
