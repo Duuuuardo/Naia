@@ -21,7 +21,7 @@ import {
 import { fetchDashboardStats, fetchSendsTimeseries } from '../../../lib/actions'
 import { StatusBadge, ChannelBadge } from '../../../components/ui'
 import { SendsTimeseriesCard } from '../../../components/charts'
-import { createHeadConfig } from '../../lib/seo'
+import { createHeadConfig } from '~/lib/seo'
 
 export const Route = createFileRoute('/_app/$workspaceId/')({ head: () => createHeadConfig('Início — Naia Campanhas'),
   loader: async ({ params }) => {

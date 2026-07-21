@@ -30,7 +30,7 @@ import {
   updatePermissions,
 } from '../../../lib/actions'
 import { Avatar, Button, Switch } from '../../../components/ui'
-import { createHeadConfig } from '../../lib/seo'
+import { createHeadConfig } from '~/lib/seo'
 
 export const Route = createFileRoute('/_app/$workspaceId/members')({ head: () => createHeadConfig('Membros — Naia Campanhas'),
   loader: async ({ params }) => {

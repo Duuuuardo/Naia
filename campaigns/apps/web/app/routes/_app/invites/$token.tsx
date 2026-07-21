@@ -1,7 +1,7 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
 import { acceptInvite } from '../../../lib/actions'
-import { createHeadConfig } from '../../lib/seo'
+import { createHeadConfig } from '~/lib/seo'
 
 export const Route = createFileRoute('/_app/invites/$token')({ head: () => createHeadConfig('Convite — Naia Campanhas'),
   component: AcceptInvitePage,

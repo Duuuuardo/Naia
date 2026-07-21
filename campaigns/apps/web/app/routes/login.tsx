@@ -1,6 +1,6 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { buildLoginUrl } from '../lib/vianova'
-import { createHeadConfig } from '../../lib/seo'
+import { createHeadConfig } from '~/lib/seo'
 
 export const Route = createFileRoute('/login')({ head: () => createHeadConfig('Entrar — Naia Campanhas'),
   validateSearch: (search: Record<string, unknown>): { redirect?: string } => ({

@@ -40,7 +40,7 @@ import {
   syncContactGroupMembers,
 } from '../../../lib/actions'
 import { Button } from '../../../components/ui'
-import { createHeadConfig } from '../../lib/seo'
+import { createHeadConfig } from '~/lib/seo'
 
 
 export const Route = createFileRoute('/_app/$workspaceId/contacts')({ head: () => createHeadConfig('Contatos — Naia Campanhas'),

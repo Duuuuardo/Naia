@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 import { Topbar } from '../../components/topbar'
 import { fetchWorkspaces, createWorkspace } from '../../lib/actions'
-import { createHeadConfig } from '../../lib/seo'
+import { createHeadConfig } from '~/lib/seo'
 
 export const Route = createFileRoute('/_app/workspaces')({ head: () => createHeadConfig('Workspaces — Naia Campanhas'),
   loader: () => fetchWorkspaces(),

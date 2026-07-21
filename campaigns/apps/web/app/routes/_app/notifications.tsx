@@ -20,7 +20,7 @@ import {
   type NotificationItem,
 } from '../../lib/actions'
 import { requireEnv } from '../../lib/env'
-import { createHeadConfig } from '../../lib/seo'
+import { createHeadConfig } from '~/lib/seo'
 
 const VIANOVA_WEB_URL = requireEnv('VITE_VIANOVA_WEB_URL')
 

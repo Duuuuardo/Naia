@@ -33,7 +33,7 @@ import {
 } from '../../../lib/actions'
 import { Button, Card, EmptyState, ErrorNote, PageHeader, StatusBadge, Switch } from '../../../components/ui'
 import { TIMEZONES } from '../../../components/campaign-wizard/types'
-import { createHeadConfig } from '../../lib/seo'
+import { createHeadConfig } from '~/lib/seo'
 
 export const Route = createFileRoute('/_app/$workspaceId/automations')({ head: () => createHeadConfig('Automações — Naia Campanhas'),
   loader: async ({ params }) => {

@@ -2,7 +2,7 @@ import { createFileRoute, redirect, useLoaderData, useRouteContext } from '@tans
 import { fetchCampaign, fetchConnections, fetchContactTags } from '../../../../lib/actions'
 import { CampaignWizard } from '../../../../components/campaign-wizard'
 import { draftFromCampaign } from '../../../../components/campaign-wizard/types'
-import { createHeadConfig } from '../../lib/seo'
+import { createHeadConfig } from '~/lib/seo'
 
 export const Route = createFileRoute('/_app/$workspaceId/campaigns/$campaignId/edit')({ head: () => createHeadConfig('Editar Campanha — Naia Campanhas'),
   loader: async ({ params }) => {

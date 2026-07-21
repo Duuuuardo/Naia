@@ -2,7 +2,7 @@ import { createFileRoute, useLoaderData, useRouteContext } from '@tanstack/react
 import { fetchConnections, fetchContactTags } from '../../../../lib/actions'
 import { CampaignWizard } from '../../../../components/campaign-wizard'
 import { emptyDraft } from '../../../../components/campaign-wizard/types'
-import { createHeadConfig } from '../../lib/seo'
+import { createHeadConfig } from '~/lib/seo'
 
 export const Route = createFileRoute('/_app/$workspaceId/campaigns/new')({ head: () => createHeadConfig('Nova Campanha — Naia Campanhas'),
   loader: async ({ params }) => {
