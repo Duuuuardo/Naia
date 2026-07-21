@@ -85,6 +85,13 @@
       "when": 1784483900000,
       "tag": "0011_admin_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1753142400000,
+      "tag": "0012_free_workspaces_counter",
+      "breakpoints": true
     }
   ]
 }
