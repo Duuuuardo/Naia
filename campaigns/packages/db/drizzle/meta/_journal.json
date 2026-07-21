@@ -92,6 +92,13 @@
       "when": 1753142400000,
       "tag": "0012_free_workspaces_counter",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1784570000000,
+      "tag": "0013_automations_v2",
+      "breakpoints": true
     }
   ]
 }
