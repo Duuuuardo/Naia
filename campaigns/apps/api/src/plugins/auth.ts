@@ -9,15 +9,15 @@ import { verifyUserToken, type VianovaUser } from '@naia/vianova-auth'
 // via POST /internal/session-revoked, ver routes/internal.ts).
 export const authPlugin = new Elysia().derive({ as: 'global' }, async ({ headers, cookie }) => {
   // Tenta obter o token do header Authorization (preferido)
-  let token = undefined
+  let token: string | undefined
   const authHeader = headers.authorization
   if (authHeader?.startsWith('Bearer ')) {
     token = authHeader.slice(7)
   }
 
   // Fallback: obtém do cookie naia_session (requisições internas do frontend)
-  if (!token) {
-    token = cookie['naia_session']?.value
+  if (!token && cookie.naia_session) {
+    token = cookie.naia_session.value as string
   }
 
   if (!token) return { session: null as VianovaUser | null, rawToken: null as string | null }
