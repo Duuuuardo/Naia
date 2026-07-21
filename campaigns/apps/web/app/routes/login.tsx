@@ -1,6 +1,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { buildLoginUrl } from '../lib/vianova'
 import { createHeadConfig } from '~/lib/seo'
+import { getSessionUser } from '../lib/session'
 
 export const Route = createFileRoute('/login')({ head: () => createHeadConfig('Entrar — Naia Campanhas'),
   validateSearch: (search: Record<string, unknown>): { redirect?: string } => ({
@@ -8,6 +9,8 @@ export const Route = createFileRoute('/login')({ head: () => createHeadConfig('E
   }),
   loaderDeps: ({ search }) => ({ redirectTo: search.redirect }),
   loader: async ({ deps }) => {
+    const user = await getSessionUser()
+    if (user) throw redirect({ to: '/workspaces' })
     const url = await buildLoginUrl({ data: { redirectTo: deps.redirectTo } })
     throw redirect({ href: url })
   },

@@ -196,11 +196,11 @@ function CreateWorkspaceModal({
               />
               <span className="text-xs text-neutral-500 leading-relaxed">
                 Concordo com os{' '}
-                <a href="https://vianova.software/terms" target="_blank" rel="noopener noreferrer" className="text-brand-500 hover:text-brand-600 font-medium underline-offset-2 hover:underline">
+                <a href="https://app.vianova.software/terms" target="_blank" rel="noopener noreferrer" className="text-brand-500 hover:text-brand-600 font-medium underline-offset-2 hover:underline">
                   Termos de Uso
                 </a>{' '}
                 e a{' '}
-                <a href="https://vianova.software/privacy" target="_blank" rel="noopener noreferrer" className="text-brand-500 hover:text-brand-600 font-medium underline-offset-2 hover:underline">
+                <a href="https://app.vianova.software/privacy" target="_blank" rel="noopener noreferrer" className="text-brand-500 hover:text-brand-600 font-medium underline-offset-2 hover:underline">
                   Política de Privacidade
                 </a>.
               </span>

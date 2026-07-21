@@ -7,7 +7,9 @@ export async function loadProductConfig(): Promise<ConfigMap> {
   const internalSecret = process.env.VIANOVA_INTERNAL_SECRET
 
   if (!baseUrl) {
-    console.warn('[config] VIANOVA_CONFIG_SERVER_URL not set, using empty config')
+    console.warn(
+      '[config] VIANOVA_CONFIG_SERVER_URL not set. In production, add this env var pointing to the config server (e.g., http://vianova-config-server:5100 or the public API URL). Using empty config as fallback.'
+    )
     productConfig = {}
     return productConfig
   }

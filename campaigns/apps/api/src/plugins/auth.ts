@@ -7,9 +7,19 @@ import { verifyUserToken, type VianovaUser } from '@naia/vianova-auth'
 // (packages/vianova-auth) — sem round-trip ao Vianova no caminho quente.
 // O único lookup local é a checagem de revogação (single sign-out imediato
 // via POST /internal/session-revoked, ver routes/internal.ts).
-export const authPlugin = new Elysia().derive({ as: 'global' }, async ({ headers }) => {
+export const authPlugin = new Elysia().derive({ as: 'global' }, async ({ headers, cookie }) => {
+  // Tenta obter o token do header Authorization (preferido)
+  let token = undefined
   const authHeader = headers.authorization
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined
+  if (authHeader?.startsWith('Bearer ')) {
+    token = authHeader.slice(7)
+  }
+
+  // Fallback: obtém do cookie naia_session (requisições internas do frontend)
+  if (!token) {
+    token = cookie['naia_session']?.value
+  }
+
   if (!token) return { session: null as VianovaUser | null, rawToken: null as string | null }
 
   const user = await verifyUserToken(token)
