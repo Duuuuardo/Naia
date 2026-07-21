@@ -9,6 +9,10 @@ concurrency:
   group: deploy-naia-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   build-and-push:
     name: Build and push images
