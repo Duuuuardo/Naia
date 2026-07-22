@@ -101,7 +101,7 @@ function MembersPage() {
     const result = await createInvite({ data: { workspaceId, email: email.trim(), role } })
     setSaving(false)
     if ('error' in result) { setMessage(result.error ?? 'Erro inesperado.'); return }
-    setMessage(`Convite gerado com sucesso! Link de acesso: ${result.inviteUrl}`)
+    setMessage('Convite enviado por e-mail com sucesso.')
     setEmail('')
     setShowInviteForm(false)
     await refresh()

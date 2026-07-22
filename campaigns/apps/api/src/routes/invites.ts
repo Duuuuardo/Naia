@@ -6,9 +6,17 @@ import { authPlugin } from '../plugins/auth'
 import { resolveWorkspaceAccess } from '../lib/workspace-auth'
 import { generateId, generateToken } from '../lib/crypto'
 import { getRequiredEnv } from '../lib/env'
+import { createVianovaEmailClient } from '@naia/vianova-email'
+import { buildWorkspaceInviteEmail } from '../lib/invite-email'
 
 const VIANOVA_WEB_URL = getRequiredEnv('VIANOVA_WEB_URL')
 const NAIA_WEB_URL = getRequiredEnv('NAIA_WEB_URL')
+const VIANOVA_API_URL = getRequiredEnv('VIANOVA_API_URL')
+const VIANOVA_INTERNAL_SECRET = getRequiredEnv('VIANOVA_INTERNAL_SECRET')
+const emailClient = createVianovaEmailClient({
+  vianovaApiUrl: VIANOVA_API_URL,
+  internalSecret: VIANOVA_INTERNAL_SECRET,
+})
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -74,11 +82,26 @@ export const inviteRoutes = new Elysia()
       const [workspace] = await db.select({ name: workspaces.name }).from(workspaces).where(eq(workspaces.id, params.workspaceId)).limit(1)
       const inviteUrl = `${NAIA_WEB_URL}/invites/${token}`
 
-      // Sem SMTP configurado neste estágio — loga só metadata, nunca email/link.
-      console.log(`[invite:dev] convite criado para workspace ${params.workspaceId}`)
+      try {
+        const email = buildWorkspaceInviteEmail({
+          workspaceName: workspace?.name ?? 'seu workspace',
+          inviteUrl,
+        })
+        await emailClient.enqueue({
+          to: body.email.toLowerCase(),
+          ...email,
+          brand: 'naia',
+          workspaceId: params.workspaceId,
+        })
+      } catch (error) {
+        await db.delete(invites).where(eq(invites.id, id))
+        console.error(`[invite] falha ao enfileirar email para workspace ${params.workspaceId}:`, error)
+        set.status = 502
+        return { message: 'Não foi possível enviar o convite por e-mail. Tente novamente.' }
+      }
 
       const [invite] = await db.select().from(invites).where(eq(invites.id, id)).limit(1)
-      return { invite, inviteUrl }
+      return { invite, emailQueued: true as const }
     },
     {
       body: t.Object({
