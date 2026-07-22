@@ -76,7 +76,7 @@ services:
       - naia-internal
 
   landing:
-    image: ${REGISTRY}/naia-landing:latest
+    image: ${REGISTRY}/naia-landing:${IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:
       - "127.0.0.1:3301:3301"
@@ -90,7 +90,7 @@ services:
       - ./.env
 
   campaigns-api:
-    image: ${REGISTRY}/naia-campaigns-api:latest
+    image: ${REGISTRY}/naia-campaigns-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:
       - "127.0.0.1:4001:4001"
@@ -115,7 +115,7 @@ services:
         condition: service_healthy
 
   campaigns-web:
-    image: ${REGISTRY}/naia-campaigns-web:latest
+    image: ${REGISTRY}/naia-campaigns-web:${IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:
       - "127.0.0.1:3001:3001"
@@ -131,7 +131,7 @@ services:
       - campaigns-api
 
   campaigns-worker:
-    image: ${REGISTRY}/naia-campaigns-worker:latest
+    image: ${REGISTRY}/naia-campaigns-worker:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file:
       - ./.env
@@ -157,7 +157,7 @@ services:
   # redis/minio) e na novaplatform (egress para VIANOVA_API_URL público e para
   # a API/worker os alcançarem pelo nome de serviço).
   session-host-base:
-    image: ${REGISTRY}/naia-campaigns-session-host:latest
+    image: ${REGISTRY}/naia-campaigns-session-host:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file:
       - ./.env
@@ -182,7 +182,7 @@ services:
         condition: service_healthy
 
   session-host-scale:
-    image: ${REGISTRY}/naia-campaigns-session-host:latest
+    image: ${REGISTRY}/naia-campaigns-session-host:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file:
       - ./.env
@@ -207,7 +207,7 @@ services:
         condition: service_healthy
 
   crm-api:
-    image: ${REGISTRY}/naia-crm-api:latest
+    image: ${REGISTRY}/naia-crm-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:
       - "127.0.0.1:4002:4002"
@@ -225,7 +225,7 @@ services:
         condition: service_healthy
 
   crm-web:
-    image: ${REGISTRY}/naia-crm-web:latest
+    image: ${REGISTRY}/naia-crm-web:${IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:
       - "127.0.0.1:3302:3302"

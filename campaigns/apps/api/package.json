@@ -25,7 +25,7 @@
     "@naia/vianova-auth": "workspace:*",
     "@naia/vianova-config": "workspace:*",
     "@naia/vianova-email": "workspace:*",
-    "drizzle-orm": "^0.44",
+    "drizzle-orm": "^0.45.2",
     "elysia": "^1",
     "logixlysia": "^6.6.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"

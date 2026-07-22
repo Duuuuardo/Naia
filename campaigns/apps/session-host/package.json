@@ -19,7 +19,7 @@
     "@naia/schemas": "workspace:*",
     "@naia/storage": "workspace:*",
     "@whiskeysockets/baileys": "7.0.0-rc13",
-    "drizzle-orm": "^0.44",
+    "drizzle-orm": "^0.45.2",
     "elysia": "^1",
     "logixlysia": "^6.6.0",
     "teleproto": "^1.228.2"

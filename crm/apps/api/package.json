@@ -18,7 +18,7 @@
     "@elysiajs/swagger": "^1",
     "@naia/vianova-auth": "workspace:*",
     "@naia/vianova-config": "workspace:*",
-    "drizzle-orm": "^0.44",
+    "drizzle-orm": "^0.45.2",
     "elysia": "^1",
     "logixlysia": "^6.6.0"
   },

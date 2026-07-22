@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Tag imutável para rollback (ex.: sha-abc123...)"
+        required: false
+        type: string
 
 concurrency:
   group: deploy-naia-${{ github.ref }}
@@ -35,22 +40,22 @@ jobs:
           - app: crm/apps/web
             image: naia-crm-web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - name: Log in to registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ${{ vars.REGISTRY || 'ghcr.io' }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           build-args: APP=${{ matrix.app }}
           push: true
-          tags: ${{ vars.REGISTRY || 'ghcr.io' }}/${{ github.repository_owner }}/${{ matrix.image }}:latest
+          tags: ${{ vars.REGISTRY || 'ghcr.io' }}/${{ github.repository_owner }}/${{ matrix.image }}:sha-${{ github.sha }}
           no-cache: true
           cache-to: type=gha,mode=max
 
@@ -61,23 +66,63 @@ jobs:
     environment: Deploy
     steps:
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
         env:
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           GHCR_USER: ${{ github.actor }}
+          DEPLOY_TAG: ${{ inputs.image_tag }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: GHCR_TOKEN,GHCR_USER
+          envs: GHCR_TOKEN,GHCR_USER,DEPLOY_TAG
           script: |
+            set -eu
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             cd /opt/naia
             git fetch origin main
             git checkout main
             git pull --ff-only origin main
-            docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            TARGET_TAG="${DEPLOY_TAG:-sha-${{ github.sha }}}"
+            PREVIOUS_TAG="latest"
+            if [ -f .deploy-version ]; then PREVIOUS_TAG="$(cat .deploy-version)"; fi
+            export IMAGE_TAG="$TARGET_TAG"
+            mkdir -p backups
+            BACKUP_TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+            if [ -n "$(docker compose -f docker-compose.prod.yml ps -q postgres)" ]; then
+              docker compose -f docker-compose.prod.yml exec -T postgres pg_dump -U naia -d naia > "backups/naia-$BACKUP_TIMESTAMP.sql"
+              gzip "backups/naia-$BACKUP_TIMESTAMP.sql"
+            fi
+            if [ -n "$(docker compose -f docker-compose.prod.yml ps -q crm-postgres)" ]; then
+              docker compose -f docker-compose.prod.yml exec -T crm-postgres pg_dump -U crm -d crm > "backups/crm-$BACKUP_TIMESTAMP.sql"
+              gzip "backups/crm-$BACKUP_TIMESTAMP.sql"
+            fi
+            find backups -type f -name '*.sql.gz' -mtime +14 -delete
+            if ! docker compose -f docker-compose.prod.yml pull || ! docker compose -f docker-compose.prod.yml up -d --remove-orphans; then
+              export IMAGE_TAG="$PREVIOUS_TAG"
+              docker compose -f docker-compose.prod.yml pull
+              docker compose -f docker-compose.prod.yml up -d --remove-orphans
+              exit 1
+            fi
+            healthy=false
+            for attempt in $(seq 1 18); do
+              if curl -fsS https://naia.website/ >/dev/null \
+                && curl -fsS https://campaigns.naia.website/ >/dev/null \
+                && curl -fsS https://api.campaigns.naia.website/health >/dev/null \
+                && curl -fsS https://crm.naia.website/ >/dev/null \
+                && curl -fsS https://api.crm.naia.website/health >/dev/null; then
+                healthy=true
+                break
+              fi
+              sleep 10
+            done
+            if [ "$healthy" != "true" ]; then
+              export IMAGE_TAG="$PREVIOUS_TAG"
+              docker compose -f docker-compose.prod.yml pull
+              docker compose -f docker-compose.prod.yml up -d --remove-orphans
+              exit 1
+            fi
+            echo "$TARGET_TAG" > .deploy-version
             # SECURITY: avoid `docker system prune -f` in automated deploys — it can
             # delete resources still in use and offers no audit trail. Clean up images
             # with a targeted, tagged prune or a separate scheduled job instead.
