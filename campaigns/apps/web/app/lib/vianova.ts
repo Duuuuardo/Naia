@@ -203,8 +203,12 @@ export const tryRefreshSession = createServerFn().handler(async (): Promise<stri
 })
 
 export const logout = createServerFn().handler(async () => {
-  deleteCookie(SESSION_COOKIE)
-  deleteCookie(REFRESH_COOKIE)
+  // A remoção deve usar os mesmos atributos do cookie de criação. Sem path e
+  // domain idênticos o navegador pode manter uma cópia válida do cookie.
+  const cookieDomain = process.env.NAIA_COOKIE_DOMAIN
+  const options = { path: '/', ...(cookieDomain ? { domain: cookieDomain } : {}) }
+  deleteCookie(SESSION_COOKIE, options)
+  deleteCookie(REFRESH_COOKIE, options)
   // Retorna a URL para o browser navegar ao end_session do Vianova —
   // o Vianova revoga a sessão e dispara o webhook single sign-out nos demais
   // produtos antes de redirecionar de volta ao /login da Naia.
