@@ -6,6 +6,7 @@
 import { db, campaigns, campaignMessages, campaignRuns, campaignConnections, campaignVariants, connections, contacts, entitlements as entitlementsTable } from '@naia/db'
 import { eq, and, sql, inArray, asc } from 'drizzle-orm'
 import { getQueue, QUEUES, defaultJobOptions } from '@naia/queue'
+import { hasActiveSubscription } from '@naia/entitlements'
 import type { PacerJob, Schedule, ChannelType } from '@naia/schemas'
 import { computeNextRunAt, DEFAULT_TIMEZONE } from '@naia/scheduling'
 import { resolveCampaignTargets, type SegmentFilter } from '../routes/contacts'
@@ -162,13 +163,25 @@ async function launchRun(
   const now = new Date()
   const campaignId = campaign.id
 
-  // Créditos: saldo disponível determina quantos contatos cabem neste run
   const [ent] = await db
     .select()
     .from(entitlementsTable)
     .where(eq(entitlementsTable.workspaceId, campaign.workspaceId))
     .limit(1)
-  const remaining = Math.max(0, ent?.creditsBalance ?? 0)
+
+  // Assinatura re-checada a cada run: a rota de dispatch valida no clique,
+  // mas runs agendados/recorrentes e a régua chegam aqui direto — assinatura
+  // que expirou entre ocorrências não pode continuar disparando.
+  const subCheck = ent ? hasActiveSubscription(ent) : null
+  if (!ent || !subCheck || !subCheck.allowed) {
+    const reason = subCheck && !subCheck.allowed ? subCheck.reason : 'Workspace sem entitlement sincronizado.'
+    await advanceAfterRun(campaignId, nextRunAt, runNumber, now)
+    await insertSkippedRun(campaignId, runNumber, scheduledFor, 'skipped_quota', reason)
+    return { started: false, reason, runStatus: 'skipped_quota' }
+  }
+
+  // Créditos: saldo disponível determina quantos contatos cabem neste run
+  const remaining = Math.max(0, ent.creditsBalance)
 
   if (remaining === 0) {
     await advanceAfterRun(campaignId, nextRunAt, runNumber, now)

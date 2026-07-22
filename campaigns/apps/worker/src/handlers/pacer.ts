@@ -8,6 +8,7 @@
 import { db, campaigns, campaignRuns, campaignMessages, campaignConnections, campaignVariants, campaignVariantMedia, mediaAssets, connections, contacts, entitlements, automationEnrollments, workspaces } from '@naia/db'
 import { eq, and, gt, sql, asc, desc, inArray } from 'drizzle-orm'
 import { getQueue, QUEUES, defaultJobOptions, getOutboundQueueName } from '@naia/queue'
+import { coerceSpeedToPolicy } from '@naia/entitlements'
 import type { PacerJob, SendMessageJob, Schedule, Speed, MediaRef, SpeedChannel } from '@naia/schemas'
 import { notifyWorkspaceOwner } from '../lib/vianova-notifications'
 import {
@@ -77,7 +78,7 @@ export async function handlePacerStep(job: PacerJob): Promise<void> {
   const schedule = parseJson<Schedule>(campaign.scheduleJson, { type: 'immediate' })
   // Fallback conservador: JSON ilegível nunca pode acelerar além do que
   // qualquer plano permite.
-  const speed = parseJson<Speed>(campaign.speedJson, { preset: 'lento' })
+  const storedSpeed = parseJson<Speed>(campaign.speedJson, { preset: 'lento' })
   const tz = campaign.timezone || DEFAULT_TIMEZONE
 
   // Janela de funcionamento: estaciona até a próxima abertura
@@ -110,6 +111,14 @@ export async function handlePacerStep(job: PacerJob): Promise<void> {
 
   // Créditos esgotados no meio do run: falha o restante e conclui
   const [ent] = await db.select({ creditsBalance: entitlements.creditsBalance, tier: entitlements.tier }).from(entitlements).where(eq(entitlements.workspaceId, campaign.workspaceId)).limit(1)
+
+  // Enforcement de velocidade em tempo de envio: downgrade depois da criação
+  // da campanha não pode manter um pacing que o plano atual não permite.
+  const speed = coerceSpeedToPolicy(
+    storedSpeed,
+    ent?.tier ?? 'free',
+    campaign.channel === 'mixed' ? ['whatsapp', 'telegram'] : [campaign.channel === 'telegram' ? 'telegram' : 'whatsapp'],
+  )
   if (ent && ent.creditsBalance <= 0) {
     const failed = await db
       .update(campaignMessages)

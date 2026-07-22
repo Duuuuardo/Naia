@@ -50,7 +50,11 @@ export async function resolveWorkspaceAccess(
     .where(eq(entitlements.workspaceId, workspaceId))
     .limit(1)
 
-  if (!ent || ent.tier === 'free' || ent.tier === 'none') {
+  // Sem row (workspace anterior ao sync) → defaults do free. Com row, os
+  // valores do banco valem SEMPRE — o segundo workspace free nasce
+  // 'inactive' com limites zerados de propósito, e um fallback hardcoded
+  // aqui reabriria os gates de conexão/campanha que o produto fecha.
+  if (!ent) {
     return {
       userId: session.userId,
       role: member.role,

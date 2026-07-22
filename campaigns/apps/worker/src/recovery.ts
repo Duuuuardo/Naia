@@ -74,16 +74,33 @@ async function reconcileRunCounts(): Promise<void> {
   }
 }
 
-/** 'sending' órfão (>10min sem update = job de envio sumiu) volta pra fila. */
+/** 'sending' órfão (>10min sem update = job de envio sumiu) volta pra fila.
+ * O crédito debitado no claim do pacer é estornado: a mensagem re-enfileirada
+ * será debitada de novo quando reivindicada — sem estorno, cada crash no meio
+ * do envio cobraria a mensagem duas vezes. */
 async function resetStaleSending(): Promise<void> {
   const cutoff = new Date(Date.now() - 10 * 60_000)
-  const reset = await db
-    .update(campaignMessages)
-    .set({ status: 'queued', updatedAt: new Date() })
-    .where(and(eq(campaignMessages.status, 'sending'), lt(campaignMessages.updatedAt, cutoff)))
-    .returning({ id: campaignMessages.id })
-  if (reset.length > 0) {
-    console.log(`[recovery] ${reset.length} mensagens presas em 'sending' devolvidas pra fila`)
+  const refunds = (await db.execute(sql`
+    WITH reset AS (
+      UPDATE campaign_messages cm SET status = 'queued', updated_at = now()
+      FROM campaigns c
+      WHERE cm.campaign_id = c.id
+        AND cm.status = 'sending'
+        AND cm.updated_at < ${cutoff}
+      RETURNING cm.id, c.workspace_id
+    )
+    SELECT workspace_id AS "workspaceId", count(*)::int AS c FROM reset GROUP BY 1
+  `)) as unknown as Array<{ workspaceId: string; c: number }>
+
+  for (const refund of refunds) {
+    await db.execute(sql`
+      UPDATE entitlements SET credits_balance = credits_balance + ${refund.c}, updated_at = now()
+      WHERE workspace_id = ${refund.workspaceId}
+    `)
+  }
+  const total = refunds.reduce((acc, r) => acc + r.c, 0)
+  if (total > 0) {
+    console.log(`[recovery] ${total} mensagens presas em 'sending' devolvidas pra fila (créditos estornados)`)
   }
 }
 

@@ -119,6 +119,41 @@ export function defaultSpeedPreset(tier: string): SpeedPreset {
 }
 
 /**
+ * Coage uma velocidade salva ao que o plano atual permite — enforcement em
+ * tempo de envio (pacer). Cobre downgrade com campanha já criada: preset fora
+ * do plano volta ao padrão, piso manual é clampado por canal e a pausa de
+ * rajada some se o plano não a tiver.
+ */
+export function coerceSpeedToPolicy(speed: Speed, tier: string, channels: SpeedChannel[]): Speed {
+  const policy = getSpeedPolicy(tier)
+  let result: Speed = speed
+
+  if (!policy.allowedPresets.includes(result.preset)) {
+    result = { preset: defaultSpeedPreset(tier) }
+  }
+
+  if (result.preset === 'manual') {
+    const floors = channels
+      .map((ch) => policy.manualFloorSeconds?.[ch])
+      .filter((v): v is number => typeof v === 'number')
+    const floor = floors.length > 0 ? Math.max(...floors) : 0
+    if (floor > 0 && (result.minSeconds ?? 0) < floor) {
+      result = {
+        ...result,
+        minSeconds: floor,
+        maxSeconds: result.maxSeconds && result.maxSeconds >= floor ? result.maxSeconds : undefined,
+      }
+    }
+  }
+
+  if (result.pauseEveryN && !policy.burstPauseAllowed) {
+    result = { ...result, pauseEveryN: undefined, pauseMinMinutes: undefined, pauseMaxMinutes: undefined }
+  }
+
+  return result
+}
+
+/**
  * Valida a configuração de velocidade da campanha contra o plano. `channels`
  * são os canais das conexões selecionadas (campanha mista valida o piso de
  * cada canal).

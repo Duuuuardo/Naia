@@ -27,6 +27,15 @@ export async function handleTelegramSend(job: SendMessageJob): Promise<void> {
     return
   }
 
+  // Cancelamento no meio do run: a rota de cancel já marcou esta mensagem
+  // como 'failed' — o job em trânsito não pode colocá-la na rua mesmo assim.
+  const [campaign] = await db
+    .select({ status: campaigns.status })
+    .from(campaigns)
+    .where(eq(campaigns.id, campaignId))
+    .limit(1)
+  if (!campaign || campaign.status === 'cancelled') return
+
   const [conn] = await db
     .select({ id: connections.id, status: connections.status })
     .from(connections)
@@ -65,23 +74,28 @@ export async function handleTelegramSend(job: SendMessageJob): Promise<void> {
     // MTProto não interpreta HTML — remove as tags do template
     const { externalMessageId } = await sendTelegramUserMessage(connectionId, tgChatId, content.replace(/<[^>]+>/g, ''), job.media)
 
-    await db.update(campaignMessages).set({
+    // Só 'sending' vira 'sent' — não ressuscita mensagem marcada 'failed'
+    // por um cancel concorrente, e retry duplicado do BullMQ não conta 2x.
+    const updated = await db.update(campaignMessages).set({
       status: 'sent',
       externalMessageId,
       sentAt: new Date(),
       updatedAt: new Date(),
-    }).where(eq(campaignMessages.id, campaignMessageId))
+    }).where(and(eq(campaignMessages.id, campaignMessageId), eq(campaignMessages.status, 'sending')))
+      .returning({ id: campaignMessages.id })
 
-    await db.update(campaigns).set({
-      sentCount: sql`${campaigns.sentCount} + 1`,
-      updatedAt: new Date(),
-    }).where(eq(campaigns.id, campaignId))
-
-    if (job.runId) {
-      await db.update(campaignRuns).set({
-        sentCount: sql`${campaignRuns.sentCount} + 1`,
+    if (updated.length > 0) {
+      await db.update(campaigns).set({
+        sentCount: sql`${campaigns.sentCount} + 1`,
         updatedAt: new Date(),
-      }).where(eq(campaignRuns.id, job.runId))
+      }).where(eq(campaigns.id, campaignId))
+
+      if (job.runId) {
+        await db.update(campaignRuns).set({
+          sentCount: sql`${campaignRuns.sentCount} + 1`,
+          updatedAt: new Date(),
+        }).where(eq(campaignRuns.id, job.runId))
+      }
     }
 
     // Aviso de opt-out: só para contatos individuais — grupos não têm opt-out.

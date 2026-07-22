@@ -330,6 +330,20 @@ export const campaignRoutes = new Elysia()
         const speedCheck = canUseSpeed(ctx.entitlements, body.speed, speedChannels(conns))
         if (!speedCheck.allowed) { set.status = 403; return { message: speedCheck.reason } }
         updates.speedJson = JSON.stringify(body.speed)
+      } else if (body.connectionIds !== undefined) {
+        // Trocar conexões muda os canais — a velocidade salva precisa continuar
+        // válida contra o piso de cada canal novo (ex: manual 2s do Telegram
+        // não vale se entrar uma conexão WhatsApp).
+        try {
+          const stored = JSON.parse(existing.speedJson) as Speed
+          const speedCheck = canUseSpeed(ctx.entitlements, stored, speedChannels(conns))
+          if (!speedCheck.allowed) {
+            set.status = 403
+            return { message: `A velocidade salva não é compatível com as novas conexões. ${speedCheck.reason}` }
+          }
+        } catch {
+          // speedJson ilegível: o pacer coage para 'lento' em tempo de envio
+        }
       }
 
       // Agendamento editado em campanha agendada → recalcula a próxima execução
@@ -933,7 +947,24 @@ export const campaignRoutes = new Elysia()
           status: campaignMessages.status,
           count: sql<number>`count(*)::int`,
         }).from(campaignMessages).innerJoin(campaigns, eq(campaignMessages.campaignId, campaigns.id)).where(eq(campaigns.workspaceId, params.workspaceId)).groupBy(campaignMessages.status),
-        db.select({ phone: contacts.whatsappPhone, customFields: contacts.customFields }).from(contacts).where(eq(contacts.workspaceId, params.workspaceId)),
+        // Agregado no banco: extrai UF do custom_fields por regex (nunca
+        // lança em JSON inválido, ao contrário do cast ::jsonb) e o DDD do
+        // telefone, sem trazer a base de contatos inteira pra memória.
+        db.execute(sql`
+          SELECT
+            upper(trim(substring(custom_fields from '"(?:estado|uf|state)"\\s*:\\s*"([^"]*)"'))) AS "customUf",
+            CASE
+              WHEN digits LIKE '55%' AND length(digits) >= 12 THEN substring(digits, 3, 2)
+              WHEN length(digits) IN (10, 11) THEN substring(digits, 1, 2)
+            END AS ddd,
+            count(*)::int AS c
+          FROM (
+            SELECT custom_fields, regexp_replace(coalesce(whatsapp_phone, ''), '\\D', '', 'g') AS digits
+            FROM contacts
+            WHERE workspace_id = ${params.workspaceId}
+          ) t
+          GROUP BY 1, 2
+        `) as unknown as Promise<Array<{ customUf: string | null; ddd: string | null; c: number }>>,
       ])
 
       const campaignsByStatus: Record<string, number> = { draft: 0, scheduled: 0, running: 0, paused: 0, completed: 0, cancelled: 0, failed: 0 }
@@ -946,56 +977,27 @@ export const campaignRoutes = new Elysia()
         messagesByStatus[row.status] = row.count
       }
 
-      const dddToUF = (ddd: string): string => {
-        const n = parseInt(ddd, 10)
-        if (n >= 11 && n <= 19) return 'SP'
-        if (n >= 21 && n <= 24) return 'RJ'
-        if (n >= 27 && n <= 28) return 'ES'
-        if (n >= 31 && n <= 38) return 'MG'
-        if (n >= 41 && n <= 46) return 'PR'
-        if (n >= 47 && n <= 49) return 'SC'
-        if (n >= 51 && n <= 55) return 'RS'
-        if (n === 61) return 'DF'
-        if (n >= 62 && n <= 64) return 'GO'
-        if (n >= 65 && n <= 66) return 'MT'
-        if (n === 67) return 'MS'
-        if (n >= 71 && n <= 77) return 'BA'
-        if (n === 79) return 'SE'
-        if (n >= 81 && n <= 87) return 'PE'
-        if (n === 82) return 'AL'
-        if (n === 83) return 'PB'
-        if (n === 84) return 'RN'
-        if (n >= 85 && n <= 88) return 'CE'
-        if (n >= 86 && n <= 89) return 'PI'
-        if (n >= 91 && n <= 94) return 'PA'
-        if (n >= 92 && n <= 97) return 'AM'
-        if (n === 95) return 'RR'
-        if (n === 96) return 'AP'
-        if (n >= 98 && n <= 99) return 'MA'
-        if (n === 63) return 'TO'
-        if (n === 68) return 'AC'
-        if (n === 69) return 'RO'
-        return 'Outros/Intl'
+      // Tabela explícita DDD→UF (plano ANATEL). Faixas sobrepostas do código
+      // anterior mapeavam AL/PB/RN/CE/PI pra PE e RR/AP pra AM.
+      const DDD_UF: Record<number, string> = {
+        11: 'SP', 12: 'SP', 13: 'SP', 14: 'SP', 15: 'SP', 16: 'SP', 17: 'SP', 18: 'SP', 19: 'SP',
+        21: 'RJ', 22: 'RJ', 24: 'RJ',
+        27: 'ES', 28: 'ES',
+        31: 'MG', 32: 'MG', 33: 'MG', 34: 'MG', 35: 'MG', 37: 'MG', 38: 'MG',
+        41: 'PR', 42: 'PR', 43: 'PR', 44: 'PR', 45: 'PR', 46: 'PR',
+        47: 'SC', 48: 'SC', 49: 'SC',
+        51: 'RS', 53: 'RS', 54: 'RS', 55: 'RS',
+        61: 'DF', 62: 'GO', 63: 'TO', 64: 'GO', 65: 'MT', 66: 'MT', 67: 'MS', 68: 'AC', 69: 'RO',
+        71: 'BA', 73: 'BA', 74: 'BA', 75: 'BA', 77: 'BA',
+        79: 'SE',
+        81: 'PE', 82: 'AL', 83: 'PB', 84: 'RN', 85: 'CE', 86: 'PI', 87: 'PE', 88: 'CE', 89: 'PI',
+        91: 'PA', 92: 'AM', 93: 'PA', 94: 'PA', 95: 'RR', 96: 'AP', 97: 'AM', 98: 'MA', 99: 'MA',
       }
 
       const contactsByStateUF: Record<string, number> = {}
-      for (const c of (contactsList || [])) {
-        let uf = 'Outros/Intl'
-        try {
-          const cf = JSON.parse(c.customFields || '{}')
-          if (cf.estado || cf.uf || cf.state) {
-            uf = String(cf.estado || cf.uf || cf.state).toUpperCase().trim()
-          }
-        } catch {}
-        if (uf === 'Outros/Intl' && c.phone) {
-          const clean = c.phone.replace(/\D/g, '')
-          if (clean.startsWith('55') && clean.length >= 12) {
-            uf = dddToUF(clean.substring(2, 4))
-          } else if (clean.length === 10 || clean.length === 11) {
-            uf = dddToUF(clean.substring(0, 2))
-          }
-        }
-        contactsByStateUF[uf] = (contactsByStateUF[uf] || 0) + 1
+      for (const row of contactsList) {
+        const uf = row.customUf || (row.ddd ? DDD_UF[Number(row.ddd)] : undefined) || 'Outros/Intl'
+        contactsByStateUF[uf] = (contactsByStateUF[uf] || 0) + Number(row.c)
       }
 
       return {
