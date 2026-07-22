@@ -4,6 +4,7 @@ import { Briefcase, Building2, Camera, CheckCircle2, Mail, MapPin, ShieldAlert, 
 import { updateWorkspaceSettings, fetchNotificationPreferences, updateNotificationPreferences, type NotificationPreferences } from '../../../lib/actions'
 import { Button, Card, ErrorNote, PageHeader } from '../../../components/ui'
 import { createHeadConfig } from '~/lib/seo'
+import { validateWorkspaceName } from '~/lib/validation'
 
 export const Route = createFileRoute('/_app/$workspaceId/settings')({ head: () => createHeadConfig('Configurações — Naia Campanhas'),
   component: SettingsPage,
@@ -39,6 +40,7 @@ function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [nameError, setNameError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   if (!permissions.settings) {
@@ -66,6 +68,10 @@ function SettingsPage() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
+    const validNameError = validateWorkspaceName(name)
+    setNameError(validNameError)
+    if (validNameError) return
+
     setSaving(true)
     setError(null)
     setSaved(false)
@@ -143,11 +149,19 @@ function SettingsPage() {
               id="ws-name"
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value)
+                setNameError(null)
+              }}
+              onBlur={() => setNameError(validateWorkspaceName(name))}
+              aria-invalid={nameError ? true : undefined}
               required
               minLength={1}
-              className="w-full h-10 px-3 rounded-md border border-neutral-300 bg-white text-sm text-dark-800 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition-colors"
+              className={`w-full h-10 px-3 rounded-md border text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition-colors ${nameError ? 'border-red-400' : 'border-neutral-300 bg-white text-dark-800'}`}
             />
+            {nameError && (
+              <span className="text-[11px] text-red-500 mt-1 block" role="alert">{nameError}</span>
+            )}
           </div>
 
           <div className="grid sm:grid-cols-2 gap-4">

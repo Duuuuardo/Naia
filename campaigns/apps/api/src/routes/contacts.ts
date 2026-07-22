@@ -859,10 +859,10 @@ export const contactRoutes = new Elysia()
     },
     {
       body: t.Object({
-        name: t.String({ minLength: 1 }),
-        telegramChatId: t.Optional(t.Nullable(t.String())),
-        whatsappPhone: t.Optional(t.Nullable(t.String())),
-        email: t.Optional(t.Nullable(t.String())),
+        name: t.String({ minLength: 1, maxLength: 200 }),
+        telegramChatId: t.Optional(t.Nullable(t.String({ pattern: '^-?[0-9]{1,20}$' }))),
+        whatsappPhone: t.Optional(t.Nullable(t.String({ pattern: '^[0-9]{8,20}$' }))),
+        email: t.Optional(t.Nullable(t.String({ format: 'email', maxLength: 254 }))),
         birthDate: t.Optional(t.Nullable(t.String())),
         company: t.Optional(t.Nullable(t.String())),
         notes: t.Optional(t.Nullable(t.String())),
@@ -991,10 +991,10 @@ export const contactRoutes = new Elysia()
     },
     {
       body: t.Object({
-        name: t.Optional(t.String({ minLength: 1 })),
-        telegramChatId: t.Optional(t.Nullable(t.String())),
-        whatsappPhone: t.Optional(t.Nullable(t.String())),
-        email: t.Optional(t.Nullable(t.String())),
+        name: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
+        telegramChatId: t.Optional(t.Nullable(t.String({ pattern: '^-?[0-9]{1,20}$' }))),
+        whatsappPhone: t.Optional(t.Nullable(t.String({ pattern: '^[0-9]{8,20}$' }))),
+        email: t.Optional(t.Nullable(t.String({ format: 'email', maxLength: 254 }))),
         birthDate: t.Optional(t.Nullable(t.String())),
         company: t.Optional(t.Nullable(t.String())),
         notes: t.Optional(t.Nullable(t.String())),

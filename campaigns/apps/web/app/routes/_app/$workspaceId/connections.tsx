@@ -40,6 +40,7 @@ import {
 } from '../../../lib/actions'
 import { Button, StatusBadge, ChannelBadge, formatChannelName } from '../../../components/ui'
 import { createHeadConfig } from '~/lib/seo'
+import { validateConnectionName, validatePhone } from '~/lib/validation'
 
 export const Route = createFileRoute('/_app/$workspaceId/connections')({ head: () => createHeadConfig('Conexões — Naia Campanhas'),
   loader: ({ params }) => fetchConnections({ data: params.workspaceId }),
@@ -88,6 +89,8 @@ function ConnectionsPage() {
   const [phone, setPhone] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [nameError, setNameError] = useState<string | null>(null)
+  const [phoneError, setPhoneError] = useState<string | null>(null)
 
   // Modals de importação
   const [activeImportContactsConn, setActiveImportContactsConn] = useState<{ id: string; name: string; channel: string } | null>(null)
@@ -130,6 +133,18 @@ function ConnectionsPage() {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
     if (!selectedChannel) return
+
+    const validNameError = validateConnectionName(name)
+    setNameError(validNameError)
+    
+    let validPhoneError = null
+    if (selectedChannel === 'telegram_user') {
+      validPhoneError = validatePhone(phone)
+      setPhoneError(validPhoneError)
+    }
+
+    if (validNameError || validPhoneError) return
+
     setSaving(true)
     setError(null)
     const result = selectedChannel === 'telegram_user'
@@ -266,18 +281,27 @@ function ConnectionsPage() {
                     id="conn-name"
                     type="text"
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    onChange={(e) => {
+                      setName(e.target.value)
+                      setNameError(null)
+                    }}
+                    onBlur={() => setNameError(validateConnectionName(name))}
+                    aria-invalid={nameError ? true : undefined}
                     placeholder={
                       selectedChannel === 'whatsapp'
                         ? 'Ex: WhatsApp Comercial (+55 11...)'
                         : 'Ex: Telegram Pessoal (+55 11...)'
                     }
-                    className="w-full h-10 px-3.5 rounded-xl border border-neutral-200 text-sm font-medium focus:border-dark-800 outline-none transition-all"
+                    className={`w-full h-10 px-3.5 rounded-xl border text-sm font-medium focus:border-dark-800 outline-none transition-all ${nameError ? 'border-red-400' : 'border-neutral-200'}`}
                     required
                   />
-                  <p className="text-xs text-neutral-400 mt-1">
-                    Nome exibido na hora de selecionar o canal durante a criação de campanhas.
-                  </p>
+                  {nameError ? (
+                    <span className="text-[11px] text-red-500 mt-1 block" role="alert">{nameError}</span>
+                  ) : (
+                    <p className="text-xs text-neutral-400 mt-1">
+                      Nome exibido na hora de selecionar o canal durante a criação de campanhas.
+                    </p>
+                  )}
                 </div>
 
                 {selectedChannel === 'telegram_user' && (
@@ -290,14 +314,23 @@ function ConnectionsPage() {
                         id="conn-phone"
                         type="tel"
                         value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
+                        onChange={(e) => {
+                          setPhone(e.target.value)
+                          setPhoneError(null)
+                        }}
+                        onBlur={() => setPhoneError(validatePhone(phone))}
+                        aria-invalid={phoneError ? true : undefined}
                         placeholder="Ex: +5511999999999"
-                        className="w-full h-10 px-3.5 rounded-xl border border-neutral-200 text-sm font-mono focus:border-dark-800 outline-none transition-all"
+                        className={`w-full h-10 px-3.5 rounded-xl border text-sm font-mono focus:border-dark-800 outline-none transition-all ${phoneError ? 'border-red-400' : 'border-neutral-200'}`}
                         required
                       />
-                      <p className="text-xs text-neutral-400 mt-1">
-                        O código de confirmação chega no app do Telegram deste número.
-                      </p>
+                      {phoneError ? (
+                        <span className="text-[11px] text-red-500 mt-1 block" role="alert">{phoneError}</span>
+                      ) : (
+                        <p className="text-xs text-neutral-400 mt-1">
+                          O código de confirmação chega no app do Telegram deste número.
+                        </p>
+                      )}
                     </div>
 
                     <div className="flex items-start gap-3 rounded-xl bg-neutral-50 border border-neutral-200 p-3.5 text-xs text-neutral-700">

@@ -41,6 +41,13 @@ import {
 } from '../../../lib/actions'
 import { Button } from '../../../components/ui'
 import { createHeadConfig } from '~/lib/seo'
+import {
+  validateContactIdentifier,
+  validateContactName,
+  validateOptionalEmail,
+} from '~/lib/validation'
+
+type ContactFieldErrors = { name?: string; identifier?: string; email?: string }
 
 
 export const Route = createFileRoute('/_app/$workspaceId/contacts')({ head: () => createHeadConfig('Contatos — Naia Campanhas'),
@@ -146,6 +153,7 @@ function ContactsPage() {
   const [createNotes, setCreateNotes] = useState('')
   const [createTags, setCreateTags] = useState('')
   const [createOptIn, setCreateOptIn] = useState(true)
+  const [createErrors, setCreateErrors] = useState<ContactFieldErrors>({})
 
   // Edit Form State
   const [editPlatform, setEditPlatform] = useState<'whatsapp' | 'telegram'>('whatsapp')
@@ -157,6 +165,7 @@ function ContactsPage() {
   const [editNotes, setEditNotes] = useState('')
   const [editTags, setEditTags] = useState('')
   const [editOptIn, setEditOptIn] = useState(true)
+  const [editErrors, setEditErrors] = useState<ContactFieldErrors>({})
 
   // Import State
   const [csv, setCsv] = useState('')
@@ -216,7 +225,13 @@ function ContactsPage() {
 
   async function handleCreateSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!createIdentifier.trim()) return
+    const errors: ContactFieldErrors = {
+      name: validateContactName(createName) ?? undefined,
+      identifier: validateContactIdentifier(createPlatform, createIdentifier) ?? undefined,
+      email: validateOptionalEmail(createEmail) ?? undefined,
+    }
+    setCreateErrors(errors)
+    if (errors.name || errors.identifier || errors.email) return
     setSaving(true)
 
     const tagsArray = createTags
@@ -224,11 +239,12 @@ function ContactsPage() {
       .map((t) => t.trim().replace(/^#/, ''))
       .filter((t) => t.length > 0)
 
+    const whatsappDigits = createIdentifier.trim().replace(/[\s()+.-]/g, '')
     const result = await createContact({
       data: {
         workspaceId,
         name: createName.trim(),
-        whatsappPhone: createPlatform === 'whatsapp' ? createIdentifier.trim() : null,
+        whatsappPhone: createPlatform === 'whatsapp' ? whatsappDigits : null,
         telegramChatId: createPlatform === 'telegram' ? createIdentifier.trim() : null,
         email: createEmail.trim() || null,
         birthDate: createBirthDate.trim() || null,
@@ -260,6 +276,7 @@ function ContactsPage() {
 
 
   function openEdit(c: ContactRow) {
+    setEditErrors({})
     setEditContact(c)
     if (c.telegramChatId) {
       setEditPlatform('telegram')
@@ -280,7 +297,14 @@ function ContactsPage() {
 
   async function handleUpdateSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!editContact || !editIdentifier.trim()) return
+    if (!editContact) return
+    const errors: ContactFieldErrors = {
+      name: validateContactName(editName) ?? undefined,
+      identifier: validateContactIdentifier(editPlatform, editIdentifier) ?? undefined,
+      email: validateOptionalEmail(editEmail) ?? undefined,
+    }
+    setEditErrors(errors)
+    if (errors.name || errors.identifier || errors.email) return
     setSaving(true)
 
     const tagsArray = editTags
@@ -288,12 +312,13 @@ function ContactsPage() {
       .map((t) => t.trim().replace(/^#/, ''))
       .filter((t) => t.length > 0)
 
+    const whatsappDigits = editIdentifier.trim().replace(/[\s()+.-]/g, '')
     const result = await updateContact({
       data: {
         workspaceId,
         contactId: editContact.id,
         name: editName.trim(),
-        whatsappPhone: editPlatform === 'whatsapp' ? editIdentifier.trim() : null,
+        whatsappPhone: editPlatform === 'whatsapp' ? whatsappDigits : null,
         telegramChatId: editPlatform === 'telegram' ? editIdentifier.trim() : null,
         email: editEmail.trim() || null,
         birthDate: editBirthDate.trim() || null,
@@ -431,7 +456,7 @@ function ContactsPage() {
           <Button className="flex-1 md:flex-none" variant="secondary" icon={FileUp} onClick={() => { setShowImportModal(true); setShowCreateModal(false) }}>
             Importar CSV
           </Button>
-          <Button className="flex-1 md:flex-none" icon={UserRoundPlus} onClick={() => { setShowCreateModal(true); setShowImportModal(false) }}>
+          <Button className="flex-1 md:flex-none" icon={UserRoundPlus} onClick={() => { setCreateErrors({}); setShowCreateModal(true); setShowImportModal(false) }}>
             + Novo Contato
           </Button>
         </div>
@@ -505,7 +530,7 @@ function ContactsPage() {
               Sua busca ou filtro não retornou clientes. Cadastre um novo contato na plataforma desejada para iniciar envios.
             </p>
             <div className="pt-2">
-              <Button icon={UserRoundPlus} onClick={() => setShowCreateModal(true)}>
+              <Button icon={UserRoundPlus} onClick={() => { setCreateErrors({}); setShowCreateModal(true) }}>
                 + Novo Contato
               </Button>
             </div>
@@ -706,10 +731,18 @@ function ContactsPage() {
                 <input
                   required
                   value={createName}
-                  onChange={(e) => setCreateName(e.target.value)}
+                  onChange={(e) => {
+                    setCreateName(e.target.value)
+                    setCreateErrors((f) => ({ ...f, name: undefined }))
+                  }}
+                  onBlur={() => setCreateErrors((f) => ({ ...f, name: validateContactName(createName) ?? undefined }))}
+                  aria-invalid={createErrors.name ? true : undefined}
                   placeholder="Ex: Carlos Oliveira"
-                  className="w-full h-10 px-3.5 rounded-xl border border-neutral-200 text-sm font-medium focus:border-dark-800 outline-none transition-all"
+                  className={`w-full h-10 px-3.5 rounded-xl border text-sm font-medium focus:border-dark-800 outline-none transition-all ${createErrors.name ? 'border-red-400' : 'border-neutral-200'}`}
                 />
+                {createErrors.name && (
+                  <span className="text-[11px] text-red-500 mt-1 block" role="alert">{createErrors.name}</span>
+                )}
               </div>
 
               <div>
@@ -719,15 +752,24 @@ function ContactsPage() {
                 <input
                   required
                   value={createIdentifier}
-                  onChange={(e) => setCreateIdentifier(e.target.value)}
+                  onChange={(e) => {
+                    setCreateIdentifier(e.target.value)
+                    setCreateErrors((f) => ({ ...f, identifier: undefined }))
+                  }}
+                  onBlur={() => setCreateErrors((f) => ({ ...f, identifier: validateContactIdentifier(createPlatform, createIdentifier) ?? undefined }))}
+                  aria-invalid={createErrors.identifier ? true : undefined}
                   placeholder={createPlatform === 'whatsapp' ? 'Ex: 5511999999999' : 'Ex: 123456789'}
-                  className="w-full h-10 px-3.5 rounded-xl border border-neutral-200 text-sm font-mono focus:border-dark-800 outline-none transition-all"
+                  className={`w-full h-10 px-3.5 rounded-xl border text-sm font-mono focus:border-dark-800 outline-none transition-all ${createErrors.identifier ? 'border-red-400' : 'border-neutral-200'}`}
                 />
-                <span className="text-[11px] text-neutral-400 mt-1 block">
-                  {createPlatform === 'whatsapp'
-                    ? 'Insira apenas números com o código de país (55 para Brasil).'
-                    : 'Insira o ID numérico do chat ou usuário no Telegram.'}
-                </span>
+                {createErrors.identifier ? (
+                  <span className="text-[11px] text-red-500 mt-1 block" role="alert">{createErrors.identifier}</span>
+                ) : (
+                  <span className="text-[11px] text-neutral-400 mt-1 block">
+                    {createPlatform === 'whatsapp'
+                      ? 'Insira apenas números com o código de país (55 para Brasil).'
+                      : 'Insira o ID numérico do chat ou usuário no Telegram.'}
+                  </span>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -739,10 +781,18 @@ function ContactsPage() {
                   <input
                     type="email"
                     value={createEmail}
-                    onChange={(e) => setCreateEmail(e.target.value)}
+                    onChange={(e) => {
+                      setCreateEmail(e.target.value)
+                      setCreateErrors((f) => ({ ...f, email: undefined }))
+                    }}
+                    onBlur={() => setCreateErrors((f) => ({ ...f, email: validateOptionalEmail(createEmail) ?? undefined }))}
+                    aria-invalid={createErrors.email ? true : undefined}
                     placeholder="Ex: carlos@empresa.com"
-                    className="w-full h-10 px-3.5 rounded-xl border border-neutral-200 text-xs font-medium focus:border-dark-800 outline-none transition-all"
+                    className={`w-full h-10 px-3.5 rounded-xl border text-xs font-medium focus:border-dark-800 outline-none transition-all ${createErrors.email ? 'border-red-400' : 'border-neutral-200'}`}
                   />
+                  {createErrors.email && (
+                    <span className="text-[11px] text-red-500 mt-1 block" role="alert">{createErrors.email}</span>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-1.5 flex items-center gap-1">
@@ -929,10 +979,18 @@ function ContactsPage() {
                 <input
                   required
                   value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
+                  onChange={(e) => {
+                    setEditName(e.target.value)
+                    setEditErrors((f) => ({ ...f, name: undefined }))
+                  }}
+                  onBlur={() => setEditErrors((f) => ({ ...f, name: validateContactName(editName) ?? undefined }))}
+                  aria-invalid={editErrors.name ? true : undefined}
                   placeholder="Ex: Carlos Oliveira"
-                  className="w-full h-10 px-3.5 rounded-xl border border-neutral-200 text-sm font-medium focus:border-dark-800 outline-none transition-all"
+                  className={`w-full h-10 px-3.5 rounded-xl border text-sm font-medium focus:border-dark-800 outline-none transition-all ${editErrors.name ? 'border-red-400' : 'border-neutral-200'}`}
                 />
+                {editErrors.name && (
+                  <span className="text-[11px] text-red-500 mt-1 block" role="alert">{editErrors.name}</span>
+                )}
               </div>
 
               <div>
@@ -942,10 +1000,18 @@ function ContactsPage() {
                 <input
                   required
                   value={editIdentifier}
-                  onChange={(e) => setEditIdentifier(e.target.value)}
+                  onChange={(e) => {
+                    setEditIdentifier(e.target.value)
+                    setEditErrors((f) => ({ ...f, identifier: undefined }))
+                  }}
+                  onBlur={() => setEditErrors((f) => ({ ...f, identifier: validateContactIdentifier(editPlatform, editIdentifier) ?? undefined }))}
+                  aria-invalid={editErrors.identifier ? true : undefined}
                   placeholder={editPlatform === 'whatsapp' ? 'Ex: 5511999999999' : 'Ex: 123456789'}
-                  className="w-full h-10 px-3.5 rounded-xl border border-neutral-200 text-sm font-mono focus:border-dark-800 outline-none transition-all"
+                  className={`w-full h-10 px-3.5 rounded-xl border text-sm font-mono focus:border-dark-800 outline-none transition-all ${editErrors.identifier ? 'border-red-400' : 'border-neutral-200'}`}
                 />
+                {editErrors.identifier && (
+                  <span className="text-[11px] text-red-500 mt-1 block" role="alert">{editErrors.identifier}</span>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -957,10 +1023,18 @@ function ContactsPage() {
                   <input
                     type="email"
                     value={editEmail}
-                    onChange={(e) => setEditEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEditEmail(e.target.value)
+                      setEditErrors((f) => ({ ...f, email: undefined }))
+                    }}
+                    onBlur={() => setEditErrors((f) => ({ ...f, email: validateOptionalEmail(editEmail) ?? undefined }))}
+                    aria-invalid={editErrors.email ? true : undefined}
                     placeholder="Ex: carlos@empresa.com"
-                    className="w-full h-10 px-3.5 rounded-xl border border-neutral-200 text-xs font-medium focus:border-dark-800 outline-none transition-all"
+                    className={`w-full h-10 px-3.5 rounded-xl border text-xs font-medium focus:border-dark-800 outline-none transition-all ${editErrors.email ? 'border-red-400' : 'border-neutral-200'}`}
                   />
+                  {editErrors.email && (
+                    <span className="text-[11px] text-red-500 mt-1 block" role="alert">{editErrors.email}</span>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-1.5 flex items-center gap-1">

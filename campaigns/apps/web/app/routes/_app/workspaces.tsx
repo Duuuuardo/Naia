@@ -17,6 +17,7 @@ import {
 import { Topbar } from '../../components/topbar'
 import { fetchWorkspaces, createWorkspace } from '../../lib/actions'
 import { createHeadConfig } from '~/lib/seo'
+import { validateWorkspaceName } from '~/lib/validation'
 
 export const Route = createFileRoute('/_app/workspaces')({ head: () => createHeadConfig('Workspaces — Naia Campanhas'),
   loader: () => fetchWorkspaces(),
@@ -89,6 +90,7 @@ function CreateWorkspaceModal({
   const [agreed, setAgreed] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [nameError, setNameError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -102,7 +104,9 @@ function CreateWorkspaceModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!name.trim() || !industry || !agreed) return
+    const validNameError = validateWorkspaceName(name)
+    setNameError(validNameError)
+    if (validNameError || !industry || !agreed) return
     setError(null)
     setLoading(true)
     const result = await createWorkspace({
@@ -145,12 +149,20 @@ function CreateWorkspaceModal({
                 id="ws-name"
                 type="text"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                  setName(e.target.value)
+                  setNameError(null)
+                }}
+                onBlur={() => setNameError(validateWorkspaceName(name))}
+                aria-invalid={nameError ? true : undefined}
                 placeholder="Minha Empresa"
                 required
                 maxLength={80}
-                className="w-full h-10 px-3.5 rounded-md border border-neutral-300 text-sm font-medium text-dark-800 placeholder:text-neutral-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all"
+                className={`w-full h-10 px-3.5 rounded-md border text-sm font-medium focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all ${nameError ? 'border-red-400' : 'border-neutral-300 text-dark-800 placeholder:text-neutral-400'}`}
               />
+              {nameError && (
+                <span className="text-[11px] text-red-500 mt-1 block" role="alert">{nameError}</span>
+              )}
             </div>
 
             <div>

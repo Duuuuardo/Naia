@@ -3,6 +3,12 @@ import { getCookie } from '@tanstack/react-start/server'
 import { requireApi } from './session.server'
 import { SESSION_COOKIE } from './vianova'
 import { requireEnv } from './env'
+import { parseApiError } from './api-error'
+
+/** Extrai mensagem segura do erro Eden Treaty sem expor JSON bruto. */
+function err(value: unknown, fallback: string): string {
+  return parseApiError(value, fallback)
+}
 
 // ─── Workspaces ──────────────────────────────────────────────────────────────
 
@@ -30,7 +36,7 @@ export const createWorkspace = createServerFn()
       industry: data.industry,
       description: data.description,
     })
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao criar workspace.' }
+    if (error) return { error: err(error.value, 'Erro ao criar workspace.') }
     return { workspace: res?.workspace }
   })
 
@@ -47,7 +53,7 @@ export const updateWorkspaceSettings = createServerFn()
     const api = await requireApi()
     const { workspaceId, ...fields } = data
     const { error } = await api.workspaces({ workspaceId }).patch(fields)
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao salvar configurações.' }
+    if (error) return { error: err(error.value, 'Erro ao salvar configurações.') }
     return { ok: true as const }
   })
 
@@ -72,7 +78,7 @@ export const updatePermissions = createServerFn()
       admin: data.admin as never,
       member: data.member as never,
     })
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao salvar permissões.' }
+    if (error) return { error: err(error.value, 'Erro ao salvar permissões.') }
     return res
   })
 
@@ -102,7 +108,7 @@ export const createInvite = createServerFn()
       email: data.email,
       role: data.role,
     })
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao convidar.' }
+    if (error) return { error: err(error.value, 'Erro ao convidar.') }
     return { invite: res?.invite, inviteUrl: res?.inviteUrl }
   })
 
@@ -121,7 +127,7 @@ export const updateMemberRole = createServerFn()
     const { error } = await api.workspaces({ workspaceId: data.workspaceId }).members({ memberId: data.memberId }).patch({
       role: data.role,
     })
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao alterar papel.' }
+    if (error) return { error: err(error.value, 'Erro ao alterar papel.') }
     return { ok: true }
   })
 
@@ -130,7 +136,7 @@ export const removeMember = createServerFn()
   .handler(async ({ data }) => {
     const api = await requireApi()
     const { error } = await api.workspaces({ workspaceId: data.workspaceId }).members({ memberId: data.memberId }).delete()
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao remover membro.' }
+    if (error) return { error: err(error.value, 'Erro ao remover membro.') }
     return { ok: true }
   })
 
@@ -139,7 +145,7 @@ export const acceptInvite = createServerFn()
   .handler(async ({ data: token }) => {
     const api = await requireApi()
     const { data, error } = await api.invites({ token }).accept.post()
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Convite inválido.' }
+    if (error) return { error: err(error.value, 'Convite inválido.') }
     return { workspace: data?.workspace }
   })
 
@@ -184,7 +190,7 @@ export const createContact = createServerFn()
       tags: data.tags,
       optInStatus: data.optInStatus,
     })
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao criar contato.' }
+    if (error) return { error: err(error.value, 'Erro ao criar contato.') }
     return { ok: true }
   })
 
@@ -217,7 +223,7 @@ export const updateContact = createServerFn()
       tags: data.tags,
       optInStatus: data.optInStatus,
     })
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao atualizar contato.' }
+    if (error) return { error: err(error.value, 'Erro ao atualizar contato.') }
     return res
   })
 
@@ -227,7 +233,7 @@ export const deleteContact = createServerFn()
   .handler(async ({ data }) => {
     const api = await requireApi()
     const { error } = await api.workspaces({ workspaceId: data.workspaceId }).contacts({ contactId: data.contactId }).delete()
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao apagar contato.' }
+    if (error) return { error: err(error.value, 'Erro ao apagar contato.') }
     return { ok: true }
   })
 
@@ -238,7 +244,7 @@ export const importContacts = createServerFn()
     const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).contacts.import.post({
       csv: data.csv,
     })
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao importar contatos.' }
+    if (error) return { error: err(error.value, 'Erro ao importar contatos.') }
     return res
   })
 
@@ -260,7 +266,7 @@ export const createContactTag = createServerFn()
       color: data.color,
       description: data.description,
     })
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao criar tag.' }
+    if (error) return { error: err(error.value, 'Erro ao criar tag.') }
     return res
   })
 
@@ -273,7 +279,7 @@ export const updateContactTag = createServerFn()
       color: data.color,
       description: data.description,
     })
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao atualizar tag.' }
+    if (error) return { error: err(error.value, 'Erro ao atualizar tag.') }
     return res
   })
 
@@ -282,7 +288,7 @@ export const deleteContactTag = createServerFn()
   .handler(async ({ data }) => {
     const api = await requireApi()
     const { error } = await (api.workspaces({ workspaceId: data.workspaceId }).contacts.tags({ tagId: data.tagId }) as any).delete()
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao deletar tag.' }
+    if (error) return { error: err(error.value, 'Erro ao deletar tag.') }
     return { ok: true }
   })
 
@@ -295,7 +301,7 @@ export const mergeContacts = createServerFn()
       targetContactId: data.targetContactId,
       sourceContactIds: data.sourceContactIds,
     })
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao unificar contatos.' }
+    if (error) return { error: err(error.value, 'Erro ao unificar contatos.') }
     return res
   })
 
@@ -308,7 +314,7 @@ export const addContactIdentity = createServerFn()
       channelIdentifier: data.channelIdentifier,
       isPrimary: false,
     })
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao adicionar identidade.' }
+    if (error) return { error: err(error.value, 'Erro ao adicionar identidade.') }
     return res
   })
 
@@ -338,7 +344,7 @@ export const createTelegramUserConnection = createServerFn()
       name: data.name,
       phone: data.phone,
     })
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao conectar conta do Telegram.' }
+    if (error) return { error: err(error.value, 'Erro ao conectar conta do Telegram.') }
     return { ok: true }
   })
 
@@ -349,7 +355,7 @@ export const submitTelegramLoginCode = createServerFn()
     const { error } = await (api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId }) as any)['telegram-code'].post({
       code: data.code,
     })
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao enviar código.' }
+    if (error) return { error: err(error.value, 'Erro ao enviar código.') }
     return { ok: true }
   })
 
@@ -360,7 +366,7 @@ export const submitTelegramLoginPassword = createServerFn()
     const { error } = await (api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId }) as any)['telegram-password'].post({
       password: data.password,
     })
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao enviar senha.' }
+    if (error) return { error: err(error.value, 'Erro ao enviar senha.') }
     return { ok: true }
   })
 
@@ -371,7 +377,7 @@ export const createWhatsAppConnection = createServerFn()
     const { error } = await api.workspaces({ workspaceId: data.workspaceId }).connections.whatsapp.post({
       name: data.name,
     })
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao criar conexão WhatsApp.' }
+    if (error) return { error: err(error.value, 'Erro ao criar conexão WhatsApp.') }
     return { ok: true }
   })
 
@@ -396,7 +402,7 @@ export const fetchConnectionContactsSync = createServerFn()
   .handler(async ({ data }) => {
     const api = await requireApi()
     const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId }) as any)['contacts-sync'].get()
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao buscar contatos da conexão.' }
+    if (error) return { error: err(error.value, 'Erro ao buscar contatos da conexão.') }
     return { contacts: res?.contacts ?? [] }
   })
 
@@ -405,7 +411,7 @@ export const fetchConnectionGroupsSync = createServerFn()
   .handler(async ({ data }) => {
     const api = await requireApi()
     const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId }) as any)['groups-sync'].get()
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao buscar grupos da conexão.' }
+    if (error) return { error: err(error.value, 'Erro ao buscar grupos da conexão.') }
     return { groups: res?.groups ?? [] }
   })
 
@@ -417,7 +423,7 @@ export const importConnectionContacts = createServerFn()
       contacts: data.contacts,
       tags: data.tags,
     })
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao importar contatos.' }
+    if (error) return { error: err(error.value, 'Erro ao importar contatos.') }
     return res
   })
 
@@ -440,7 +446,7 @@ export const importConnectionGroups = createServerFn()
       groups: data.groups,
       tags: data.tags,
     })
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao importar grupos.' }
+    if (error) return { error: err(error.value, 'Erro ao importar grupos.') }
     return res
   })
 
@@ -452,7 +458,7 @@ export const importGroupMembers = createServerFn()
       groupJid: data.groupJid,
       tags: data.tags,
     })
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao importar membros do grupo.' }
+    if (error) return { error: err(error.value, 'Erro ao importar membros do grupo.') }
     return res
   })
 
@@ -461,7 +467,7 @@ export const syncContactGroupMembers = createServerFn()
   .handler(async ({ data }) => {
     const api = await requireApi()
     const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }).contacts({ contactId: data.contactId }) as any)['sync-members'].post()
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao sincronizar membros do grupo.' }
+    if (error) return { error: err(error.value, 'Erro ao sincronizar membros do grupo.') }
     return res
   })
 
@@ -552,7 +558,7 @@ export const createCampaign = createServerFn()
     const api = await requireApi()
     const { workspaceId, ...payload } = data
     const { data: res, error } = await api.workspaces({ workspaceId }).campaigns.post(payload as never)
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao criar campanha.' }
+    if (error) return { error: err(error.value, 'Erro ao criar campanha.') }
     return { campaign: (res as { campaign?: CampaignRef })?.campaign }
   })
 
@@ -562,7 +568,7 @@ export const updateCampaign = createServerFn()
     const api = await requireApi()
     const { workspaceId, campaignId, ...payload } = data
     const { data: res, error } = await api.workspaces({ workspaceId }).campaigns({ campaignId }).patch(payload as never)
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao atualizar campanha.' }
+    if (error) return { error: err(error.value, 'Erro ao atualizar campanha.') }
     return { campaign: (res as { campaign?: CampaignRef })?.campaign }
   })
 
@@ -575,7 +581,7 @@ export const dispatchCampaign = createServerFn()
       .workspaces({ workspaceId: data.workspaceId })
       .campaigns({ campaignId: data.campaignId })
       .dispatch.post({ consent: true })
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao disparar campanha.' }
+    if (error) return { error: err(error.value, 'Erro ao disparar campanha.') }
     return { message: (res as { message?: string })?.message }
   })
 
@@ -584,7 +590,7 @@ export const pauseCampaign = createServerFn()
   .handler(async ({ data }) => {
     const api = await requireApi()
     const { error } = await api.workspaces({ workspaceId: data.workspaceId }).campaigns({ campaignId: data.campaignId }).pause.post()
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao pausar campanha.' }
+    if (error) return { error: err(error.value, 'Erro ao pausar campanha.') }
     return { ok: true as const }
   })
 
@@ -593,7 +599,7 @@ export const resumeCampaign = createServerFn()
   .handler(async ({ data }) => {
     const api = await requireApi()
     const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).campaigns({ campaignId: data.campaignId }).resume.post()
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao retomar campanha.' }
+    if (error) return { error: err(error.value, 'Erro ao retomar campanha.') }
     return { message: (res as { message?: string })?.message }
   })
 
@@ -609,7 +615,7 @@ export const updateCampaignSchedule = createServerFn()
     const api = await requireApi()
     const { workspaceId, campaignId, ...payload } = data
     const { data: res, error } = await api.workspaces({ workspaceId }).campaigns({ campaignId }).schedule.patch(payload as never)
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao alterar agendamento.' }
+    if (error) return { error: err(error.value, 'Erro ao alterar agendamento.') }
     return { campaign: (res as { campaign?: CampaignRef })?.campaign }
   })
 
@@ -661,7 +667,7 @@ export const presignMediaUpload = createServerFn()
       mimeType: data.mimeType,
       sizeBytes: data.sizeBytes,
     })
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao preparar upload.' }
+    if (error) return { error: err(error.value, 'Erro ao preparar upload.') }
     return res as { assetId: string; kind: string; storageKey: string; uploadUrl: string }
   })
 
@@ -670,7 +676,7 @@ export const confirmMediaUpload = createServerFn()
   .handler(async ({ data }) => {
     const api = await requireApi()
     const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }) as any).media({ assetId: data.assetId }).confirm.post()
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao confirmar upload.' }
+    if (error) return { error: err(error.value, 'Erro ao confirmar upload.') }
     return res as { asset: { id: string; kind: string; filename: string; mimeType: string } }
   })
 
@@ -692,7 +698,7 @@ export const bulkUpsertContacts = createServerFn()
       rows: data.rows,
       tags: data.tags,
     })
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao salvar contatos.' }
+    if (error) return { error: err(error.value, 'Erro ao salvar contatos.') }
     return res as { created: number; updated: number; failed: number; errors: string[]; contactIds: string[]; tags: string[] }
   })
 
@@ -704,7 +710,7 @@ export const importContactsFile = createServerFn()
     const bytes = Uint8Array.from(atob(data.contentBase64), (c) => c.charCodeAt(0))
     const file = new File([bytes], data.filename, { type: data.mimeType })
     const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }).contacts as any)['import-file'].post({ file })
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao importar arquivo.' }
+    if (error) return { error: err(error.value, 'Erro ao importar arquivo.') }
     return res as { imported: number; skipped: number; failed: number; errors: string[]; tag: string }
   })
 
@@ -747,7 +753,7 @@ export const createAutomation = createServerFn()
     const api = await requireApi()
     const { workspaceId, ...payload } = data
     const { data: res, error } = await (api.workspaces({ workspaceId }) as any).automations.post(payload)
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao criar automação.' }
+    if (error) return { error: err(error.value, 'Erro ao criar automação.') }
     return { automation: (res as { automation?: AutomationRef })?.automation }
   })
 
@@ -757,7 +763,7 @@ export const updateAutomation = createServerFn()
     const api = await requireApi()
     const { workspaceId, automationId, ...payload } = data
     const { data: res, error } = await (api.workspaces({ workspaceId }) as any).automations({ automationId }).patch(payload)
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao atualizar automação.' }
+    if (error) return { error: err(error.value, 'Erro ao atualizar automação.') }
     return { automation: (res as { automation?: AutomationRef })?.automation }
   })
 
@@ -766,7 +772,7 @@ export const toggleAutomation = createServerFn()
   .handler(async ({ data }) => {
     const api = await requireApi()
     const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }) as any).automations({ automationId: data.automationId }).toggle.post()
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao alternar automação.' }
+    if (error) return { error: err(error.value, 'Erro ao alternar automação.') }
     return res as { active: boolean }
   })
 
@@ -775,7 +781,7 @@ export const deleteAutomation = createServerFn()
   .handler(async ({ data }) => {
     const api = await requireApi()
     const { error } = await (api.workspaces({ workspaceId: data.workspaceId }) as any).automations({ automationId: data.automationId }).delete()
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao excluir automação.' }
+    if (error) return { error: err(error.value, 'Erro ao excluir automação.') }
     return { ok: true as const }
   })
 
@@ -899,7 +905,7 @@ export const deleteWorkspaceFile = createServerFn()
   .handler(async ({ data }) => {
     const api = await requireApi()
     const { error } = await (api.workspaces({ workspaceId: data.workspaceId }) as any).files({ fileId: data.fileId }).delete()
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao remover arquivo.' }
+    if (error) return { error: err(error.value, 'Erro ao remover arquivo.') }
     return { ok: true as const }
   })
 
@@ -908,7 +914,7 @@ export const restoreWorkspaceFile = createServerFn()
   .handler(async ({ data }) => {
     const api = await requireApi()
     const { error } = await (api.workspaces({ workspaceId: data.workspaceId }) as any).files({ fileId: data.fileId }).restore.post()
-    if (error) return { error: (error.value as { message?: string })?.message ?? 'Erro ao restaurar arquivo.' }
+    if (error) return { error: err(error.value, 'Erro ao restaurar arquivo.') }
     return { ok: true as const }
   })
 

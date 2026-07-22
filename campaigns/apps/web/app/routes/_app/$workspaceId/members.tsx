@@ -31,6 +31,7 @@ import {
 } from '../../../lib/actions'
 import { Avatar, Button, Switch } from '../../../components/ui'
 import { createHeadConfig } from '~/lib/seo'
+import { validateEmail } from '~/lib/validation'
 
 export const Route = createFileRoute('/_app/$workspaceId/members')({ head: () => createHeadConfig('Membros — Naia Campanhas'),
   loader: async ({ params }) => {
@@ -67,6 +68,7 @@ function MembersPage() {
   const router = useRouter()
 
   const [email, setEmail] = useState('')
+  const [emailError, setEmailError] = useState<string | null>(null)
   const [role, setRole] = useState<'admin' | 'member'>('member')
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -91,9 +93,12 @@ function MembersPage() {
       )
       return
     }
+    const invalidEmail = validateEmail(email)
+    setEmailError(invalidEmail)
+    if (invalidEmail) return
     setSaving(true)
     setMessage(null)
-    const result = await createInvite({ data: { workspaceId, email, role } })
+    const result = await createInvite({ data: { workspaceId, email: email.trim(), role } })
     setSaving(false)
     if ('error' in result) { setMessage(result.error ?? 'Erro inesperado.'); return }
     setMessage(`Convite gerado com sucesso! Link de acesso: ${result.inviteUrl}`)
@@ -232,10 +237,18 @@ function MembersPage() {
                   type="email"
                   required
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value)
+                    setEmailError(null)
+                  }}
+                  onBlur={() => setEmailError(validateEmail(email))}
+                  aria-invalid={emailError ? true : undefined}
                   placeholder="colaborador@suaempresa.com"
-                  className="w-full h-10 px-3.5 rounded-xl border border-neutral-200 text-sm focus:border-dark-800 outline-none transition-all bg-neutral-50/50 focus:bg-white"
+                  className={`w-full h-10 px-3.5 rounded-xl border text-sm focus:border-dark-800 outline-none transition-all bg-neutral-50/50 focus:bg-white ${emailError ? 'border-red-400' : 'border-neutral-200'}`}
                 />
+                {emailError && (
+                  <span className="text-[11px] text-red-500 mt-1 block" role="alert">{emailError}</span>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-1.5">
