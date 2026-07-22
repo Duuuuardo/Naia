@@ -12,7 +12,7 @@ const VIANOVA_API_URL = getRequiredEnv('VIANOVA_API_URL')
 const VIANOVA_INTERNAL_SECRET = getRequiredEnv('VIANOVA_INTERNAL_SECRET')
 const PRODUCT_SLUG = 'naia'
 
-async function ensureVianovaFreeSubscription(workspace: { id: string; name: string; ownerUserId: string; organizationId: string | null }) {
+async function ensureVianovaWorkspaceSubscription(workspace: { id: string; name: string; ownerUserId: string; organizationId: string | null; freeEligible: boolean }) {
   try {
     await fetch(`${VIANOVA_API_URL}/internal/billing/ensure-free-subscription`, {
       method: 'POST',
@@ -26,6 +26,7 @@ async function ensureVianovaFreeSubscription(workspace: { id: string; name: stri
         workspace_name: workspace.name,
         owner_user_id: workspace.ownerUserId,
         organization_id: workspace.organizationId,
+        free_eligible: workspace.freeEligible,
       }),
     })
   } catch (err) {
@@ -146,15 +147,15 @@ export const workspaceRoutes = new Elysia()
             },
       )
 
-      // Só registra no Vianova (e garante subscription free) para o primeiro workspace.
-      if (isFirstFreeWorkspace) {
-        await ensureVianovaFreeSubscription({
-          id,
-          name: body.name,
-          ownerUserId: session.userId,
-          organizationId: body.organizationId ?? null,
-        })
-      }
+      // Todo workspace precisa existir no billing para poder assinar um plano
+      // pago. Só o primeiro, porém, recebe elegibilidade para o plano grátis.
+      await ensureVianovaWorkspaceSubscription({
+        id,
+        name: body.name,
+        ownerUserId: session.userId,
+        organizationId: body.organizationId ?? null,
+        freeEligible: isFirstFreeWorkspace,
+      })
 
       // Incrementa o contador vitalício — sobe sempre, nunca desce.
       await db

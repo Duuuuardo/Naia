@@ -371,11 +371,13 @@ export const submitTelegramLoginPassword = createServerFn()
   })
 
 export const createWhatsAppConnection = createServerFn()
-  .validator((data: { workspaceId: string; name: string }) => data)
+  .validator((data: { workspaceId: string; name: string; acceptTerms: true; acceptResponsibleUse: true }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
     const { error } = await api.workspaces({ workspaceId: data.workspaceId }).connections.whatsapp.post({
       name: data.name,
+      acceptTerms: data.acceptTerms,
+      acceptResponsibleUse: data.acceptResponsibleUse,
     })
     if (error) return { error: err(error.value, 'Erro ao criar conexão WhatsApp.') }
     return { ok: true }

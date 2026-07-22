@@ -15,6 +15,7 @@ import {
   RefreshCw,
   Search,
   Send,
+  ShieldCheck,
   Smartphone,
   Square,
   Tag,
@@ -91,6 +92,8 @@ function ConnectionsPage() {
   const [error, setError] = useState<string | null>(null)
   const [nameError, setNameError] = useState<string | null>(null)
   const [phoneError, setPhoneError] = useState<string | null>(null)
+  const [acceptTerms, setAcceptTerms] = useState(false)
+  const [acceptResponsibleUse, setAcceptResponsibleUse] = useState(false)
 
   // Modals de importação
   const [activeImportContactsConn, setActiveImportContactsConn] = useState<{ id: string; name: string; channel: string } | null>(null)
@@ -121,6 +124,8 @@ function ConnectionsPage() {
     setSelectedChannel(null)
     setName('')
     setPhone('')
+    setAcceptTerms(false)
+    setAcceptResponsibleUse(false)
     setError(null)
   }
 
@@ -144,12 +149,18 @@ function ConnectionsPage() {
     }
 
     if (validNameError || validPhoneError) return
+    if (selectedChannel === 'whatsapp' && (!acceptTerms || !acceptResponsibleUse)) {
+      setError('Confirme os termos e as práticas de uso responsável para continuar.')
+      return
+    }
 
     setSaving(true)
     setError(null)
     const result = selectedChannel === 'telegram_user'
       ? await createTelegramUserConnection({ data: { workspaceId, name, phone } })
-      : await createWhatsAppConnection({ data: { workspaceId, name } })
+      : await createWhatsAppConnection({
+          data: { workspaceId, name, acceptTerms: true, acceptResponsibleUse: true },
+        })
     setSaving(false)
     if (result && 'error' in result) {
       setError(result.error ?? 'Erro inesperado ao conectar.')
@@ -343,11 +354,73 @@ function ConnectionsPage() {
                 )}
 
                 {selectedChannel === 'whatsapp' && (
-                  <div className="flex items-start gap-3 rounded-xl bg-neutral-50 border border-neutral-200 p-3.5 text-xs text-neutral-700">
-                    <Info size={16} className="text-emerald-600 shrink-0 mt-0.5" />
-                    <div>
-                      <strong className="font-bold text-dark-800">Sincronização por QR Code:</strong> Ao clicar em salvar, iniciaremos a sessão multi-device. O QR Code aparecerá na tela para pareamento instantâneo pelo celular.
+                  <div className="space-y-3 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+                    <div className="flex items-start gap-3">
+                      <span className="grid size-9 shrink-0 place-items-center rounded-lg border border-neutral-200 bg-white text-brand-500">
+                        <ShieldCheck size={18} aria-hidden="true" />
+                      </span>
+                      <div>
+                        <h3 className="text-sm font-bold text-dark-800">Proteja seu número antes de conectar</h3>
+                        <p className="mt-1 text-xs leading-relaxed text-neutral-600">
+                          O pareamento usa o modo de dispositivos conectados do WhatsApp. O uso inadequado pode causar limitações ou banimento do número.
+                        </p>
+                      </div>
                     </div>
+
+                    <ul className="grid gap-2 border-y border-neutral-200 py-3 text-xs leading-relaxed text-neutral-700">
+                      {[
+                        'Envie apenas para pessoas que autorizaram receber suas mensagens.',
+                        'Comece com volume baixo e aumente aos poucos, sem picos de disparo.',
+                        'Evite mensagens repetitivas e respeite bloqueios e pedidos de saída.',
+                      ].map((guideline) => (
+                        <li key={guideline} className="flex items-start gap-2">
+                          <Check size={14} className="mt-0.5 shrink-0 text-success-500" aria-hidden="true" />
+                          <span>{guideline}</span>
+                        </li>
+                      ))}
+                    </ul>
+
+                    <label className="flex cursor-pointer items-start gap-3 rounded-lg p-2 text-xs text-neutral-700 hover:bg-white focus-within:ring-2 focus-within:ring-brand-500/30">
+                      <input
+                        type="checkbox"
+                        checked={acceptResponsibleUse}
+                        onChange={(event) => {
+                          setAcceptResponsibleUse(event.target.checked)
+                          setError(null)
+                        }}
+                        className="mt-0.5 size-4 rounded border-neutral-300 accent-brand-500"
+                      />
+                      <span>Entendi as práticas acima e assumo responsabilidade pelo uso deste número.</span>
+                    </label>
+
+                    <label className="flex cursor-pointer items-start gap-3 rounded-lg p-2 text-xs text-neutral-700 hover:bg-white focus-within:ring-2 focus-within:ring-brand-500/30">
+                      <input
+                        type="checkbox"
+                        checked={acceptTerms}
+                        onChange={(event) => {
+                          setAcceptTerms(event.target.checked)
+                          setError(null)
+                        }}
+                        className="mt-0.5 size-4 rounded border-neutral-300 accent-brand-500"
+                      />
+                      <span>
+                        Li e aceito os{' '}
+                        <a
+                          href="https://app.vianova.software/terms"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-semibold text-brand-500 underline underline-offset-2 hover:text-brand-600"
+                        >
+                          Termos de Uso
+                        </a>{' '}
+                        e autorizo a geração do QR code.
+                      </span>
+                    </label>
+
+                    <p className="flex items-center gap-2 text-[11px] text-neutral-500">
+                      <Info size={13} aria-hidden="true" />
+                      O QR code só será gerado depois das duas confirmações.
+                    </p>
                   </div>
                 )}
 
@@ -366,7 +439,11 @@ function ConnectionsPage() {
                   >
                     Cancelar
                   </button>
-                  <Button type="submit" loading={saving}>
+                  <Button
+                    type="submit"
+                    loading={saving}
+                    disabled={selectedChannel === 'whatsapp' && (!acceptTerms || !acceptResponsibleUse)}
+                  >
                     Conectar {selectedChannel === 'whatsapp' ? 'WhatsApp' : 'Conta Telegram'}
                   </Button>
                 </div>
@@ -1237,4 +1314,3 @@ function ImportGroupsModal({
     </div>
   )
 }
-

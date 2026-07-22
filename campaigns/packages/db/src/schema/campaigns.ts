@@ -21,6 +21,9 @@ export const connections = pgTable('connections', {
   config: text('config').notNull().default('{}'),
   lastErrorAt: timestamp('last_error_at'),
   lastErrorMessage: text('last_error_message'),
+  termsAcceptedAt: timestamp('terms_accepted_at'),
+  termsAcceptedByUserId: text('terms_accepted_by_user_id'),
+  termsVersion: text('terms_version'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })

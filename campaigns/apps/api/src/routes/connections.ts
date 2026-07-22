@@ -218,6 +218,11 @@ export const connectionRoutes = new Elysia()
       if (!ctx.permissions.connections) { set.status = 403; return { message: 'Seu papel não tem acesso a esta área do workspace.' } }
       if (ctx.role === 'member') { set.status = 403; return { message: 'Requer permissão de admin ou owner.' } }
 
+      if (!body.acceptTerms || !body.acceptResponsibleUse) {
+        set.status = 400
+        return { message: 'Confirme os termos e as práticas de uso responsável antes de conectar o WhatsApp.' }
+      }
+
       const [countResult] = await db
         .select({ count: count() })
         .from(connections)
@@ -235,6 +240,9 @@ export const connectionRoutes = new Elysia()
         name: body.name,
         status: 'disconnected',
         config: '{}',
+        termsAcceptedAt: new Date(),
+        termsAcceptedByUserId: session!.userId,
+        termsVersion: 'whatsapp-baileys-v1',
       })
 
       // Sessão Baileys em background (gera o QR code).
@@ -244,7 +252,13 @@ export const connectionRoutes = new Elysia()
       const [conn] = await db.select().from(connections).where(eq(connections.id, connectionId)).limit(1)
       return { connection: { ...conn, config: undefined } }
     },
-    { body: t.Object({ name: t.String({ minLength: 1 }) }) },
+    {
+      body: t.Object({
+        name: t.String({ minLength: 1 }),
+        acceptTerms: t.Literal(true),
+        acceptResponsibleUse: t.Literal(true),
+      }),
+    },
   )
 
   // GET /workspaces/:workspaceId/connections/:connectionId
@@ -836,4 +850,3 @@ export const connectionRoutes = new Elysia()
       }),
     },
   )
-
