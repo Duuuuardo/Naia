@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Briefcase, Building2, Camera, CheckCircle2, Mail, MapPin, ShieldAlert, Trash2 } from 'lucide-react'
 import { updateWorkspaceSettings, fetchNotificationPreferences, updateNotificationPreferences, type NotificationPreferences } from '../../../lib/actions'
 import { Button, Card, ErrorNote, PageHeader } from '../../../components/ui'
+import { IndustrySelect } from '../../../components/industry-select'
 import { createHeadConfig } from '~/lib/seo'
 import { validateWorkspaceName } from '~/lib/validation'
 
@@ -184,13 +185,10 @@ function SettingsPage() {
                 <Briefcase size={14} className="text-neutral-400" aria-hidden="true" />
                 Área de atuação
               </label>
-              <input
+              <IndustrySelect
                 id="ws-industry"
-                type="text"
                 value={industry}
-                onChange={(e) => setIndustry(e.target.value)}
-                placeholder="Varejo, educação, serviços…"
-                className="w-full h-10 px-3 rounded-md border border-neutral-300 bg-white text-sm text-dark-800 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition-colors"
+                onChange={setIndustry}
               />
             </div>
           </div>

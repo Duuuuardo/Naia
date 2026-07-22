@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react'
 import { Topbar } from '../../components/topbar'
+import { IndustrySelect } from '../../components/industry-select'
 import { fetchWorkspaces, createWorkspace } from '../../lib/actions'
 import { createHeadConfig } from '~/lib/seo'
 import { validateWorkspaceName } from '~/lib/validation'
@@ -60,20 +61,6 @@ function getInitials(name: string) {
     .join('')
     .toUpperCase()
 }
-
-const INDUSTRIES = [
-  'Varejo / E-commerce',
-  'Saúde / Bem-estar',
-  'Educação / Cursos',
-  'Imobiliário',
-  'Serviços / Consultoria',
-  'Alimentação / Restaurantes',
-  'Beleza / Estética',
-  'Tecnologia',
-  'Financeiro / Seguros',
-  'Eventos / Entretenimento',
-  'Outro',
-]
 
 function CreateWorkspaceModal({
   onClose,
@@ -169,19 +156,12 @@ function CreateWorkspaceModal({
               <label htmlFor="ws-industry" className="block text-sm font-medium text-dark-800 mb-1.5">
                 Área de atuação <span className="text-error-500">*</span>
               </label>
-              <select
+              <IndustrySelect
                 id="ws-industry"
                 value={industry}
-                onChange={(e) => setIndustry(e.target.value)}
+                onChange={setIndustry}
                 required
-                className="w-full h-10 px-3.5 rounded-md border border-neutral-300 text-sm text-dark-800 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all bg-white appearance-none"
-                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
-              >
-                <option value="">Selecione…</option>
-                {INDUSTRIES.map((i) => (
-                  <option key={i} value={i}>{i}</option>
-                ))}
-              </select>
+              />
             </div>
 
             <div>
