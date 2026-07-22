@@ -59,4 +59,7 @@ COPY --from=base /app/campaigns/packages/db/drizzle ./drizzle
 COPY docker-serve.mjs ./docker-serve.mjs
 
 EXPOSE 3000
-CMD ["sh", "-c", "if [ -f dist/server/server.js ]; then bun docker-serve.mjs; else bun dist/index.js; fi"]
+# API: aplica as migrations antes de subir — migration falhando impede o boot
+# (deploy quebra na hora, não no primeiro request contra schema velho).
+# Web (dist/server) e workers (sem migrate.js) sobem direto.
+CMD ["sh", "-c", "if [ -f dist/server/server.js ]; then bun docker-serve.mjs; elif [ -f dist/migrate.js ]; then bun dist/migrate.js && bun dist/index.js; else bun dist/index.js; fi"]
