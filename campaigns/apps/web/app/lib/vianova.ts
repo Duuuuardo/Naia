@@ -19,6 +19,7 @@ function requireEnv(name: string): string {
 
 const vianovaApiUrl = () => process.env.VIANOVA_API_INTERNAL_URL || requireEnv('VITE_VIANOVA_API_URL')
 const vianovaApiPublicUrl = () => requireEnv('VITE_VIANOVA_API_URL')
+const vianovaWebPublicUrl = () => requireEnv('VITE_VIANOVA_WEB_URL')
 const naiaWebUrl = () => requireEnv('VITE_NAIA_WEB_URL')
 const clientId = () => requireEnv('NAIA_OIDC_CLIENT_ID')
 const clientSecret = () => requireEnv('NAIA_OIDC_CLIENT_SECRET')
@@ -72,8 +73,19 @@ function oidcTxCookieOptions() {
 // Retorna a URL do endpoint end_session do Vianova. Isomorphic (sem imports
 // server-only) — pode ser chamado de qualquer contexto.
 export function buildEndSessionUrl(): string {
-  const url = new URL(`${vianovaApiPublicUrl()}/oidc/end_session`)
+  const url = new URL(`${vianovaWebPublicUrl()}/logout`)
   url.searchParams.set('post_logout_redirect_uri', `${naiaWebUrl()}/login`)
+  return url.toString()
+}
+
+function buildAuthorizeUrl(state: string, challenge: string): string {
+  const url = new URL(`${vianovaApiPublicUrl()}/oidc/authorize`)
+  url.searchParams.set('client_id', clientId())
+  url.searchParams.set('redirect_uri', REDIRECT_URI())
+  url.searchParams.set('response_type', 'code')
+  url.searchParams.set('state', state)
+  url.searchParams.set('code_challenge', challenge)
+  url.searchParams.set('code_challenge_method', 'S256')
   return url.toString()
 }
 
@@ -89,14 +101,11 @@ export const buildLoginUrl = createServerFn()
 
     setCookie(OIDC_TX_COOKIE, JSON.stringify({ state, verifier, redirectTo }), oidcTxCookieOptions())
 
-    const url = new URL(`${vianovaApiPublicUrl()}/oidc/authorize`)
-    url.searchParams.set('client_id', clientId())
-    url.searchParams.set('redirect_uri', REDIRECT_URI())
-    url.searchParams.set('response_type', 'code')
-    url.searchParams.set('state', state)
-    url.searchParams.set('code_challenge', challenge)
-    url.searchParams.set('code_challenge_method', 'S256')
-    return url.toString()
+    // O navegador entra pelo domínio do serviço Vianova. A URL da API fica
+    // encapsulada como continuação segura do login e não como destino inicial.
+    const loginUrl = new URL(`${vianovaWebPublicUrl()}/login`)
+    loginUrl.searchParams.set('redirect_uri', buildAuthorizeUrl(state, challenge))
+    return loginUrl.toString()
   })
 
 export const completeLogin = createServerFn()
@@ -201,6 +210,35 @@ export const tryRefreshSession = createServerFn().handler(async (): Promise<stri
 
   return tokenData.access_token
 })
+
+export type SessionIntrospection = 'active' | 'inactive' | 'unavailable'
+
+// Segunda garantia do single sign-out. O webhook continua sendo o caminho
+// rápido no API do Campaigns; esta consulta impede que uma sessão local pareça
+// válida quando o webhook estiver atrasado ou indisponível.
+export async function introspectSessionToken(token: string): Promise<SessionIntrospection> {
+  try {
+    const res = await fetch(`${vianovaApiUrl()}/oidc/introspect`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        token,
+        client_id: clientId(),
+        client_secret: clientSecret(),
+      }),
+      signal: AbortSignal.timeout(2_000),
+    })
+    // Erro HTTP pode ser indisponibilidade ou configuração do client; só uma
+    // resposta 200 com active=false tem autoridade para apagar a sessão.
+    if (!res.ok) return 'unavailable'
+    const data = await res.json() as { active?: boolean }
+    return data.active === true ? 'active' : 'inactive'
+  } catch {
+    // Falha do Vianova não derruba sessões válidas: o API local ainda verifica
+    // assinatura, expiração e a tabela preenchida pelo webhook de revogação.
+    return 'unavailable'
+  }
+}
 
 export const logout = createServerFn().handler(async () => {
   // A remoção deve usar os mesmos atributos do cookie de criação. Sem path e

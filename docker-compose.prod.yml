@@ -125,6 +125,9 @@ services:
           - naia-campaigns-web
     environment:
       - PORT=3001
+      # Troca de token/introspection são server-to-server; evita sair da VPS e
+      # mantém o single sign-out funcional mesmo sem acesso ao domínio público.
+      - VIANOVA_API_INTERNAL_URL=http://vianova-api:5000
     env_file:
       - ./.env
     depends_on:
