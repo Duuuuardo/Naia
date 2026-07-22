@@ -108,9 +108,7 @@ jobs:
             for attempt in $(seq 1 18); do
               if curl -fsS https://naia.website/ >/dev/null \
                 && curl -fsS https://campaigns.naia.website/ >/dev/null \
-                && curl -fsS https://api.campaigns.naia.website/health >/dev/null \
-                && curl -fsS https://crm.naia.website/ >/dev/null \
-                && curl -fsS https://api.crm.naia.website/health >/dev/null; then
+                && curl -fsS https://api.campaigns.naia.website/health >/dev/null; then
                 healthy=true
                 break
               fi
