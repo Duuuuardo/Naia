@@ -251,7 +251,7 @@ function ChatMock() {
                 <span>Status em tempo real</span>
                 <span className="text-brand-500">Opt-in validado</span>
               </div>
-              <p>Envio automático em lotes sem risco de bloqueio do número.</p>
+              <p>Envio em lotes com intervalos configuráveis para controlar o ritmo.</p>
             </div>
           </>
         ) : (
@@ -379,7 +379,7 @@ function Products() {
             </div>
             <p className="mt-2 flex-1 leading-relaxed text-neutral-500">
               Todas as respostas dos seus clientes num inbox só, com atribuição
-              por atendente e histórico completo. Cada conversa fica atribuída a
+              por atendente e histórico por contato. Cada conversa fica atribuída a
               uma pessoa, com registro desde o primeiro contato.
             </p>
             <Link

@@ -20,25 +20,24 @@ import { NaiaIcon } from '@naia/ui'
 export const Route = createFileRoute('/campaigns')({
   head: () => ({
     meta: [
-      { title: 'Naia Campanhas — Disparo em Massa no WhatsApp e Telegram' },
+      { title: 'Naia Campaigns | Campanhas no WhatsApp e Telegram' },
       {
         name: 'description',
         content:
-          'Envie campanhas em massa para contatos no WhatsApp e Telegram com opt-in nativo, status por mensagem e envio em lotes. Sem risco de bloqueio.',
+          'Crie, programe e acompanhe campanhas no WhatsApp e Telegram. Segmente contatos, valide opt-in e veja o status de cada mensagem.',
       },
-      { property: 'og:title', content: 'Naia Campanhas' },
+      { property: 'og:title', content: 'Naia Campaigns' },
       {
         property: 'og:description',
         content:
-          'Disparo em massa no WhatsApp e Telegram com opt-in nativo e status por mensagem.',
+          'Crie campanhas no WhatsApp e Telegram, segmente contatos e acompanhe cada envio.',
       },
       { property: 'og:url', content: 'https://naia.website/campaigns' },
-      { property: 'og:image', content: 'https://naia.website/og-image.png' },
-      { name: 'twitter:title', content: 'Naia Campanhas' },
+      { name: 'twitter:title', content: 'Naia Campaigns' },
       {
         name: 'twitter:description',
         content:
-          'Disparo em massa no WhatsApp e Telegram com opt-in nativo e status por mensagem.',
+          'Crie campanhas no WhatsApp e Telegram, segmente contatos e acompanhe cada envio.',
       },
     ],
     links: [
@@ -56,7 +55,7 @@ export const Route = createFileRoute('/campaigns')({
           url: 'https://campaigns.naia.website',
           offers: { '@type': 'Offer', price: '97', priceCurrency: 'BRL' },
           description:
-            'Envie campanhas em massa no WhatsApp e Telegram com opt-in nativo e status por mensagem.',
+            'Crie campanhas no WhatsApp e Telegram, segmente contatos, valide opt-in e acompanhe cada envio.',
         }),
       },
     ],
@@ -258,7 +257,7 @@ function CampaignPreview() {
             <span>Status em tempo real</span>
             <span className="text-brand-500">Opt-in validado</span>
           </div>
-          <p>Envio automático em lotes sem risco de bloqueio do número.</p>
+          <p>Envio em lotes com intervalos configuráveis para controlar o ritmo.</p>
         </div>
       </div>
       <p className="mt-4 text-center text-xs text-neutral-400">
@@ -272,7 +271,7 @@ const steps = [
   {
     icon: Upload,
     title: 'Importe seus contatos',
-    text: 'CSV, importação manual ou API. Você organiza a base do seu jeito.',
+    text: 'Importe por CSV, cadastre contatos ou conecte sua integração pela API.',
   },
   {
     icon: Rocket,
@@ -339,7 +338,7 @@ const features = [
   {
     icon: Zap,
     title: 'Automações',
-    text: 'Crie gatilhos que disparam mensagens sozinhos: aniversário, abandono, follow-up e mais.',
+    text: 'Programe mensagens por aniversário, abandono ou follow-up.',
   },
   {
     icon: ShieldCheck,

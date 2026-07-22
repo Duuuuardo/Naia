@@ -12,32 +12,30 @@ export const Route = createRootRoute({
     meta: [
       { charSet: 'utf-8' },
       { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      { title: 'Naia — Campanhas e CRM para comunicação multicanal' },
+      { title: 'Naia | Campanhas e atendimento no WhatsApp e Telegram' },
       {
         name: 'description',
         content:
-          'Campanhas em massa e atendimento multicanal no WhatsApp e Telegram. Dois produtos, uma marca: Naia.',
+          'Envie campanhas em massa e organize o atendimento da sua equipe no WhatsApp e Telegram com os produtos Naia.',
       },
       { name: 'theme-color', content: '#DD5973' },
       { name: 'robots', content: 'index, follow' },
       { property: 'og:type', content: 'website' },
-      { property: 'og:title', content: 'Naia' },
+      { property: 'og:title', content: 'Naia: campanhas e atendimento multicanal' },
       {
         property: 'og:description',
         content:
-          'Campanhas em massa e atendimento multicanal no WhatsApp e Telegram. Dois produtos, uma marca: Naia.',
+          'Envie campanhas em massa e organize o atendimento da sua equipe no WhatsApp e Telegram.',
       },
       { property: 'og:url', content: 'https://naia.website' },
-      { property: 'og:image', content: 'https://naia.website/og-image.png' },
       { property: 'og:locale', content: 'pt_BR' },
-      { name: 'twitter:card', content: 'summary_large_image' },
-      { name: 'twitter:title', content: 'Naia' },
+      { name: 'twitter:card', content: 'summary' },
+      { name: 'twitter:title', content: 'Naia: campanhas e atendimento multicanal' },
       {
         name: 'twitter:description',
         content:
-          'Campanhas em massa e atendimento multicanal no WhatsApp e Telegram. Dois produtos, uma marca: Naia.',
+          'Envie campanhas em massa e organize o atendimento da sua equipe no WhatsApp e Telegram.',
       },
-      { name: 'twitter:image', content: 'https://naia.website/og-image.png' },
     ],
     links: [
       { rel: 'icon', type: 'image/png', href: '/favicon.png?v=2' },
@@ -54,8 +52,7 @@ export const Route = createRootRoute({
           '@type': 'Organization',
           name: 'Naia',
           url: 'https://naia.website',
-          logo: 'https://naia.website/og-image.png',
-          description: 'Campanhas em massa e atendimento multicanal no WhatsApp e Telegram.',
+          description: 'Produtos para campanhas em massa e atendimento no WhatsApp e Telegram.',
         }),
       },
     ],

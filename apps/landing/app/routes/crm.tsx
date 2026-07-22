@@ -20,23 +20,22 @@ import { NaiaIcon } from '@naia/ui'
 export const Route = createFileRoute('/crm')({
   head: () => ({
     meta: [
-      { title: 'Naia CRM — Inbox Unificado para Atendimento Multicanal' },
+      { title: 'Naia CRM | Atendimento no WhatsApp e Telegram' },
       {
         name: 'description',
         content:
-          'Todas as respostas das suas campanhas num inbox só. Atribuição por atendente, histórico completo e integração nativa com WhatsApp e Telegram.',
+          'Conheça o Naia CRM para reunir mensagens do WhatsApp e Telegram, distribuir atendimentos e consultar o histórico de cada contato.',
       },
       { property: 'og:title', content: 'Naia CRM' },
       {
         property: 'og:description',
-        content: 'Inbox unificado para atendimento multicanal com WhatsApp e Telegram.',
+        content: 'Reúna mensagens do WhatsApp e Telegram e distribua cada atendimento para sua equipe.',
       },
       { property: 'og:url', content: 'https://naia.website/crm' },
-      { property: 'og:image', content: 'https://naia.website/og-image.png' },
       { name: 'twitter:title', content: 'Naia CRM' },
       {
         name: 'twitter:description',
-        content: 'Inbox unificado para atendimento multicanal com WhatsApp e Telegram.',
+        content: 'Reúna mensagens do WhatsApp e Telegram e distribua cada atendimento para sua equipe.',
       },
     ],
     links: [
@@ -52,7 +51,7 @@ export const Route = createFileRoute('/crm')({
           applicationCategory: 'BusinessApplication',
           operatingSystem: 'Web',
           url: 'https://crm.naia.website',
-          description: 'Inbox unificado para atendimento multicanal com WhatsApp e Telegram.',
+          description: 'Reúna mensagens do WhatsApp e Telegram, distribua atendimentos e consulte o histórico de cada contato.',
         }),
       },
     ],
@@ -224,7 +223,7 @@ function Hero() {
                 <Check size={14} className="text-success-500" /> Atribuição por atendente
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <Check size={14} className="text-success-500" /> Histórico completo
+                <Check size={14} className="text-success-500" /> Histórico por contato
               </span>
             </div>
           </div>
@@ -295,7 +294,7 @@ function Problem() {
             </h2>
             <p className="mt-4 text-lg text-neutral-500 leading-relaxed">
               Quando a campanha dispara, as respostas chegam em vários celulares e contas.
-              Ninguém sabe quem respondeu o quê. Clientes esperam. Oportunidades somem.
+              Sua equipe perde tempo procurando quem respondeu cada conversa. Enquanto isso, clientes esperam.
             </p>
             <ul className="mt-6 space-y-3">
               {[
@@ -316,7 +315,7 @@ function Problem() {
               {[
                 'Todas as conversas num inbox só',
                 'Cada atendente vê só o que é dele',
-                'Histórico completo do primeiro ao último contato',
+                'Histórico de mensagens por contato',
               ].map((item) => (
                 <li key={item} className="flex items-start gap-2 text-sm text-neutral-600">
                   <Check size={16} className="mt-0.5 shrink-0 text-success-500" />
@@ -335,16 +334,16 @@ const features = [
   {
     icon: Inbox,
     title: 'Inbox unificado',
-    text: 'WhatsApp, Telegram e futuros canais num só lugar. Pare de alternar entre contas.',
+    text: 'Consulte mensagens do WhatsApp e Telegram na mesma fila de atendimento.',
   },
   {
     icon: UserCheck,
     title: 'Atribuição por atendente',
-    text: 'Cada conversa tem um responsável. Ninguém fica sem dono e nada se perde.',
+    text: 'Cada conversa mostra o atendente responsável e o estado do atendimento.',
   },
   {
     icon: History,
-    title: 'Histórico completo',
+    title: 'Histórico por contato',
     text: 'Veja toda a trajetória do cliente: campanhas recebidas, respostas e anotações.',
   },
   {
@@ -370,7 +369,7 @@ function Features() {
       <div className="text-center max-w-2xl mx-auto">
         <p className="text-sm font-semibold uppercase tracking-widest text-brand-500">Recursos</p>
         <h2 className="mt-2 text-2xl font-semibold tracking-tight text-dark-800 md:text-3xl">
-          Tudo para atender sem perder ninguém
+          Organize a fila e dê contexto à sua equipe
         </h2>
       </div>
       <div className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
