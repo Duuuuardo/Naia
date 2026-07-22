@@ -4,6 +4,7 @@ import {
   ArrowRight,
   CalendarClock,
   CheckCircle2,
+  CircleAlert,
   Crown,
   ExternalLink,
   HardDrive,
@@ -12,6 +13,7 @@ import {
   Minus,
   PackagePlus,
   Plus,
+  RefreshCw,
   Send,
   ShieldAlert,
   ShieldCheck,
@@ -161,6 +163,7 @@ function BillingPage() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<string | null>(null)
+  const [activationTimedOut, setActivationTimedOut] = useState(false)
 
   const isOwner = role === 'owner'
   const checkoutSuccess =
@@ -170,26 +173,45 @@ function BillingPage() {
     const { ok, data } = await vianovaBilling(
       `/billing/subscription?product_slug=naia&workspace_id=${workspaceId}`,
     )
-    if (ok) setSubscription((data.subscription as SubscriptionState | null) ?? null)
+    const next = ok ? ((data.subscription as SubscriptionState | null) ?? null) : null
+    if (ok) setSubscription(next)
     setSubLoaded(true)
+    return next
   }, [workspaceId])
 
   useEffect(() => {
     loadSubscription()
   }, [loadSubscription])
 
-  // Voltando do Stripe: o webhook pode levar alguns segundos pra ativar —
-  // re-consulta algumas vezes até o estado virar.
+  // Voltando do Stripe: aguarda a confirmação real do backend. A URL de
+  // sucesso sozinha não prova que webhook e entitlement foram processados.
   useEffect(() => {
     if (!checkoutSuccess) return
-    let attempts = 0
-    const timer = setInterval(async () => {
-      attempts += 1
-      await loadSubscription()
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+
+    const poll = async (attempt: number) => {
+      const next = await loadSubscription()
       await router.invalidate()
-      if (attempts >= 4) clearInterval(timer)
-    }, 2000)
-    return () => clearInterval(timer)
+      if (cancelled) return
+      const active = Boolean(next?.hasStripeSubscription && ['active', 'trialing', 'past_due'].includes(next.status))
+      if (active) {
+        setActivationTimedOut(false)
+        return
+      }
+      if (attempt >= 15) {
+        setActivationTimedOut(true)
+        return
+      }
+      timer = setTimeout(() => void poll(attempt + 1), 2000)
+    }
+
+    setActivationTimedOut(false)
+    void poll(1)
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+    }
   }, [checkoutSuccess, loadSubscription, router])
 
   const paidActive = Boolean(
@@ -363,10 +385,28 @@ function BillingPage() {
         )}
       </div>
 
-      {checkoutSuccess && !paidActive && subLoaded && (
+      {checkoutSuccess && !paidActive && subLoaded && !activationTimedOut && (
         <div className="mt-6 rounded-xl bg-brand-50 border border-brand-100 px-4 py-3 text-sm text-brand-600 font-medium flex items-center gap-2.5">
-          <span className="size-4 animate-spin rounded-full border-2 border-brand-200 border-t-brand-500 shrink-0" />
-          <span>Pagamento confirmado. Ativando seu plano…</span>
+          <span className="size-4 motion-safe:animate-spin rounded-full border-2 border-brand-200 border-t-brand-500 shrink-0" />
+          <span>Confirmando o pagamento e ativando seu plano…</span>
+        </div>
+      )}
+
+      {checkoutSuccess && !paidActive && subLoaded && activationTimedOut && (
+        <div className="mt-6 rounded-xl bg-warning-50 border border-warning-200 px-4 py-3 text-sm text-dark-800 flex flex-col sm:flex-row sm:items-center gap-3">
+          <CircleAlert size={18} className="text-warning-500 shrink-0" />
+          <span className="flex-1">A confirmação está demorando mais que o esperado. Seu pagamento não será cobrado novamente.</span>
+          <button
+            type="button"
+            onClick={() => {
+              setActivationTimedOut(false)
+              void refresh().finally(() => setActivationTimedOut(true))
+            }}
+            className="h-9 px-3 rounded-md border border-neutral-300 bg-white text-sm font-semibold text-dark-800 hover:bg-neutral-50 transition-colors duration-150 active:scale-[0.98] inline-flex items-center justify-center gap-2 shrink-0"
+          >
+            <RefreshCw size={15} />
+            Verificar novamente
+          </button>
         </div>
       )}
 
