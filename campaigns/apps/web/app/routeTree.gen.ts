@@ -29,7 +29,7 @@ import { Route as AppWorkspaceIdAutomationsRouteImport } from './routes/_app/$wo
 import { Route as AppWorkspaceIdCampaignsIndexRouteImport } from './routes/_app/$workspaceId/campaigns/index'
 import { Route as AppWorkspaceIdCampaignsNewRouteImport } from './routes/_app/$workspaceId/campaigns/new'
 import { Route as AppWorkspaceIdCampaignsCampaignIdRouteImport } from './routes/_app/$workspaceId/campaigns/$campaignId'
-import { Route as AppWorkspaceIdCampaignsCampaignIdEditRouteImport } from './routes/_app/$workspaceId/campaigns/$campaignId.edit'
+import { Route as AppWorkspaceIdCampaignsCampaignIdEditRouteImport } from './routes/_app/$workspaceId/campaigns/$campaignId_.edit'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -137,9 +137,9 @@ const AppWorkspaceIdCampaignsCampaignIdRoute =
   } as any)
 const AppWorkspaceIdCampaignsCampaignIdEditRoute =
   AppWorkspaceIdCampaignsCampaignIdEditRouteImport.update({
-    id: '/edit',
-    path: '/edit',
-    getParentRoute: () => AppWorkspaceIdCampaignsCampaignIdRoute,
+    id: '/campaigns/$campaignId_/edit',
+    path: '/campaigns/$campaignId/edit',
+    getParentRoute: () => AppWorkspaceIdRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -159,7 +159,7 @@ export interface FileRoutesByFullPath {
   '/$workspaceId/settings': typeof AppWorkspaceIdSettingsRoute
   '/invites/$token': typeof AppInvitesTokenRoute
   '/$workspaceId/': typeof AppWorkspaceIdIndexRoute
-  '/$workspaceId/campaigns/$campaignId': typeof AppWorkspaceIdCampaignsCampaignIdRouteWithChildren
+  '/$workspaceId/campaigns/$campaignId': typeof AppWorkspaceIdCampaignsCampaignIdRoute
   '/$workspaceId/campaigns/new': typeof AppWorkspaceIdCampaignsNewRoute
   '/$workspaceId/campaigns/': typeof AppWorkspaceIdCampaignsIndexRoute
   '/$workspaceId/campaigns/$campaignId/edit': typeof AppWorkspaceIdCampaignsCampaignIdEditRoute
@@ -180,7 +180,7 @@ export interface FileRoutesByTo {
   '/$workspaceId/settings': typeof AppWorkspaceIdSettingsRoute
   '/invites/$token': typeof AppInvitesTokenRoute
   '/$workspaceId': typeof AppWorkspaceIdIndexRoute
-  '/$workspaceId/campaigns/$campaignId': typeof AppWorkspaceIdCampaignsCampaignIdRouteWithChildren
+  '/$workspaceId/campaigns/$campaignId': typeof AppWorkspaceIdCampaignsCampaignIdRoute
   '/$workspaceId/campaigns/new': typeof AppWorkspaceIdCampaignsNewRoute
   '/$workspaceId/campaigns': typeof AppWorkspaceIdCampaignsIndexRoute
   '/$workspaceId/campaigns/$campaignId/edit': typeof AppWorkspaceIdCampaignsCampaignIdEditRoute
@@ -204,10 +204,10 @@ export interface FileRoutesById {
   '/_app/$workspaceId/settings': typeof AppWorkspaceIdSettingsRoute
   '/_app/invites/$token': typeof AppInvitesTokenRoute
   '/_app/$workspaceId/': typeof AppWorkspaceIdIndexRoute
-  '/_app/$workspaceId/campaigns/$campaignId': typeof AppWorkspaceIdCampaignsCampaignIdRouteWithChildren
+  '/_app/$workspaceId/campaigns/$campaignId': typeof AppWorkspaceIdCampaignsCampaignIdRoute
   '/_app/$workspaceId/campaigns/new': typeof AppWorkspaceIdCampaignsNewRoute
   '/_app/$workspaceId/campaigns/': typeof AppWorkspaceIdCampaignsIndexRoute
-  '/_app/$workspaceId/campaigns/$campaignId/edit': typeof AppWorkspaceIdCampaignsCampaignIdEditRoute
+  '/_app/$workspaceId/campaigns/$campaignId_/edit': typeof AppWorkspaceIdCampaignsCampaignIdEditRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -275,7 +275,7 @@ export interface FileRouteTypes {
     | '/_app/$workspaceId/campaigns/$campaignId'
     | '/_app/$workspaceId/campaigns/new'
     | '/_app/$workspaceId/campaigns/'
-    | '/_app/$workspaceId/campaigns/$campaignId/edit'
+    | '/_app/$workspaceId/campaigns/$campaignId_/edit'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -428,30 +428,15 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppWorkspaceIdCampaignsCampaignIdRouteImport
       parentRoute: typeof AppWorkspaceIdRoute
     }
-    '/_app/$workspaceId/campaigns/$campaignId/edit': {
-      id: '/_app/$workspaceId/campaigns/$campaignId/edit'
-      path: '/edit'
+    '/_app/$workspaceId/campaigns/$campaignId_/edit': {
+      id: '/_app/$workspaceId/campaigns/$campaignId_/edit'
+      path: '/campaigns/$campaignId/edit'
       fullPath: '/$workspaceId/campaigns/$campaignId/edit'
       preLoaderRoute: typeof AppWorkspaceIdCampaignsCampaignIdEditRouteImport
-      parentRoute: typeof AppWorkspaceIdCampaignsCampaignIdRoute
+      parentRoute: typeof AppWorkspaceIdRoute
     }
   }
 }
-
-interface AppWorkspaceIdCampaignsCampaignIdRouteChildren {
-  AppWorkspaceIdCampaignsCampaignIdEditRoute: typeof AppWorkspaceIdCampaignsCampaignIdEditRoute
-}
-
-const AppWorkspaceIdCampaignsCampaignIdRouteChildren: AppWorkspaceIdCampaignsCampaignIdRouteChildren =
-  {
-    AppWorkspaceIdCampaignsCampaignIdEditRoute:
-      AppWorkspaceIdCampaignsCampaignIdEditRoute,
-  }
-
-const AppWorkspaceIdCampaignsCampaignIdRouteWithChildren =
-  AppWorkspaceIdCampaignsCampaignIdRoute._addFileChildren(
-    AppWorkspaceIdCampaignsCampaignIdRouteChildren,
-  )
 
 interface AppWorkspaceIdRouteChildren {
   AppWorkspaceIdAutomationsRoute: typeof AppWorkspaceIdAutomationsRoute
@@ -462,9 +447,10 @@ interface AppWorkspaceIdRouteChildren {
   AppWorkspaceIdMembersRoute: typeof AppWorkspaceIdMembersRoute
   AppWorkspaceIdSettingsRoute: typeof AppWorkspaceIdSettingsRoute
   AppWorkspaceIdIndexRoute: typeof AppWorkspaceIdIndexRoute
-  AppWorkspaceIdCampaignsCampaignIdRoute: typeof AppWorkspaceIdCampaignsCampaignIdRouteWithChildren
+  AppWorkspaceIdCampaignsCampaignIdRoute: typeof AppWorkspaceIdCampaignsCampaignIdRoute
   AppWorkspaceIdCampaignsNewRoute: typeof AppWorkspaceIdCampaignsNewRoute
   AppWorkspaceIdCampaignsIndexRoute: typeof AppWorkspaceIdCampaignsIndexRoute
+  AppWorkspaceIdCampaignsCampaignIdEditRoute: typeof AppWorkspaceIdCampaignsCampaignIdEditRoute
 }
 
 const AppWorkspaceIdRouteChildren: AppWorkspaceIdRouteChildren = {
@@ -477,9 +463,11 @@ const AppWorkspaceIdRouteChildren: AppWorkspaceIdRouteChildren = {
   AppWorkspaceIdSettingsRoute: AppWorkspaceIdSettingsRoute,
   AppWorkspaceIdIndexRoute: AppWorkspaceIdIndexRoute,
   AppWorkspaceIdCampaignsCampaignIdRoute:
-    AppWorkspaceIdCampaignsCampaignIdRouteWithChildren,
+    AppWorkspaceIdCampaignsCampaignIdRoute,
   AppWorkspaceIdCampaignsNewRoute: AppWorkspaceIdCampaignsNewRoute,
   AppWorkspaceIdCampaignsIndexRoute: AppWorkspaceIdCampaignsIndexRoute,
+  AppWorkspaceIdCampaignsCampaignIdEditRoute:
+    AppWorkspaceIdCampaignsCampaignIdEditRoute,
 }
 
 const AppWorkspaceIdRouteWithChildren = AppWorkspaceIdRoute._addFileChildren(

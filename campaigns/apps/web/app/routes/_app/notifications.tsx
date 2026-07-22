@@ -26,17 +26,11 @@ const VIANOVA_WEB_URL = requireEnv('VITE_VIANOVA_WEB_URL')
 
 export const Route = createFileRoute('/_app/notifications')({ head: () => createHeadConfig('Notificações — Naia Campanhas'),
   loader: async () => {
-    try {
-      const [notifications, unread] = await Promise.all([
-        fetchNotifications({ data: { page: 1 } }),
-        fetchUnreadNotificationCount(),
-      ])
-      console.log('[notifications loader]', notifications.notifications.length, unread.count)
-      return { notifications, unread }
-    } catch (err) {
-      console.error('[notifications loader] erro:', err)
-      return { notifications: { notifications: [] as NotificationItem[], total: 0, page: 1, hasMore: false }, unread: { count: 0 } }
-    }
+    const [notifications, unread] = await Promise.all([
+      fetchNotifications({ data: { page: 1 } }),
+      fetchUnreadNotificationCount(),
+    ])
+    return { notifications, unread }
   },
   component: NotificationsPage,
 })
@@ -52,28 +46,32 @@ function NotificationsPage() {
   const [unreadCount, setUnreadCount] = useState(initialCount.count)
   const [filter, setFilter] = useState<Filter>('all')
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     setLoading(true)
+    setError(null)
     const productSlug = filter === 'naia' ? 'naia' : undefined
     fetchNotifications({ data: { page, productSlug } })
       .then((res) => {
         setItems(res.notifications)
         setHasMore(res.hasMore ?? false)
       })
-      .catch(() => setItems([]))
+      .catch(() => setError('Não foi possível carregar as notificações. Tente novamente.'))
       .finally(() => setLoading(false))
   }, [page, filter])
 
   async function handleMarkAll() {
-    await markAllNotificationsRead()
+    const result = await markAllNotificationsRead()
+    if ('error' in result) { setError(result.error); return }
     setItems((prev) => prev.map((n) => ({ ...n, readAt: new Date().toISOString() })))
     setUnreadCount(0)
   }
 
   async function handleClickItem(item: NotificationItem) {
     if (!item.readAt) {
-      await markNotificationRead({ data: item.id })
+      const result = await markNotificationRead({ data: item.id })
+      if ('error' in result) { setError(result.error); return }
       setItems((prev) => prev.map((n) => (n.id === item.id ? { ...n, readAt: new Date().toISOString() } : n)))
       setUnreadCount((c) => Math.max(0, c - 1))
     }
@@ -88,6 +86,11 @@ function NotificationsPage() {
     <div className="min-h-screen flex flex-col font-sans">
       <Topbar user={user} />
       <main className="mx-auto max-w-3xl flex-1 px-4 py-6">
+        {error && (
+          <p className="mb-4 rounded-md border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-600" role="alert">
+            {error}
+          </p>
+        )}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-dark-800">Notificações</h1>

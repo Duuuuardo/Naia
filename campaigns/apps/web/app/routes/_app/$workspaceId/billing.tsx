@@ -2,7 +2,6 @@ import { createFileRoute, useLoaderData, useRouter } from '@tanstack/react-route
 import { useCallback, useEffect, useState } from 'react'
 import {
   ArrowRight,
-  CalendarClock,
   CheckCircle2,
   CircleAlert,
   Crown,
@@ -18,21 +17,23 @@ import {
   ShieldAlert,
   ShieldCheck,
   Sparkles,
-  Undo2,
   Users,
   Workflow,
   Zap,
 } from 'lucide-react'
-import { fetchPlans, fetchManageBillingUrl } from '../../../lib/actions'
-import { requireEnv } from '../../../lib/env'
+import {
+  fetchBillingSubscription,
+  fetchPlans,
+  fetchManageBillingUrl,
+  startBillingCheckout,
+  updateBillingAddon,
+} from '../../../lib/actions'
 import { createHeadConfig } from '~/lib/seo'
 
 export const Route = createFileRoute('/_app/$workspaceId/billing')({ head: () => createHeadConfig('Cobrança — Naia Campanhas'),
   loader: () => fetchPlans(),
   component: BillingPage,
 })
-
-const VIANOVA_API_URL = () => requireEnv('VITE_VIANOVA_API_URL')
 
 const tierLabels: Record<string, string> = {
   free: 'Grátis',
@@ -137,20 +138,6 @@ function formatLimitItem(key: string, value: number) {
 
 const LIMIT_ORDER = ['creditsPerCycle', 'campaignsPerMonth', 'automations', 'connections', 'seats', 'storageBytes', 'maxFileSizeBytes']
 
-// Todas as chamadas de billing passam pelo proxy do Naia API com credentials
-// (o cookie naia_session é enviado automaticamente).
-async function vianovaBilling(path: string, init?: RequestInit) {
-  const naiaApiUrl = import.meta.env.VITE_NAIA_API_URL
-
-  const res = await fetch(`${naiaApiUrl}${path}`, {
-    credentials: 'include',
-    headers: { 'content-type': 'application/json' },
-    ...init,
-  })
-  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
-  return { ok: res.ok, data }
-}
-
 function BillingPage() {
   const plans = Route.useLoaderData()
   const { workspace, entitlements, role } = useLoaderData({ from: '/_app/$workspaceId' })
@@ -170,11 +157,11 @@ function BillingPage() {
     typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('success') === 'true'
 
   const loadSubscription = useCallback(async () => {
-    const { ok, data } = await vianovaBilling(
-      `/billing/subscription?product_slug=naia&workspace_id=${workspaceId}`,
-    )
-    const next = ok ? ((data.subscription as SubscriptionState | null) ?? null) : null
-    if (ok) setSubscription(next)
+    const result = await fetchBillingSubscription({ data: workspaceId })
+    const next = result && !('error' in result)
+      ? ((result as { subscription?: SubscriptionState | null }).subscription ?? null)
+      : null
+    if (result && !('error' in result)) setSubscription(next)
     setSubLoaded(true)
     return next
   }, [workspaceId])
@@ -247,20 +234,16 @@ function BillingPage() {
     setConfirming(null)
 
     try {
-      const { ok, data } = await vianovaBilling('/billing/checkout', {
-        method: 'POST',
-        body: JSON.stringify({
-          product_slug: 'naia',
-          workspace_id: workspaceId,
-          workspace_name: workspace.name,
-          plan_id: plan.id,
-          success_url: `${window.location.origin}/${workspaceId}/billing?success=true`,
-          cancel_url: `${window.location.origin}/${workspaceId}/billing`,
-        }),
-      })
+      const data = await startBillingCheckout({ data: {
+        workspaceId,
+        workspaceName: workspace.name,
+        planId: plan.id,
+        successUrl: `${window.location.origin}/${workspaceId}/billing?success=true`,
+        cancelUrl: `${window.location.origin}/${workspaceId}/billing`,
+      } })
 
-      if (!ok) {
-        setError((data.message as string) ?? 'Erro ao iniciar a mudança de plano.')
+      if ('error' in data) {
+        setError(data.error ?? 'Erro ao iniciar a mudança de plano.')
         return
       }
 
@@ -290,41 +273,6 @@ function BillingPage() {
     }
   }
 
-  async function handleCancel() {
-    if (!subscription) return
-    setBusyAction('cancel')
-    setError(null)
-    setNotice(null)
-    setConfirming(null)
-    const { ok, data } = await vianovaBilling(`/billing/subscriptions/${subscription.id}/cancel`, {
-      method: 'POST',
-    })
-    setBusyAction(null)
-    if (!ok) {
-      setError((data.message as string) ?? 'Erro ao cancelar.')
-      return
-    }
-    setNotice(`Cancelamento agendado. O plano continua ativo até ${formatDate(data.effectiveAt as string)}.`)
-    await refresh()
-  }
-
-  async function handleResume() {
-    if (!subscription) return
-    setBusyAction('resume')
-    setError(null)
-    setNotice(null)
-    const { ok, data } = await vianovaBilling(`/billing/subscriptions/${subscription.id}/resume`, {
-      method: 'POST',
-    })
-    setBusyAction(null)
-    if (!ok) {
-      setError((data.message as string) ?? 'Erro ao retomar a assinatura.')
-      return
-    }
-    setNotice('Assinatura retomada. A renovação automática está ativa de novo.')
-    await refresh()
-  }
-
   async function handleAddonQuantity(addonTypeId: string, quantity: number) {
     if (!subscription) return
     setBusyAction(`addon:${addonTypeId}`)
@@ -332,19 +280,16 @@ function BillingPage() {
     setNotice(null)
 
     const existing = subscription.addons.find((a) => a.addonTypeId === addonTypeId)
-    const { ok, data } = existing
-      ? await vianovaBilling(`/billing/subscriptions/${subscription.id}/addons/${addonTypeId}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ quantity }),
-        })
-      : await vianovaBilling(`/billing/subscriptions/${subscription.id}/addons`, {
-          method: 'POST',
-          body: JSON.stringify({ addon_type_id: addonTypeId, quantity }),
-        })
+    const data = await updateBillingAddon({ data: {
+      subscriptionId: subscription.id,
+      addonTypeId,
+      quantity,
+      exists: Boolean(existing),
+    } })
 
     setBusyAction(null)
-    if (!ok) {
-      setError((data.message as string) ?? 'Erro ao atualizar o add-on.')
+    if ('error' in data) {
+      setError(data.error ?? 'Erro ao atualizar o add-on.')
       return
     }
     const charged = (data.chargedNowCents as number | undefined) ?? 0
@@ -451,52 +396,16 @@ function BillingPage() {
           </div>
         </div>
 
-        {isOwner && subscription?.cancelAtPeriodEnd && (
-          <div className="mt-4 pt-4 border-t border-neutral-100 flex items-center justify-between gap-3 flex-wrap">
-            <p className="text-xs text-neutral-500 flex items-center gap-1.5">
-              <CalendarClock size={13} className="text-amber-500 shrink-0" />
-              Mudou de ideia? Retome antes do fim do período e nada muda.
-            </p>
+        {isOwner && paidActive && (
+          <div className="mt-4 flex items-center justify-end border-t border-neutral-100 pt-4">
             <button
-              onClick={handleResume}
-              disabled={busyAction === 'resume'}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-dark-800 text-xs font-bold text-white hover:bg-dark-700 transition-colors disabled:opacity-60"
+              type="button"
+              onClick={handleManage}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-semibold text-neutral-500 transition-colors duration-150 hover:bg-neutral-100 hover:text-dark-800 active:scale-[0.98]"
             >
-              <Undo2 size={13} />
-              {busyAction === 'resume' ? 'Retomando…' : 'Retomar assinatura'}
+              Gerenciar cancelamento, cartão e faturas
+              <ExternalLink size={13} aria-hidden="true" />
             </button>
-          </div>
-        )}
-
-        {isOwner && paidActive && !subscription?.cancelAtPeriodEnd && (
-          <div className="mt-4 pt-4 border-t border-neutral-100 flex items-center justify-end">
-            {confirming === 'cancel' ? (
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-neutral-500">
-                  O plano continua até o fim do período pago. Confirmar?
-                </span>
-                <button
-                  onClick={handleCancel}
-                  disabled={busyAction === 'cancel'}
-                  className="h-8 px-3 rounded-md bg-[#ef4444] text-xs font-bold text-white hover:bg-[#dc2626] transition-colors disabled:opacity-60"
-                >
-                  {busyAction === 'cancel' ? 'Cancelando…' : 'Cancelar plano'}
-                </button>
-                <button
-                  onClick={() => setConfirming(null)}
-                  className="h-8 px-3 rounded-md text-xs font-semibold text-neutral-500 hover:bg-neutral-100 transition-colors"
-                >
-                  Voltar
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setConfirming('cancel')}
-                className="text-xs font-medium text-neutral-400 hover:text-[#ef4444] transition-colors"
-              >
-                Cancelar assinatura
-              </button>
-            )}
           </div>
         )}
       </div>

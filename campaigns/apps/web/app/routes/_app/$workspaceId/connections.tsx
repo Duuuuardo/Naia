@@ -174,12 +174,16 @@ function ConnectionsPage() {
   }
 
   async function handleDelete(connectionId: string) {
-    await deleteConnection({ data: { workspaceId, connectionId } })
+    setError(null)
+    const result = await deleteConnection({ data: { workspaceId, connectionId } })
+    if ('error' in result) { setError(result.error ?? 'Erro ao excluir conexão.'); return }
     await refresh()
   }
 
   async function handleReconnect(connectionId: string) {
-    await reconnectWhatsApp({ data: { workspaceId, connectionId } })
+    setError(null)
+    const result = await reconnectWhatsApp({ data: { workspaceId, connectionId } })
+    if ('error' in result) { setError(result.error ?? 'Erro ao reconectar WhatsApp.'); return }
     await refresh()
   }
 

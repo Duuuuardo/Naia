@@ -61,9 +61,20 @@ export async function replaceVariants(
   campaignId: string,
   variants: Array<{ body: string; mediaAssetIds?: string[] }>,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
+  return db.transaction((tx) => replaceVariantsWith(tx, workspaceId, campaignId, variants))
+}
+
+type VariantExecutor = Pick<typeof db, 'select' | 'insert' | 'delete'>
+
+async function replaceVariantsWith(
+  executor: VariantExecutor,
+  workspaceId: string,
+  campaignId: string,
+  variants: Array<{ body: string; mediaAssetIds?: string[] }>,
+): Promise<{ ok: true } | { ok: false; message: string }> {
   const allMediaIds = [...new Set(variants.flatMap((v) => v.mediaAssetIds ?? []))]
   if (allMediaIds.length > 0) {
-    const found = await db
+    const found = await executor
       .select({ id: mediaAssets.id, status: mediaAssets.status })
       .from(mediaAssets)
       .where(and(inArray(mediaAssets.id, allMediaIds), eq(mediaAssets.workspaceId, workspaceId)))
@@ -74,28 +85,28 @@ export async function replaceVariants(
     }
   }
 
-  await db.transaction(async (tx) => {
-    await tx.delete(campaignVariants).where(eq(campaignVariants.campaignId, campaignId))
-    for (let i = 0; i < variants.length; i++) {
-      const variantId = generateId()
-      await tx.insert(campaignVariants).values({
-        id: variantId,
-        campaignId,
-        position: i,
-        body: variants[i]!.body,
+  await executor.delete(campaignVariants).where(eq(campaignVariants.campaignId, campaignId))
+  for (let i = 0; i < variants.length; i++) {
+    const variantId = generateId()
+    await executor.insert(campaignVariants).values({
+      id: variantId,
+      campaignId,
+      position: i,
+      body: variants[i]!.body,
+    })
+    const mediaIds = variants[i]!.mediaAssetIds ?? []
+    for (let m = 0; m < mediaIds.length; m++) {
+      await executor.insert(campaignVariantMedia).values({
+        variantId,
+        mediaAssetId: mediaIds[m]!,
+        position: m,
       })
-      const mediaIds = variants[i]!.mediaAssetIds ?? []
-      for (let m = 0; m < mediaIds.length; m++) {
-        await tx.insert(campaignVariantMedia).values({
-          variantId,
-          mediaAssetId: mediaIds[m]!,
-          position: m,
-        })
-      }
     }
-  })
+  }
   return { ok: true }
 }
+
+class CampaignEditValidationError extends Error {}
 
 async function loadCampaignDetail(campaignId: string) {
   const [connRows, variantRows, mediaRows, latestRuns] = await Promise.all([
@@ -356,18 +367,28 @@ export const campaignRoutes = new Elysia()
         )
       }
 
-      await db.update(campaigns).set(updates).where(eq(campaigns.id, params.campaignId))
+      try {
+        await db.transaction(async (tx) => {
+          await tx.update(campaigns).set(updates).where(eq(campaigns.id, params.campaignId))
 
-      if (body.connectionIds !== undefined) {
-        await db.delete(campaignConnections).where(eq(campaignConnections.campaignId, params.campaignId))
-        for (let i = 0; i < conns.length; i++) {
-          await db.insert(campaignConnections).values({ campaignId: params.campaignId, connectionId: conns[i]!.id, position: i })
+          if (body.connectionIds !== undefined) {
+            await tx.delete(campaignConnections).where(eq(campaignConnections.campaignId, params.campaignId))
+            for (let i = 0; i < conns.length; i++) {
+              await tx.insert(campaignConnections).values({ campaignId: params.campaignId, connectionId: conns[i]!.id, position: i })
+            }
+          }
+
+          if (body.variants !== undefined) {
+            const variantResult = await replaceVariantsWith(tx, params.workspaceId, params.campaignId, body.variants)
+            if (!variantResult.ok) throw new CampaignEditValidationError(variantResult.message)
+          }
+        })
+      } catch (error) {
+        if (error instanceof CampaignEditValidationError) {
+          set.status = 400
+          return { message: error.message }
         }
-      }
-
-      if (body.variants !== undefined) {
-        const variantResult = await replaceVariants(params.workspaceId, params.campaignId, body.variants)
-        if (!variantResult.ok) { set.status = 400; return { message: variantResult.message } }
+        throw error
       }
 
       const [updated] = await db.select().from(campaigns).where(eq(campaigns.id, params.campaignId)).limit(1)

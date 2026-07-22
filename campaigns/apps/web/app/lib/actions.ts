@@ -1,8 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
-import { getCookie } from '@tanstack/react-start/server'
 import { requireApi } from './session.server'
-import { SESSION_COOKIE } from './vianova'
-import { requireEnv } from './env'
 import { parseApiError } from './api-error'
 
 /** Extrai mensagem segura do erro Eden Treaty sem expor JSON bruto. */
@@ -88,7 +85,8 @@ export const fetchMembers = createServerFn()
   .validator((workspaceId: string) => workspaceId)
   .handler(async ({ data: workspaceId }) => {
     const api = await requireApi()
-    const { data } = await api.workspaces({ workspaceId }).members.get()
+    const { data, error } = await api.workspaces({ workspaceId }).members.get()
+    if (error) throw new Error(err(error.value, 'Erro ao carregar membros.'))
     return data?.members ?? []
   })
 
@@ -96,7 +94,8 @@ export const fetchInvites = createServerFn()
   .validator((workspaceId: string) => workspaceId)
   .handler(async ({ data: workspaceId }) => {
     const api = await requireApi()
-    const { data } = await api.workspaces({ workspaceId }).invites.get()
+    const { data, error } = await api.workspaces({ workspaceId }).invites.get()
+    if (error) throw new Error(err(error.value, 'Erro ao carregar convites.'))
     return data?.invites ?? []
   })
 
@@ -116,7 +115,8 @@ export const revokeInvite = createServerFn()
   .validator((data: { workspaceId: string; inviteId: string }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    await api.workspaces({ workspaceId: data.workspaceId }).invites({ inviteId: data.inviteId }).delete()
+    const { error } = await api.workspaces({ workspaceId: data.workspaceId }).invites({ inviteId: data.inviteId }).delete()
+    if (error) return { error: err(error.value, 'Erro ao revogar convite.') }
     return { ok: true }
   })
 
@@ -155,9 +155,10 @@ export const fetchContacts = createServerFn()
   .validator((data: { workspaceId: string; search?: string; tag?: string; channel?: string; isGroup?: string }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    const { data: res } = await api.workspaces({ workspaceId: data.workspaceId }).contacts.get({
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).contacts.get({
       query: { search: data.search, tag: data.tag, channel: data.channel, isGroup: data.isGroup },
     })
+    if (error) throw new Error(err(error.value, 'Erro ao carregar contatos.'))
     return { contacts: (res?.contacts ?? []) as Array<any>, total: res?.total ?? 0 }
   })
 
@@ -261,7 +262,7 @@ export const createContactTag = createServerFn()
   .validator((data: { workspaceId: string; name: string; color?: string; description?: string | null }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }).contacts.tags as any).post({
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).contacts.tags.post({
       name: data.name,
       color: data.color,
       description: data.description,
@@ -274,7 +275,7 @@ export const updateContactTag = createServerFn()
   .validator((data: { workspaceId: string; tagId: string; name?: string; color?: string; description?: string | null }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }).contacts.tags({ tagId: data.tagId }) as any).patch({
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).contacts.tags({ tagId: data.tagId }).patch({
       name: data.name,
       color: data.color,
       description: data.description,
@@ -287,7 +288,7 @@ export const deleteContactTag = createServerFn()
   .validator((data: { workspaceId: string; tagId: string }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    const { error } = await (api.workspaces({ workspaceId: data.workspaceId }).contacts.tags({ tagId: data.tagId }) as any).delete()
+    const { error } = await api.workspaces({ workspaceId: data.workspaceId }).contacts.tags({ tagId: data.tagId }).delete()
     if (error) return { error: err(error.value, 'Erro ao deletar tag.') }
     return { ok: true }
   })
@@ -322,7 +323,8 @@ export const deleteContactIdentity = createServerFn()
   .validator((data: { workspaceId: string; contactId: string; identityId: string }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    await api.workspaces({ workspaceId: data.workspaceId }).contacts({ contactId: data.contactId }).identities({ identityId: data.identityId }).delete()
+    const { error } = await api.workspaces({ workspaceId: data.workspaceId }).contacts({ contactId: data.contactId }).identities({ identityId: data.identityId }).delete()
+    if (error) return { error: err(error.value, 'Erro ao remover identidade.') }
     return { ok: true }
   })
 
@@ -332,7 +334,8 @@ export const fetchConnections = createServerFn()
   .validator((workspaceId: string) => workspaceId)
   .handler(async ({ data: workspaceId }) => {
     const api = await requireApi()
-    const { data } = await api.workspaces({ workspaceId }).connections.get()
+    const { data, error } = await api.workspaces({ workspaceId }).connections.get()
+    if (error) throw new Error(err(error.value, 'Erro ao carregar conexões.'))
     return data?.connections ?? []
   })
 
@@ -340,7 +343,7 @@ export const createTelegramUserConnection = createServerFn()
   .validator((data: { workspaceId: string; name: string; phone: string }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    const { error } = await (api.workspaces({ workspaceId: data.workspaceId }).connections as any)['telegram-user'].post({
+    const { error } = await api.workspaces({ workspaceId: data.workspaceId }).connections['telegram-user'].post({
       name: data.name,
       phone: data.phone,
     })
@@ -352,7 +355,7 @@ export const submitTelegramLoginCode = createServerFn()
   .validator((data: { workspaceId: string; connectionId: string; code: string }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    const { error } = await (api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId }) as any)['telegram-code'].post({
+    const { error } = await api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId })['telegram-code'].post({
       code: data.code,
     })
     if (error) return { error: err(error.value, 'Erro ao enviar código.') }
@@ -363,7 +366,7 @@ export const submitTelegramLoginPassword = createServerFn()
   .validator((data: { workspaceId: string; connectionId: string; password: string }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    const { error } = await (api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId }) as any)['telegram-password'].post({
+    const { error } = await api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId })['telegram-password'].post({
       password: data.password,
     })
     if (error) return { error: err(error.value, 'Erro ao enviar senha.') }
@@ -387,7 +390,8 @@ export const deleteConnection = createServerFn()
   .validator((data: { workspaceId: string; connectionId: string }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    await api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId }).delete()
+    const { error } = await api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId }).delete()
+    if (error) return { error: err(error.value, 'Erro ao excluir conexão.') }
     return { ok: true }
   })
 
@@ -395,7 +399,8 @@ export const reconnectWhatsApp = createServerFn()
   .validator((data: { workspaceId: string; connectionId: string }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    await api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId }).reconnect.post()
+    const { error } = await api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId }).reconnect.post()
+    if (error) return { error: err(error.value, 'Erro ao reconectar WhatsApp.') }
     return { ok: true }
   })
 
@@ -403,7 +408,7 @@ export const fetchConnectionContactsSync = createServerFn()
   .validator((data: { workspaceId: string; connectionId: string }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId }) as any)['contacts-sync'].get()
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId })['contacts-sync'].get()
     if (error) return { error: err(error.value, 'Erro ao buscar contatos da conexão.') }
     return { contacts: res?.contacts ?? [] }
   })
@@ -412,7 +417,7 @@ export const fetchConnectionGroupsSync = createServerFn()
   .validator((data: { workspaceId: string; connectionId: string }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId }) as any)['groups-sync'].get()
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId })['groups-sync'].get()
     if (error) return { error: err(error.value, 'Erro ao buscar grupos da conexão.') }
     return { groups: res?.groups ?? [] }
   })
@@ -421,7 +426,7 @@ export const importConnectionContacts = createServerFn()
   .validator((data: { workspaceId: string; connectionId: string; contacts: Array<{ name: string; phoneOrId: string; avatarUrl?: string | null }>; tags?: string[] }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId }) as any)['import-contacts'].post({
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId })['import-contacts'].post({
       contacts: data.contacts,
       tags: data.tags,
     })
@@ -444,7 +449,7 @@ export const importConnectionGroups = createServerFn()
   }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId }) as any)['import-groups'].post({
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId })['import-groups'].post({
       groups: data.groups,
       tags: data.tags,
     })
@@ -456,7 +461,7 @@ export const importGroupMembers = createServerFn()
   .validator((data: { workspaceId: string; connectionId: string; groupJid: string; tags?: string[] }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId }) as any)['import-group-members'].post({
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).connections({ connectionId: data.connectionId })['import-group-members'].post({
       groupJid: data.groupJid,
       tags: data.tags,
     })
@@ -468,7 +473,7 @@ export const syncContactGroupMembers = createServerFn()
   .validator((data: { workspaceId: string; contactId: string }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }).contacts({ contactId: data.contactId }) as any)['sync-members'].post()
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).contacts({ contactId: data.contactId })['sync-members'].post()
     if (error) return { error: err(error.value, 'Erro ao sincronizar membros do grupo.') }
     return res
   })
@@ -480,7 +485,8 @@ export const fetchDashboardStats = createServerFn()
   .validator((workspaceId: string) => workspaceId)
   .handler(async ({ data: workspaceId }) => {
     const api = await requireApi()
-    const { data } = await (api.workspaces({ workspaceId }) as unknown as { dashboard: { get: () => Promise<{ data?: any }> } }).dashboard.get()
+    const { data, error } = await api.workspaces({ workspaceId }).dashboard.get()
+    if (error) throw new Error(err(error.value, 'Erro ao carregar o dashboard.'))
     return data ?? null
   })
 
@@ -488,7 +494,8 @@ export const fetchCampaigns = createServerFn()
   .validator((workspaceId: string) => workspaceId)
   .handler(async ({ data: workspaceId }) => {
     const api = await requireApi()
-    const { data } = await api.workspaces({ workspaceId }).campaigns.get({ query: {} })
+    const { data, error } = await api.workspaces({ workspaceId }).campaigns.get({ query: {} })
+    if (error) throw new Error(err(error.value, 'Erro ao carregar campanhas.'))
     return data?.campaigns ?? []
   })
 
@@ -505,9 +512,10 @@ export const fetchCampaignMessages = createServerFn()
   .validator((data: { workspaceId: string; campaignId: string; runId?: string; status?: string }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    const { data: res } = await api.workspaces({ workspaceId: data.workspaceId }).campaigns({ campaignId: data.campaignId }).messages.get({
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).campaigns({ campaignId: data.campaignId }).messages.get({
       query: { runId: data.runId, status: data.status },
     })
+    if (error) throw new Error(err(error.value, 'Erro ao carregar mensagens da campanha.'))
     return res?.messages ?? []
   })
 
@@ -625,18 +633,29 @@ export const cancelCampaign = createServerFn()
   .validator((data: { workspaceId: string; campaignId: string }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    await api.workspaces({ workspaceId: data.workspaceId }).campaigns({ campaignId: data.campaignId }).cancel.post()
+    const { error } = await api.workspaces({ workspaceId: data.workspaceId }).campaigns({ campaignId: data.campaignId }).cancel.post()
+    if (error) return { error: err(error.value, 'Erro ao cancelar campanha.') }
     return { ok: true }
+  })
+
+export const deleteCampaign = createServerFn()
+  .validator((data: { workspaceId: string; campaignId: string }) => data)
+  .handler(async ({ data }) => {
+    const api = await requireApi()
+    const { error } = await api.workspaces({ workspaceId: data.workspaceId }).campaigns({ campaignId: data.campaignId }).delete()
+    if (error) return { error: err(error.value, 'Erro ao excluir campanha.') }
+    return { ok: true as const }
   })
 
 export const fetchCampaignRuns = createServerFn()
   .validator((data: { workspaceId: string; campaignId: string; page?: number }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    const { data: res } = await api
+    const { data: res, error } = await api
       .workspaces({ workspaceId: data.workspaceId })
       .campaigns({ campaignId: data.campaignId })
       .runs.get({ query: { page: data.page } })
+    if (error) throw new Error(err(error.value, 'Erro ao carregar execuções da campanha.'))
     return { runs: (res as { runs?: Array<any> })?.runs ?? [], total: (res as { total?: number })?.total ?? 0 }
   })
 
@@ -644,8 +663,8 @@ export const fetchSendsTimeseries = createServerFn()
   .validator((data: { workspaceId: string; tz?: string }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    const { data: res, error } = await (api as any).workspaces[data.workspaceId].dashboard.timeseries.get({
-      $query: { tz: data.tz },
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).dashboard.timeseries.get({
+      query: { tz: data.tz },
     })
     
     if (error) {
@@ -664,7 +683,7 @@ export const presignMediaUpload = createServerFn()
   .validator((data: { workspaceId: string; filename: string; mimeType: string; sizeBytes: number }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }) as any).media.presign.post({
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).media.presign.post({
       filename: data.filename,
       mimeType: data.mimeType,
       sizeBytes: data.sizeBytes,
@@ -677,7 +696,7 @@ export const confirmMediaUpload = createServerFn()
   .validator((data: { workspaceId: string; assetId: string }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }) as any).media({ assetId: data.assetId }).confirm.post()
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).media({ assetId: data.assetId }).confirm.post()
     if (error) return { error: err(error.value, 'Erro ao confirmar upload.') }
     return res as { asset: { id: string; kind: string; filename: string; mimeType: string } }
   })
@@ -686,7 +705,7 @@ export const fetchMediaUrl = createServerFn()
   .validator((data: { workspaceId: string; assetId: string }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    const { data: res } = await (api.workspaces({ workspaceId: data.workspaceId }) as any).media({ assetId: data.assetId }).url.get()
+    const { data: res } = await api.workspaces({ workspaceId: data.workspaceId }).media({ assetId: data.assetId }).url.get()
     return (res ?? null) as { url: string; mimeType: string; kind: string } | null
   })
 
@@ -696,7 +715,7 @@ export const bulkUpsertContacts = createServerFn()
   .validator((data: { workspaceId: string; rows: Array<{ name: string; phone: string }>; tags?: string[] }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }).contacts as any)['bulk-upsert'].post({
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).contacts['bulk-upsert'].post({
       rows: data.rows,
       tags: data.tags,
     })
@@ -711,7 +730,7 @@ export const importContactsFile = createServerFn()
     if (!data.workspaceId || !data.contentBase64) return { error: 'Arquivo ou workspace ausente.' }
     const bytes = Uint8Array.from(atob(data.contentBase64), (c) => c.charCodeAt(0))
     const file = new File([bytes], data.filename, { type: data.mimeType })
-    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }).contacts as any)['import-file'].post({ file })
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).contacts['import-file'].post({ file })
     if (error) return { error: err(error.value, 'Erro ao importar arquivo.') }
     return res as { imported: number; skipped: number; failed: number; errors: string[]; tag: string }
   })
@@ -745,7 +764,8 @@ export const fetchAutomations = createServerFn()
   .validator((workspaceId: string) => workspaceId)
   .handler(async ({ data: workspaceId }) => {
     const api = await requireApi()
-    const { data } = await (api.workspaces({ workspaceId }) as any).automations.get()
+    const { data, error } = await api.workspaces({ workspaceId }).automations.get()
+    if (error) throw new Error(err(error.value, 'Erro ao carregar automações.'))
     return (data?.automations ?? []) as Array<any>
   })
 
@@ -754,7 +774,7 @@ export const createAutomation = createServerFn()
   .handler(async ({ data }) => {
     const api = await requireApi()
     const { workspaceId, ...payload } = data
-    const { data: res, error } = await (api.workspaces({ workspaceId }) as any).automations.post(payload)
+    const { data: res, error } = await api.workspaces({ workspaceId }).automations.post(payload)
     if (error) return { error: err(error.value, 'Erro ao criar automação.') }
     return { automation: (res as { automation?: AutomationRef })?.automation }
   })
@@ -764,7 +784,7 @@ export const updateAutomation = createServerFn()
   .handler(async ({ data }) => {
     const api = await requireApi()
     const { workspaceId, automationId, ...payload } = data
-    const { data: res, error } = await (api.workspaces({ workspaceId }) as any).automations({ automationId }).patch(payload)
+    const { data: res, error } = await api.workspaces({ workspaceId }).automations({ automationId }).patch(payload)
     if (error) return { error: err(error.value, 'Erro ao atualizar automação.') }
     return { automation: (res as { automation?: AutomationRef })?.automation }
   })
@@ -773,7 +793,7 @@ export const toggleAutomation = createServerFn()
   .validator((data: { workspaceId: string; automationId: string }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }) as any).automations({ automationId: data.automationId }).toggle.post()
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).automations({ automationId: data.automationId }).toggle.post()
     if (error) return { error: err(error.value, 'Erro ao alternar automação.') }
     return res as { active: boolean }
   })
@@ -782,7 +802,7 @@ export const deleteAutomation = createServerFn()
   .validator((data: { workspaceId: string; automationId: string }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    const { error } = await (api.workspaces({ workspaceId: data.workspaceId }) as any).automations({ automationId: data.automationId }).delete()
+    const { error } = await api.workspaces({ workspaceId: data.workspaceId }).automations({ automationId: data.automationId }).delete()
     if (error) return { error: err(error.value, 'Erro ao excluir automação.') }
     return { ok: true as const }
   })
@@ -803,6 +823,89 @@ export const fetchManageBillingUrl = createServerFn().handler(async (): Promise<
   return (data as { url?: string } | null)?.url
 })
 
+export const fetchBillingSubscription = createServerFn()
+  .validator((workspaceId: string) => workspaceId)
+  .handler(async ({ data: workspaceId }): Promise<{ subscription: {
+    id: string
+    status: string
+    cancelAtPeriodEnd: boolean
+    currentPeriodEnd: string | null
+    hasStripeSubscription: boolean
+    isOwner: boolean
+    plan: { id: string; tier: string; name: string; priceCents: number } | null
+    addons: Array<{
+      addonTypeId: string
+      quantity: number
+      key: string
+      name: string
+      unitLabel: string | null
+      priceCents: number
+      limitsPerUnit: Record<string, number>
+    }>
+  } | null } | { error: string }> => {
+    const api = await requireApi()
+    const { data, error } = await api.billing.subscription.get({
+      query: { product_slug: 'naia', workspace_id: workspaceId },
+    })
+    if (error) return { error: err(error.value, 'Erro ao carregar assinatura.') }
+    return data as { subscription: {
+      id: string; status: string; cancelAtPeriodEnd: boolean; currentPeriodEnd: string | null
+      hasStripeSubscription: boolean; isOwner: boolean
+      plan: { id: string; tier: string; name: string; priceCents: number } | null
+      addons: Array<{ addonTypeId: string; quantity: number; key: string; name: string; unitLabel: string | null; priceCents: number; limitsPerUnit: Record<string, number> }>
+    } | null }
+  })
+
+export const startBillingCheckout = createServerFn()
+  .validator((data: {
+    workspaceId: string
+    workspaceName: string
+    planId: string
+    successUrl: string
+    cancelUrl: string
+  }) => data)
+  .handler(async ({ data }): Promise<{
+    checkoutUrl?: string
+    changed?: boolean
+    scheduled?: boolean
+    activated?: boolean
+    effectiveAt?: string
+  } | { error: string }> => {
+    const api = await requireApi()
+    const { data: result, error } = await api.billing.checkout.post({
+      product_slug: 'naia',
+      workspace_id: data.workspaceId,
+      workspace_name: data.workspaceName,
+      plan_id: data.planId,
+      success_url: data.successUrl,
+      cancel_url: data.cancelUrl,
+    })
+    if (error) return { error: err(error.value, 'Erro ao iniciar a mudança de plano.') }
+    return result as { checkoutUrl?: string; changed?: boolean; scheduled?: boolean; activated?: boolean; effectiveAt?: string }
+  })
+
+export const updateBillingAddon = createServerFn()
+  .validator((data: {
+    subscriptionId: string
+    addonTypeId: string
+    quantity: number
+    exists: boolean
+  }) => data)
+  .handler(async ({ data }): Promise<{ chargedNowCents?: number } | { error: string }> => {
+    const api = await requireApi()
+    if (data.exists) {
+      const { data: result, error } = await api.billing.subscriptions({ id: data.subscriptionId }).addons({ addonTypeId: data.addonTypeId }).patch({ quantity: data.quantity })
+      if (error) return { error: err(error.value, 'Erro ao atualizar o add-on.') }
+      return result as { chargedNowCents?: number }
+    }
+    const { data: result, error } = await api.billing.subscriptions({ id: data.subscriptionId }).addons.post({
+      addon_type_id: data.addonTypeId,
+      quantity: data.quantity,
+    })
+    if (error) return { error: err(error.value, 'Erro ao adicionar o add-on.') }
+    return result as { chargedNowCents?: number }
+  })
+
 // ─── Vianova Storage (arquivos do workspace) ─────────────────────────────────
 
 export const fetchWorkspaceFiles = createServerFn()
@@ -812,7 +915,7 @@ export const fetchWorkspaceFiles = createServerFn()
     const query: Record<string, string | number> = { status: data.status ?? 'active', limit: 50 }
     if (data.cursor) query.cursor = data.cursor
     if (data.ownerUserId) query.ownerUserId = data.ownerUserId
-    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }) as any).files.get({
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).files.get({
       query,
     })
     if (error || !res) return { error: (error?.value as { message?: string })?.message ?? 'Erro ao listar arquivos.' }
@@ -823,7 +926,7 @@ export const fetchFileUsage = createServerFn()
   .validator((workspaceId: string) => workspaceId)
   .handler(async ({ data: workspaceId }) => {
     const api = await requireApi()
-    const { data: res, error } = await (api.workspaces({ workspaceId }) as any).files.usage.get()
+    const { data: res, error } = await api.workspaces({ workspaceId }).files.usage.get()
     if (error || !res) return { error: (error?.value as { message?: string })?.message ?? 'Erro ao consultar uso.' }
     return res as { usedBytes: number; quotaBytes: number; maxFileSizeBytes: number; fileCount: number; percent: number }
   })
@@ -837,25 +940,10 @@ export const uploadWorkspaceFile = createServerFn({ method: 'POST' })
     return { workspaceId, file }
   })
   .handler(async ({ data }) => {
-    const token = getCookie(SESSION_COOKIE)
-    if (!token) return { error: 'Não autenticado.' }
-
-    const form = new FormData()
-    form.append('file', data.file)
-
-    const apiUrl = requireEnv('NAIA_API_URL')
-    const res = await fetch(`${apiUrl}/workspaces/${encodeURIComponent(data.workspaceId)}/files/upload`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${token}` },
-      body: form,
-    })
-
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({ message: 'Erro ao enviar arquivo.' }))
-      return { error: (body as { message?: string }).message ?? 'Erro ao enviar arquivo.' }
-    }
-
-    return (await res.json()) as { id: string; url: string; sizeBytes: number; mimeType: string; originalName: string }
+    const api = await requireApi()
+    const { data: result, error } = await api.workspaces({ workspaceId: data.workspaceId }).files.upload.post({ file: data.file })
+    if (error) return { error: err(error.value, 'Erro ao enviar arquivo.') }
+    return result as { id: string; url: string; sizeBytes: number; mimeType: string; originalName: string }
   })
 
 function mediaKindFromMime(mimeType: string): 'image' | 'video' | 'audio' | 'document' {
@@ -874,25 +962,10 @@ export const uploadCampaignMedia = createServerFn({ method: 'POST' })
     return { workspaceId, file }
   })
   .handler(async ({ data }) => {
-    const token = getCookie(SESSION_COOKIE)
-    if (!token) return { error: 'Não autenticado.' }
-
-    const form = new FormData()
-    form.append('file', data.file)
-
-    const apiUrl = requireEnv('NAIA_API_URL')
-    const res = await fetch(`${apiUrl}/workspaces/${encodeURIComponent(data.workspaceId)}/files/upload`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${token}` },
-      body: form,
-    })
-
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({ message: 'Erro ao enviar arquivo.' }))
-      return { error: (body as { message?: string }).message ?? 'Erro ao enviar arquivo.' }
-    }
-
-    const file = (await res.json()) as { id: string; url: string; sizeBytes: number; mimeType: string; originalName: string }
+    const api = await requireApi()
+    const { data: result, error } = await api.workspaces({ workspaceId: data.workspaceId }).files.upload.post({ file: data.file })
+    if (error) return { error: err(error.value, 'Erro ao enviar arquivo.') }
+    const file = result as { id: string; url: string; sizeBytes: number; mimeType: string; originalName: string }
     return {
       assetId: file.id,
       filename: file.originalName,
@@ -906,7 +979,7 @@ export const deleteWorkspaceFile = createServerFn()
   .validator((data: { workspaceId: string; fileId: string }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    const { error } = await (api.workspaces({ workspaceId: data.workspaceId }) as any).files({ fileId: data.fileId }).delete()
+    const { error } = await api.workspaces({ workspaceId: data.workspaceId }).files({ fileId: data.fileId }).delete()
     if (error) return { error: err(error.value, 'Erro ao remover arquivo.') }
     return { ok: true as const }
   })
@@ -915,7 +988,7 @@ export const restoreWorkspaceFile = createServerFn()
   .validator((data: { workspaceId: string; fileId: string }) => data)
   .handler(async ({ data }) => {
     const api = await requireApi()
-    const { error } = await (api.workspaces({ workspaceId: data.workspaceId }) as any).files({ fileId: data.fileId }).restore.post()
+    const { error } = await api.workspaces({ workspaceId: data.workspaceId }).files({ fileId: data.fileId }).restore.post()
     if (error) return { error: err(error.value, 'Erro ao restaurar arquivo.') }
     return { ok: true as const }
   })
@@ -945,7 +1018,8 @@ export const fetchNotifications = createServerFn()
     const query: Record<string, string | number> = { page: data.page ?? 1 }
     if (data.productSlug) query.product_slug = data.productSlug
     const { data: res, error } = await api.notifications.get({ query })
-    if (error || !res) return { notifications: [] as NotificationItem[], total: 0, page: 1 }
+    if (error) throw new Error(err(error.value, 'Erro ao carregar notificações.'))
+    if (!res) throw new Error('A central de notificações retornou uma resposta vazia.')
     return res as { notifications: NotificationItem[]; total: number; page: number; hasMore?: boolean }
   })
 
@@ -953,22 +1027,25 @@ export const fetchUnreadNotificationCount = createServerFn()
   .handler(async (): Promise<{ count: number }> => {
     const api = await requireApi()
     const { data: res, error } = await api.notifications['unread-count'].get()
-    if (error || !res) return { count: 0 }
+    if (error) throw new Error(err(error.value, 'Erro ao carregar notificações não lidas.'))
+    if (!res) throw new Error('A central de notificações retornou uma resposta vazia.')
     return res as { count: number }
   })
 
 export const markNotificationRead = createServerFn()
   .validator((notificationId: string) => notificationId)
-  .handler(async ({ data: notificationId }): Promise<{ ok: true }> => {
+  .handler(async ({ data: notificationId }): Promise<{ ok: true } | { error: string }> => {
     const api = await requireApi()
-    await api.notifications({ id: notificationId }).read.post()
+    const { error } = await api.notifications({ id: notificationId }).read.post()
+    if (error) return { error: err(error.value, 'Erro ao marcar notificação como lida.') }
     return { ok: true as const }
   })
 
 export const markAllNotificationsRead = createServerFn()
-  .handler(async (): Promise<{ ok: true }> => {
+  .handler(async (): Promise<{ ok: true } | { error: string }> => {
     const api = await requireApi()
-    await api.notifications['read-all'].post()
+    const { error } = await api.notifications['read-all'].post()
+    if (error) return { error: err(error.value, 'Erro ao marcar notificações como lidas.') }
     return { ok: true as const }
   })
 
@@ -983,7 +1060,7 @@ export const fetchNotificationPreferences = createServerFn()
   .validator((workspaceId: string) => workspaceId)
   .handler(async ({ data: workspaceId }): Promise<NotificationPreferences> => {
     const api = await requireApi()
-    const { data: res, error } = await (api.workspaces({ workspaceId }) as any)['notification-preferences'].get()
+    const { data: res, error } = await api.workspaces({ workspaceId })['notification-preferences'].get()
     if (error || !res) {
       return {
         emailOnCampaignCompleted: true,
@@ -999,7 +1076,7 @@ export const updateNotificationPreferences = createServerFn()
   .validator((data: { workspaceId: string; preferences: Partial<NotificationPreferences> }) => data)
   .handler(async ({ data }): Promise<NotificationPreferences> => {
     const api = await requireApi()
-    const { data: res, error } = await (api.workspaces({ workspaceId: data.workspaceId }) as any)['notification-preferences'].patch(data.preferences)
+    const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId })['notification-preferences'].patch(data.preferences)
     if (error || !res) throw new Error('Erro ao salvar preferências.')
     return res.preferences as NotificationPreferences
   })

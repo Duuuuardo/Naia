@@ -12,12 +12,14 @@ import {
   Play,
   Plug,
   Send,
+  Trash2,
   Users,
   XCircle,
   Zap,
 } from 'lucide-react'
 import {
   cancelCampaign,
+  deleteCampaign,
   dispatchCampaign,
   fetchCampaign,
   fetchCampaignMessages,
@@ -126,14 +128,37 @@ function CampaignDetailPage() {
     setBusy(true)
     setError(null)
     setFeedback(null)
-    const result = await action()
-    setBusy(false)
-    if (result && 'error' in result && result.error) {
-      setError(result.error)
-      return
+    try {
+      const result = await action()
+      if (result && 'error' in result && result.error) {
+        setError(result.error)
+        return
+      }
+      if (result && 'message' in result && result.message) setFeedback(result.message)
+      await router.invalidate()
+    } catch {
+      setError('Não foi possível concluir a ação. Tente novamente.')
+    } finally {
+      setBusy(false)
     }
-    if (result && 'message' in result && result.message) setFeedback(result.message)
-    await router.invalidate()
+  }
+
+  async function handleDelete() {
+    if (!window.confirm(`Excluir a campanha “${campaign.name}”? Esta ação não pode ser desfeita.`)) return
+    setBusy(true)
+    setError(null)
+    try {
+      const result = await deleteCampaign({ data: { workspaceId, campaignId } })
+      if ('error' in result && result.error) {
+        setError(result.error)
+        return
+      }
+      await router.navigate({ to: '/$workspaceId/campaigns', params: { workspaceId } })
+    } catch {
+      setError('Não foi possível excluir a campanha. Tente novamente.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   const editable = ['draft', 'scheduled', 'paused'].includes(campaign.status)
@@ -180,6 +205,11 @@ function CampaignDetailPage() {
         {['running', 'scheduled', 'paused'].includes(campaign.status) && (
           <Button className="w-full sm:w-auto" variant="danger" icon={XCircle} loading={busy} onClick={() => act(() => cancelCampaign({ data: { workspaceId, campaignId } }))}>
             Cancelar
+          </Button>
+        )}
+        {campaign.status !== 'running' && (
+          <Button className="w-full sm:w-auto" variant="danger" icon={Trash2} loading={busy} onClick={handleDelete}>
+            Excluir
           </Button>
         )}
       </PageHeader>

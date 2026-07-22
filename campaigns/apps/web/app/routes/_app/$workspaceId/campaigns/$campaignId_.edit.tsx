@@ -4,7 +4,8 @@ import { CampaignWizard } from '../../../../components/campaign-wizard'
 import { draftFromCampaign } from '../../../../components/campaign-wizard/types'
 import { createHeadConfig } from '~/lib/seo'
 
-export const Route = createFileRoute('/_app/$workspaceId/campaigns/$campaignId/edit')({ head: () => createHeadConfig('Editar Campanha — Naia Campanhas'),
+export const Route = createFileRoute('/_app/$workspaceId/campaigns/$campaignId_/edit')({
+  head: () => createHeadConfig('Editar Campanha — Naia Campanhas'),
   loader: async ({ params }) => {
     const [result, connections, tagsRes] = await Promise.all([
       fetchCampaign({ data: { workspaceId: params.workspaceId, campaignId: params.campaignId } }),
@@ -14,7 +15,6 @@ export const Route = createFileRoute('/_app/$workspaceId/campaigns/$campaignId/e
     if (!result?.campaign) {
       throw redirect({ to: '/$workspaceId/campaigns', params: { workspaceId: params.workspaceId } })
     }
-    // Só rascunho, agendada ou pausada podem ser editadas — espelho da regra da API
     if (!['draft', 'scheduled', 'paused'].includes(result.campaign.status)) {
       throw redirect({
         to: '/$workspaceId/campaigns/$campaignId',

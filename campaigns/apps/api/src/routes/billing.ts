@@ -7,14 +7,10 @@ import { getRequiredEnv } from '../lib/env'
 
 const VIANOVA_INTERNAL_SECRET = getRequiredEnv('VIANOVA_INTERNAL_SECRET')
 
-// Naia nunca integra Stripe — este arquivo só repassa o catálogo público do
-// Vianova. O checkout em si (POST /billing/checkout) NÃO passa por aqui: o
-// Vianova autentica essa rota pelo cookie de sessão dele (vianova_session),
-// que o servidor do Naia nunca tem acesso — só o browser do usuário guarda
-// esse cookie. Por isso o frontend chama o Vianova direto (cross-origin, com
-// credentials), do jeito descrito em docs/architecture.md, seção "Portal de
-// billing" — a única exceção documentada à regra de sempre passar pelo
-// Eden Treaty do próprio Naia.
+// Naia nunca integra Stripe. Estas rotas tipadas apenas encaminham catálogo,
+// checkout e compra de add-ons ao Vianova usando a identidade do usuário.
+// Gestão de assinatura ativa (cancelamento, cartão e faturas) continua no
+// portal do Vianova.
 export const billingRoutes = new Elysia()
   .use(authPlugin)
 
@@ -173,4 +169,34 @@ export const billingRoutes = new Elysia()
       cancel_url: t.Optional(t.String()),
       organization_id: t.Optional(t.String()),
     }),
+  })
+
+  // Add-ons novos e mudanças de quantidade acontecem dentro do produto.
+  .post('/billing/subscriptions/:id/addons', async ({ params, body, set, session, rawToken }) => {
+    if (!session) { set.status = 401; return { message: 'Não autenticado.' } }
+    const res = await fetch(`${VIANOVA_API_URL}/billing/subscriptions/${encodeURIComponent(params.id)}/addons`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${rawToken}` },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) { set.status = res.status; return res.json().catch(() => ({ message: 'Erro ao adicionar add-on.' })) }
+    return res.json()
+  }, {
+    body: t.Object({ addon_type_id: t.String(), quantity: t.Number({ minimum: 0 }) }),
+  })
+
+  .patch('/billing/subscriptions/:id/addons/:addonTypeId', async ({ params, body, set, session, rawToken }) => {
+    if (!session) { set.status = 401; return { message: 'Não autenticado.' } }
+    const res = await fetch(
+      `${VIANOVA_API_URL}/billing/subscriptions/${encodeURIComponent(params.id)}/addons/${encodeURIComponent(params.addonTypeId)}`,
+      {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${rawToken}` },
+        body: JSON.stringify(body),
+      },
+    )
+    if (!res.ok) { set.status = res.status; return res.json().catch(() => ({ message: 'Erro ao atualizar add-on.' })) }
+    return res.json()
+  }, {
+    body: t.Object({ quantity: t.Number({ minimum: 0 }) }),
   })

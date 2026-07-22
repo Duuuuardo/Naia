@@ -108,7 +108,8 @@ function MembersPage() {
   }
 
   async function handleRevoke(inviteId: string) {
-    await revokeInvite({ data: { workspaceId, inviteId } })
+    const result = await revokeInvite({ data: { workspaceId, inviteId } })
+    if ('error' in result) { setMessage(result.error ?? 'Erro ao revogar convite.'); return }
     await refresh()
   }
 
