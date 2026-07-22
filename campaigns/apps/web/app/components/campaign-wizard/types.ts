@@ -1,3 +1,4 @@
+import { defaultSpeedPreset, getSpeedPolicy } from '@naia/entitlements'
 import type {
   CampaignScheduleInput,
   CampaignSpeedInput,
@@ -76,7 +77,7 @@ export function newVariantKey(): string {
   return `v${Date.now()}-${variantSeq}`
 }
 
-export function emptyDraft(): WizardDraft {
+export function emptyDraft(tier: string): WizardDraft {
   return {
     name: '',
     connectionIds: [],
@@ -107,7 +108,7 @@ export function emptyDraft(): WizardDraft {
     dailyCap: '',
     timezoneEnabled: false,
     timezone: DEFAULT_TZ,
-    speed: { preset: 'medio' },
+    speed: { preset: defaultSpeedPreset(tier) },
     consent: false,
   }
 }
@@ -165,8 +166,9 @@ export function draftFromCampaign(input: {
     body: string
     media: Array<{ id: string; filename: string; kind: string; mimeType: string }>
   }>
+  tier: string
 }): WizardDraft {
-  const d = emptyDraft()
+  const d = emptyDraft(input.tier)
   const { campaign } = input
   d.name = campaign.name
   d.connectionIds = input.connections.map((c) => c.id)
@@ -218,10 +220,20 @@ export function draftFromCampaign(input: {
   }
 
   try {
-    const speed = JSON.parse(campaign.speedJson ?? '{"preset":"medio"}')
+    const speed = JSON.parse(campaign.speedJson ?? 'null')
     if (speed?.preset) d.speed = speed
   } catch {
     // velocidade ilegível → mantém preset padrão
+  }
+
+  // Plano pode ter mudado desde o salvamento — velocidade fora do plano volta
+  // ao padrão permitido em vez de estourar 403 na hora de salvar.
+  const policy = getSpeedPolicy(input.tier)
+  if (!policy.allowedPresets.includes(d.speed.preset)) {
+    d.speed = { preset: defaultSpeedPreset(input.tier) }
+  }
+  if (d.speed.pauseEveryN && !policy.burstPauseAllowed) {
+    d.speed = { ...d.speed, pauseEveryN: undefined, pauseMinMinutes: undefined, pauseMaxMinutes: undefined }
   }
 
   if (input.variants.length > 0) {

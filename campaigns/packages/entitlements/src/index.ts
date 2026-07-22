@@ -109,6 +109,16 @@ export function getSpeedPolicy(tier: string): SpeedPolicy {
 }
 
 /**
+ * Preset padrão do plano: 'medio' quando o plano permite, senão o melhor
+ * permitido (free → 'lento'). Usado como default do wizard e das rotas quando
+ * o cliente não envia velocidade.
+ */
+export function defaultSpeedPreset(tier: string): SpeedPreset {
+  const { allowedPresets } = getSpeedPolicy(tier)
+  return allowedPresets.includes('medio') ? 'medio' : (allowedPresets[0] ?? 'lento')
+}
+
+/**
  * Valida a configuração de velocidade da campanha contra o plano. `channels`
  * são os canais das conexões selecionadas (campanha mista valida o piso de
  * cada canal).

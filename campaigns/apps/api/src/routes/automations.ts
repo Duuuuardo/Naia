@@ -8,7 +8,7 @@
 import { Elysia, t } from 'elysia'
 import { db, automations, automationConnections, automationEnrollments, connections, campaigns } from '@naia/db'
 import { eq, and, desc, asc, inArray, sql } from 'drizzle-orm'
-import { canUseSpeed, canCreateAutomation, canActivateAutomation } from '@naia/entitlements'
+import { canUseSpeed, canCreateAutomation, canActivateAutomation, defaultSpeedPreset } from '@naia/entitlements'
 import { SpeedSchema, type Speed, type SpeedChannel, type AutomationStep, type AutomationType } from '@naia/schemas'
 import { authPlugin } from '../plugins/auth'
 import { resolveWorkspaceAccess } from '../lib/workspace-auth'
@@ -211,7 +211,7 @@ export const automationRoutes = new Elysia()
         set.status = 400; return { message: 'Uma ou mais conexões selecionadas não existem neste workspace.' }
       }
 
-      const speed: Speed = body.speed ?? { preset: 'medio' }
+      const speed: Speed = body.speed ?? { preset: defaultSpeedPreset(ctx.entitlements.tier) }
       const channels = [...new Set(conns.map((c) => c.channel))].filter(
         (c): c is SpeedChannel => c === 'whatsapp' || c === 'telegram',
       )

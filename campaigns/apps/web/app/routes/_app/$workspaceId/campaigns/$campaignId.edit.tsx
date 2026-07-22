@@ -51,6 +51,7 @@ function EditCampaignPage() {
         campaign,
         connections: campaignConnections,
         variants,
+        tier: entitlements?.tier ?? 'free',
       })}
       userId={user.id}
       permissions={permissions}

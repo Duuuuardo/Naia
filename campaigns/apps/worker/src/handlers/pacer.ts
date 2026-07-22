@@ -75,7 +75,9 @@ export async function handlePacerStep(job: PacerJob): Promise<void> {
   }
 
   const schedule = parseJson<Schedule>(campaign.scheduleJson, { type: 'immediate' })
-  const speed = parseJson<Speed>(campaign.speedJson, { preset: 'medio' })
+  // Fallback conservador: JSON ilegível nunca pode acelerar além do que
+  // qualquer plano permite.
+  const speed = parseJson<Speed>(campaign.speedJson, { preset: 'lento' })
   const tz = campaign.timezone || DEFAULT_TIMEZONE
 
   // Janela de funcionamento: estaciona até a próxima abertura

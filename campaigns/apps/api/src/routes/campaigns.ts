@@ -1,7 +1,7 @@
 import { Elysia, t } from 'elysia'
 import { db, campaigns, campaignMessages, campaignRuns, campaignConnections, campaignVariants, campaignVariantMedia, mediaAssets, connections, contacts, entitlements } from '@naia/db'
 import { eq, and, sql, desc, asc, inArray, gte } from 'drizzle-orm'
-import { canCreateCampaign, canUseSpeed, hasActiveSubscription } from '@naia/entitlements'
+import { canCreateCampaign, canUseSpeed, defaultSpeedPreset, hasActiveSubscription } from '@naia/entitlements'
 import { getQueue, QUEUES, defaultJobOptions } from '@naia/queue'
 import { ScheduleSchema, SpeedSchema, type PacerJob, type Schedule, type Speed, type SpeedChannel } from '@naia/schemas'
 import { computeNextRunAt, DEFAULT_TIMEZONE } from '@naia/scheduling'
@@ -215,7 +215,7 @@ export const campaignRoutes = new Elysia()
         set.status = 400; return { message: 'Uma ou mais conexões selecionadas não existem neste workspace.' }
       }
 
-      const speed: Speed = body.speed ?? { preset: 'medio' }
+      const speed: Speed = body.speed ?? { preset: defaultSpeedPreset(ctx.entitlements.tier) }
       const speedCheck = canUseSpeed(ctx.entitlements, speed, speedChannels(conns))
       if (!speedCheck.allowed) { set.status = 403; return { message: speedCheck.reason } }
 

@@ -27,7 +27,7 @@ function NewCampaignPage() {
       connections={connections}
       availableTags={availableTags}
       tier={entitlements?.tier ?? 'free'}
-      initialDraft={emptyDraft()}
+      initialDraft={emptyDraft(entitlements?.tier ?? 'free')}
       userId={user.id}
       permissions={permissions}
     />
