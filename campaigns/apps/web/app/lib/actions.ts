@@ -109,7 +109,7 @@ export const createInvite = createServerFn()
       role: data.role,
     })
     if (error) return { error: err(error.value, 'Erro ao convidar.') }
-    return { invite: res?.invite, inviteUrl: res?.inviteUrl }
+    return { invite: res?.invite, emailQueued: res?.emailQueued }
   })
 
 export const revokeInvite = createServerFn()
