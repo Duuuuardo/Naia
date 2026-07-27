@@ -9,38 +9,520 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as InboxIndexRouteImport } from './routes/inbox/index'
+import { Route as InboxRespostasRouteImport } from './routes/inbox/respostas'
+import { Route as InboxRelatoriosRouteImport } from './routes/inbox/relatorios'
+import { Route as InboxLoginRouteImport } from './routes/inbox/login'
+import { Route as InboxArquivosRouteImport } from './routes/inbox/arquivos'
+import { Route as InboxActivateRouteImport } from './routes/inbox/activate'
+import { Route as AuthErrorRouteImport } from './routes/auth/error'
+import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
+import { Route as AppWorkspacesRouteImport } from './routes/_app/workspaces'
+import { Route as AppNotificationsRouteImport } from './routes/_app/notifications'
+import { Route as AppWorkspaceIdRouteImport } from './routes/_app/$workspaceId'
+import { Route as InboxFunisIndexRouteImport } from './routes/inbox/funis/index'
+import { Route as InboxContatosIndexRouteImport } from './routes/inbox/contatos/index'
+import { Route as InboxChatIndexRouteImport } from './routes/inbox/chat/index'
+import { Route as InboxBotIndexRouteImport } from './routes/inbox/bot/index'
+import { Route as AppWorkspaceIdIndexRouteImport } from './routes/_app/$workspaceId/index'
+import { Route as InboxFunisPipelineIdRouteImport } from './routes/inbox/funis/$pipelineId'
+import { Route as InboxContatosContactIdRouteImport } from './routes/inbox/contatos/$contactId'
+import { Route as InboxChatChatIdRouteImport } from './routes/inbox/chat/$chatId'
+import { Route as InboxCConversationIdRouteImport } from './routes/inbox/c/$conversationId'
+import { Route as InboxBotBotIdRouteImport } from './routes/inbox/bot/$botId'
+import { Route as InboxAdminTagsRouteImport } from './routes/inbox/admin/tags'
+import { Route as InboxAdminPermissoesRouteImport } from './routes/inbox/admin/permissoes'
+import { Route as InboxAdminHorariosRouteImport } from './routes/inbox/admin/horarios'
+import { Route as InboxAdminFilasRouteImport } from './routes/inbox/admin/filas'
+import { Route as InboxAdminEquipesRouteImport } from './routes/inbox/admin/equipes'
+import { Route as InboxAdminConexoesRouteImport } from './routes/inbox/admin/conexoes'
+import { Route as InboxAdminAvaliacaoRouteImport } from './routes/inbox/admin/avaliacao'
+import { Route as InboxAdminAgentesRouteImport } from './routes/inbox/admin/agentes'
+import { Route as AppInvitesTokenRouteImport } from './routes/_app/invites/$token'
+import { Route as AppWorkspaceIdSettingsRouteImport } from './routes/_app/$workspaceId/settings'
+import { Route as AppWorkspaceIdMembersRouteImport } from './routes/_app/$workspaceId/members'
+import { Route as AppWorkspaceIdDashboardRouteImport } from './routes/_app/$workspaceId/dashboard'
+import { Route as AppWorkspaceIdBillingRouteImport } from './routes/_app/$workspaceId/billing'
+import { Route as AppWorkspaceIdAgentsRouteImport } from './routes/_app/$workspaceId/agents'
 
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InboxIndexRoute = InboxIndexRouteImport.update({
+  id: '/inbox/',
+  path: '/inbox/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InboxRespostasRoute = InboxRespostasRouteImport.update({
+  id: '/inbox/respostas',
+  path: '/inbox/respostas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InboxRelatoriosRoute = InboxRelatoriosRouteImport.update({
+  id: '/inbox/relatorios',
+  path: '/inbox/relatorios',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InboxLoginRoute = InboxLoginRouteImport.update({
+  id: '/inbox/login',
+  path: '/inbox/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InboxArquivosRoute = InboxArquivosRouteImport.update({
+  id: '/inbox/arquivos',
+  path: '/inbox/arquivos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InboxActivateRoute = InboxActivateRouteImport.update({
+  id: '/inbox/activate',
+  path: '/inbox/activate',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthErrorRoute = AuthErrorRouteImport.update({
+  id: '/auth/error',
+  path: '/auth/error',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthCallbackRoute = AuthCallbackRouteImport.update({
+  id: '/auth/callback',
+  path: '/auth/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppWorkspacesRoute = AppWorkspacesRouteImport.update({
+  id: '/workspaces',
+  path: '/workspaces',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppNotificationsRoute = AppNotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppWorkspaceIdRoute = AppWorkspaceIdRouteImport.update({
+  id: '/$workspaceId',
+  path: '/$workspaceId',
+  getParentRoute: () => AppRoute,
+} as any)
+const InboxFunisIndexRoute = InboxFunisIndexRouteImport.update({
+  id: '/inbox/funis/',
+  path: '/inbox/funis/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InboxContatosIndexRoute = InboxContatosIndexRouteImport.update({
+  id: '/inbox/contatos/',
+  path: '/inbox/contatos/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InboxChatIndexRoute = InboxChatIndexRouteImport.update({
+  id: '/inbox/chat/',
+  path: '/inbox/chat/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InboxBotIndexRoute = InboxBotIndexRouteImport.update({
+  id: '/inbox/bot/',
+  path: '/inbox/bot/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppWorkspaceIdIndexRoute = AppWorkspaceIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppWorkspaceIdRoute,
+} as any)
+const InboxFunisPipelineIdRoute = InboxFunisPipelineIdRouteImport.update({
+  id: '/inbox/funis/$pipelineId',
+  path: '/inbox/funis/$pipelineId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InboxContatosContactIdRoute = InboxContatosContactIdRouteImport.update({
+  id: '/inbox/contatos/$contactId',
+  path: '/inbox/contatos/$contactId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InboxChatChatIdRoute = InboxChatChatIdRouteImport.update({
+  id: '/inbox/chat/$chatId',
+  path: '/inbox/chat/$chatId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InboxCConversationIdRoute = InboxCConversationIdRouteImport.update({
+  id: '/inbox/c/$conversationId',
+  path: '/inbox/c/$conversationId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InboxBotBotIdRoute = InboxBotBotIdRouteImport.update({
+  id: '/inbox/bot/$botId',
+  path: '/inbox/bot/$botId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InboxAdminTagsRoute = InboxAdminTagsRouteImport.update({
+  id: '/inbox/admin/tags',
+  path: '/inbox/admin/tags',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InboxAdminPermissoesRoute = InboxAdminPermissoesRouteImport.update({
+  id: '/inbox/admin/permissoes',
+  path: '/inbox/admin/permissoes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InboxAdminHorariosRoute = InboxAdminHorariosRouteImport.update({
+  id: '/inbox/admin/horarios',
+  path: '/inbox/admin/horarios',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InboxAdminFilasRoute = InboxAdminFilasRouteImport.update({
+  id: '/inbox/admin/filas',
+  path: '/inbox/admin/filas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InboxAdminEquipesRoute = InboxAdminEquipesRouteImport.update({
+  id: '/inbox/admin/equipes',
+  path: '/inbox/admin/equipes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InboxAdminConexoesRoute = InboxAdminConexoesRouteImport.update({
+  id: '/inbox/admin/conexoes',
+  path: '/inbox/admin/conexoes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InboxAdminAvaliacaoRoute = InboxAdminAvaliacaoRouteImport.update({
+  id: '/inbox/admin/avaliacao',
+  path: '/inbox/admin/avaliacao',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InboxAdminAgentesRoute = InboxAdminAgentesRouteImport.update({
+  id: '/inbox/admin/agentes',
+  path: '/inbox/admin/agentes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppInvitesTokenRoute = AppInvitesTokenRouteImport.update({
+  id: '/invites/$token',
+  path: '/invites/$token',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppWorkspaceIdSettingsRoute = AppWorkspaceIdSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AppWorkspaceIdRoute,
+} as any)
+const AppWorkspaceIdMembersRoute = AppWorkspaceIdMembersRouteImport.update({
+  id: '/members',
+  path: '/members',
+  getParentRoute: () => AppWorkspaceIdRoute,
+} as any)
+const AppWorkspaceIdDashboardRoute = AppWorkspaceIdDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AppWorkspaceIdRoute,
+} as any)
+const AppWorkspaceIdBillingRoute = AppWorkspaceIdBillingRouteImport.update({
+  id: '/billing',
+  path: '/billing',
+  getParentRoute: () => AppWorkspaceIdRoute,
+} as any)
+const AppWorkspaceIdAgentsRoute = AppWorkspaceIdAgentsRouteImport.update({
+  id: '/agents',
+  path: '/agents',
+  getParentRoute: () => AppWorkspaceIdRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/$workspaceId': typeof AppWorkspaceIdRouteWithChildren
+  '/notifications': typeof AppNotificationsRoute
+  '/workspaces': typeof AppWorkspacesRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/auth/error': typeof AuthErrorRoute
+  '/inbox/activate': typeof InboxActivateRoute
+  '/inbox/arquivos': typeof InboxArquivosRoute
+  '/inbox/login': typeof InboxLoginRoute
+  '/inbox/relatorios': typeof InboxRelatoriosRoute
+  '/inbox/respostas': typeof InboxRespostasRoute
+  '/inbox/': typeof InboxIndexRoute
+  '/$workspaceId/agents': typeof AppWorkspaceIdAgentsRoute
+  '/$workspaceId/billing': typeof AppWorkspaceIdBillingRoute
+  '/$workspaceId/dashboard': typeof AppWorkspaceIdDashboardRoute
+  '/$workspaceId/members': typeof AppWorkspaceIdMembersRoute
+  '/$workspaceId/settings': typeof AppWorkspaceIdSettingsRoute
+  '/invites/$token': typeof AppInvitesTokenRoute
+  '/inbox/admin/agentes': typeof InboxAdminAgentesRoute
+  '/inbox/admin/avaliacao': typeof InboxAdminAvaliacaoRoute
+  '/inbox/admin/conexoes': typeof InboxAdminConexoesRoute
+  '/inbox/admin/equipes': typeof InboxAdminEquipesRoute
+  '/inbox/admin/filas': typeof InboxAdminFilasRoute
+  '/inbox/admin/horarios': typeof InboxAdminHorariosRoute
+  '/inbox/admin/permissoes': typeof InboxAdminPermissoesRoute
+  '/inbox/admin/tags': typeof InboxAdminTagsRoute
+  '/inbox/bot/$botId': typeof InboxBotBotIdRoute
+  '/inbox/c/$conversationId': typeof InboxCConversationIdRoute
+  '/inbox/chat/$chatId': typeof InboxChatChatIdRoute
+  '/inbox/contatos/$contactId': typeof InboxContatosContactIdRoute
+  '/inbox/funis/$pipelineId': typeof InboxFunisPipelineIdRoute
+  '/$workspaceId/': typeof AppWorkspaceIdIndexRoute
+  '/inbox/bot/': typeof InboxBotIndexRoute
+  '/inbox/chat/': typeof InboxChatIndexRoute
+  '/inbox/contatos/': typeof InboxContatosIndexRoute
+  '/inbox/funis/': typeof InboxFunisIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/notifications': typeof AppNotificationsRoute
+  '/workspaces': typeof AppWorkspacesRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/auth/error': typeof AuthErrorRoute
+  '/inbox/activate': typeof InboxActivateRoute
+  '/inbox/arquivos': typeof InboxArquivosRoute
+  '/inbox/login': typeof InboxLoginRoute
+  '/inbox/relatorios': typeof InboxRelatoriosRoute
+  '/inbox/respostas': typeof InboxRespostasRoute
+  '/inbox': typeof InboxIndexRoute
+  '/$workspaceId/agents': typeof AppWorkspaceIdAgentsRoute
+  '/$workspaceId/billing': typeof AppWorkspaceIdBillingRoute
+  '/$workspaceId/dashboard': typeof AppWorkspaceIdDashboardRoute
+  '/$workspaceId/members': typeof AppWorkspaceIdMembersRoute
+  '/$workspaceId/settings': typeof AppWorkspaceIdSettingsRoute
+  '/invites/$token': typeof AppInvitesTokenRoute
+  '/inbox/admin/agentes': typeof InboxAdminAgentesRoute
+  '/inbox/admin/avaliacao': typeof InboxAdminAvaliacaoRoute
+  '/inbox/admin/conexoes': typeof InboxAdminConexoesRoute
+  '/inbox/admin/equipes': typeof InboxAdminEquipesRoute
+  '/inbox/admin/filas': typeof InboxAdminFilasRoute
+  '/inbox/admin/horarios': typeof InboxAdminHorariosRoute
+  '/inbox/admin/permissoes': typeof InboxAdminPermissoesRoute
+  '/inbox/admin/tags': typeof InboxAdminTagsRoute
+  '/inbox/bot/$botId': typeof InboxBotBotIdRoute
+  '/inbox/c/$conversationId': typeof InboxCConversationIdRoute
+  '/inbox/chat/$chatId': typeof InboxChatChatIdRoute
+  '/inbox/contatos/$contactId': typeof InboxContatosContactIdRoute
+  '/inbox/funis/$pipelineId': typeof InboxFunisPipelineIdRoute
+  '/$workspaceId': typeof AppWorkspaceIdIndexRoute
+  '/inbox/bot': typeof InboxBotIndexRoute
+  '/inbox/chat': typeof InboxChatIndexRoute
+  '/inbox/contatos': typeof InboxContatosIndexRoute
+  '/inbox/funis': typeof InboxFunisIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_app': typeof AppRouteWithChildren
+  '/login': typeof LoginRoute
+  '/_app/$workspaceId': typeof AppWorkspaceIdRouteWithChildren
+  '/_app/notifications': typeof AppNotificationsRoute
+  '/_app/workspaces': typeof AppWorkspacesRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/auth/error': typeof AuthErrorRoute
+  '/inbox/activate': typeof InboxActivateRoute
+  '/inbox/arquivos': typeof InboxArquivosRoute
+  '/inbox/login': typeof InboxLoginRoute
+  '/inbox/relatorios': typeof InboxRelatoriosRoute
+  '/inbox/respostas': typeof InboxRespostasRoute
+  '/inbox/': typeof InboxIndexRoute
+  '/_app/$workspaceId/agents': typeof AppWorkspaceIdAgentsRoute
+  '/_app/$workspaceId/billing': typeof AppWorkspaceIdBillingRoute
+  '/_app/$workspaceId/dashboard': typeof AppWorkspaceIdDashboardRoute
+  '/_app/$workspaceId/members': typeof AppWorkspaceIdMembersRoute
+  '/_app/$workspaceId/settings': typeof AppWorkspaceIdSettingsRoute
+  '/_app/invites/$token': typeof AppInvitesTokenRoute
+  '/inbox/admin/agentes': typeof InboxAdminAgentesRoute
+  '/inbox/admin/avaliacao': typeof InboxAdminAvaliacaoRoute
+  '/inbox/admin/conexoes': typeof InboxAdminConexoesRoute
+  '/inbox/admin/equipes': typeof InboxAdminEquipesRoute
+  '/inbox/admin/filas': typeof InboxAdminFilasRoute
+  '/inbox/admin/horarios': typeof InboxAdminHorariosRoute
+  '/inbox/admin/permissoes': typeof InboxAdminPermissoesRoute
+  '/inbox/admin/tags': typeof InboxAdminTagsRoute
+  '/inbox/bot/$botId': typeof InboxBotBotIdRoute
+  '/inbox/c/$conversationId': typeof InboxCConversationIdRoute
+  '/inbox/chat/$chatId': typeof InboxChatChatIdRoute
+  '/inbox/contatos/$contactId': typeof InboxContatosContactIdRoute
+  '/inbox/funis/$pipelineId': typeof InboxFunisPipelineIdRoute
+  '/_app/$workspaceId/': typeof AppWorkspaceIdIndexRoute
+  '/inbox/bot/': typeof InboxBotIndexRoute
+  '/inbox/chat/': typeof InboxChatIndexRoute
+  '/inbox/contatos/': typeof InboxContatosIndexRoute
+  '/inbox/funis/': typeof InboxFunisIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/$workspaceId'
+    | '/notifications'
+    | '/workspaces'
+    | '/auth/callback'
+    | '/auth/error'
+    | '/inbox/activate'
+    | '/inbox/arquivos'
+    | '/inbox/login'
+    | '/inbox/relatorios'
+    | '/inbox/respostas'
+    | '/inbox/'
+    | '/$workspaceId/agents'
+    | '/$workspaceId/billing'
+    | '/$workspaceId/dashboard'
+    | '/$workspaceId/members'
+    | '/$workspaceId/settings'
+    | '/invites/$token'
+    | '/inbox/admin/agentes'
+    | '/inbox/admin/avaliacao'
+    | '/inbox/admin/conexoes'
+    | '/inbox/admin/equipes'
+    | '/inbox/admin/filas'
+    | '/inbox/admin/horarios'
+    | '/inbox/admin/permissoes'
+    | '/inbox/admin/tags'
+    | '/inbox/bot/$botId'
+    | '/inbox/c/$conversationId'
+    | '/inbox/chat/$chatId'
+    | '/inbox/contatos/$contactId'
+    | '/inbox/funis/$pipelineId'
+    | '/$workspaceId/'
+    | '/inbox/bot/'
+    | '/inbox/chat/'
+    | '/inbox/contatos/'
+    | '/inbox/funis/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/login'
+    | '/notifications'
+    | '/workspaces'
+    | '/auth/callback'
+    | '/auth/error'
+    | '/inbox/activate'
+    | '/inbox/arquivos'
+    | '/inbox/login'
+    | '/inbox/relatorios'
+    | '/inbox/respostas'
+    | '/inbox'
+    | '/$workspaceId/agents'
+    | '/$workspaceId/billing'
+    | '/$workspaceId/dashboard'
+    | '/$workspaceId/members'
+    | '/$workspaceId/settings'
+    | '/invites/$token'
+    | '/inbox/admin/agentes'
+    | '/inbox/admin/avaliacao'
+    | '/inbox/admin/conexoes'
+    | '/inbox/admin/equipes'
+    | '/inbox/admin/filas'
+    | '/inbox/admin/horarios'
+    | '/inbox/admin/permissoes'
+    | '/inbox/admin/tags'
+    | '/inbox/bot/$botId'
+    | '/inbox/c/$conversationId'
+    | '/inbox/chat/$chatId'
+    | '/inbox/contatos/$contactId'
+    | '/inbox/funis/$pipelineId'
+    | '/$workspaceId'
+    | '/inbox/bot'
+    | '/inbox/chat'
+    | '/inbox/contatos'
+    | '/inbox/funis'
+  id:
+    | '__root__'
+    | '/'
+    | '/_app'
+    | '/login'
+    | '/_app/$workspaceId'
+    | '/_app/notifications'
+    | '/_app/workspaces'
+    | '/auth/callback'
+    | '/auth/error'
+    | '/inbox/activate'
+    | '/inbox/arquivos'
+    | '/inbox/login'
+    | '/inbox/relatorios'
+    | '/inbox/respostas'
+    | '/inbox/'
+    | '/_app/$workspaceId/agents'
+    | '/_app/$workspaceId/billing'
+    | '/_app/$workspaceId/dashboard'
+    | '/_app/$workspaceId/members'
+    | '/_app/$workspaceId/settings'
+    | '/_app/invites/$token'
+    | '/inbox/admin/agentes'
+    | '/inbox/admin/avaliacao'
+    | '/inbox/admin/conexoes'
+    | '/inbox/admin/equipes'
+    | '/inbox/admin/filas'
+    | '/inbox/admin/horarios'
+    | '/inbox/admin/permissoes'
+    | '/inbox/admin/tags'
+    | '/inbox/bot/$botId'
+    | '/inbox/c/$conversationId'
+    | '/inbox/chat/$chatId'
+    | '/inbox/contatos/$contactId'
+    | '/inbox/funis/$pipelineId'
+    | '/_app/$workspaceId/'
+    | '/inbox/bot/'
+    | '/inbox/chat/'
+    | '/inbox/contatos/'
+    | '/inbox/funis/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AppRoute: typeof AppRouteWithChildren
+  LoginRoute: typeof LoginRoute
+  AuthCallbackRoute: typeof AuthCallbackRoute
+  AuthErrorRoute: typeof AuthErrorRoute
+  InboxActivateRoute: typeof InboxActivateRoute
+  InboxArquivosRoute: typeof InboxArquivosRoute
+  InboxLoginRoute: typeof InboxLoginRoute
+  InboxRelatoriosRoute: typeof InboxRelatoriosRoute
+  InboxRespostasRoute: typeof InboxRespostasRoute
+  InboxIndexRoute: typeof InboxIndexRoute
+  InboxAdminAgentesRoute: typeof InboxAdminAgentesRoute
+  InboxAdminAvaliacaoRoute: typeof InboxAdminAvaliacaoRoute
+  InboxAdminConexoesRoute: typeof InboxAdminConexoesRoute
+  InboxAdminEquipesRoute: typeof InboxAdminEquipesRoute
+  InboxAdminFilasRoute: typeof InboxAdminFilasRoute
+  InboxAdminHorariosRoute: typeof InboxAdminHorariosRoute
+  InboxAdminPermissoesRoute: typeof InboxAdminPermissoesRoute
+  InboxAdminTagsRoute: typeof InboxAdminTagsRoute
+  InboxBotBotIdRoute: typeof InboxBotBotIdRoute
+  InboxCConversationIdRoute: typeof InboxCConversationIdRoute
+  InboxChatChatIdRoute: typeof InboxChatChatIdRoute
+  InboxContatosContactIdRoute: typeof InboxContatosContactIdRoute
+  InboxFunisPipelineIdRoute: typeof InboxFunisPipelineIdRoute
+  InboxBotIndexRoute: typeof InboxBotIndexRoute
+  InboxChatIndexRoute: typeof InboxChatIndexRoute
+  InboxContatosIndexRoute: typeof InboxContatosIndexRoute
+  InboxFunisIndexRoute: typeof InboxFunisIndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app': {
+      id: '/_app'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,11 +530,321 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/inbox/': {
+      id: '/inbox/'
+      path: '/inbox'
+      fullPath: '/inbox/'
+      preLoaderRoute: typeof InboxIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inbox/respostas': {
+      id: '/inbox/respostas'
+      path: '/inbox/respostas'
+      fullPath: '/inbox/respostas'
+      preLoaderRoute: typeof InboxRespostasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inbox/relatorios': {
+      id: '/inbox/relatorios'
+      path: '/inbox/relatorios'
+      fullPath: '/inbox/relatorios'
+      preLoaderRoute: typeof InboxRelatoriosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inbox/login': {
+      id: '/inbox/login'
+      path: '/inbox/login'
+      fullPath: '/inbox/login'
+      preLoaderRoute: typeof InboxLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inbox/arquivos': {
+      id: '/inbox/arquivos'
+      path: '/inbox/arquivos'
+      fullPath: '/inbox/arquivos'
+      preLoaderRoute: typeof InboxArquivosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inbox/activate': {
+      id: '/inbox/activate'
+      path: '/inbox/activate'
+      fullPath: '/inbox/activate'
+      preLoaderRoute: typeof InboxActivateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/error': {
+      id: '/auth/error'
+      path: '/auth/error'
+      fullPath: '/auth/error'
+      preLoaderRoute: typeof AuthErrorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/callback': {
+      id: '/auth/callback'
+      path: '/auth/callback'
+      fullPath: '/auth/callback'
+      preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app/workspaces': {
+      id: '/_app/workspaces'
+      path: '/workspaces'
+      fullPath: '/workspaces'
+      preLoaderRoute: typeof AppWorkspacesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/notifications': {
+      id: '/_app/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof AppNotificationsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/$workspaceId': {
+      id: '/_app/$workspaceId'
+      path: '/$workspaceId'
+      fullPath: '/$workspaceId'
+      preLoaderRoute: typeof AppWorkspaceIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/inbox/funis/': {
+      id: '/inbox/funis/'
+      path: '/inbox/funis'
+      fullPath: '/inbox/funis/'
+      preLoaderRoute: typeof InboxFunisIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inbox/contatos/': {
+      id: '/inbox/contatos/'
+      path: '/inbox/contatos'
+      fullPath: '/inbox/contatos/'
+      preLoaderRoute: typeof InboxContatosIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inbox/chat/': {
+      id: '/inbox/chat/'
+      path: '/inbox/chat'
+      fullPath: '/inbox/chat/'
+      preLoaderRoute: typeof InboxChatIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inbox/bot/': {
+      id: '/inbox/bot/'
+      path: '/inbox/bot'
+      fullPath: '/inbox/bot/'
+      preLoaderRoute: typeof InboxBotIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app/$workspaceId/': {
+      id: '/_app/$workspaceId/'
+      path: '/'
+      fullPath: '/$workspaceId/'
+      preLoaderRoute: typeof AppWorkspaceIdIndexRouteImport
+      parentRoute: typeof AppWorkspaceIdRoute
+    }
+    '/inbox/funis/$pipelineId': {
+      id: '/inbox/funis/$pipelineId'
+      path: '/inbox/funis/$pipelineId'
+      fullPath: '/inbox/funis/$pipelineId'
+      preLoaderRoute: typeof InboxFunisPipelineIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inbox/contatos/$contactId': {
+      id: '/inbox/contatos/$contactId'
+      path: '/inbox/contatos/$contactId'
+      fullPath: '/inbox/contatos/$contactId'
+      preLoaderRoute: typeof InboxContatosContactIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inbox/chat/$chatId': {
+      id: '/inbox/chat/$chatId'
+      path: '/inbox/chat/$chatId'
+      fullPath: '/inbox/chat/$chatId'
+      preLoaderRoute: typeof InboxChatChatIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inbox/c/$conversationId': {
+      id: '/inbox/c/$conversationId'
+      path: '/inbox/c/$conversationId'
+      fullPath: '/inbox/c/$conversationId'
+      preLoaderRoute: typeof InboxCConversationIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inbox/bot/$botId': {
+      id: '/inbox/bot/$botId'
+      path: '/inbox/bot/$botId'
+      fullPath: '/inbox/bot/$botId'
+      preLoaderRoute: typeof InboxBotBotIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inbox/admin/tags': {
+      id: '/inbox/admin/tags'
+      path: '/inbox/admin/tags'
+      fullPath: '/inbox/admin/tags'
+      preLoaderRoute: typeof InboxAdminTagsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inbox/admin/permissoes': {
+      id: '/inbox/admin/permissoes'
+      path: '/inbox/admin/permissoes'
+      fullPath: '/inbox/admin/permissoes'
+      preLoaderRoute: typeof InboxAdminPermissoesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inbox/admin/horarios': {
+      id: '/inbox/admin/horarios'
+      path: '/inbox/admin/horarios'
+      fullPath: '/inbox/admin/horarios'
+      preLoaderRoute: typeof InboxAdminHorariosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inbox/admin/filas': {
+      id: '/inbox/admin/filas'
+      path: '/inbox/admin/filas'
+      fullPath: '/inbox/admin/filas'
+      preLoaderRoute: typeof InboxAdminFilasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inbox/admin/equipes': {
+      id: '/inbox/admin/equipes'
+      path: '/inbox/admin/equipes'
+      fullPath: '/inbox/admin/equipes'
+      preLoaderRoute: typeof InboxAdminEquipesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inbox/admin/conexoes': {
+      id: '/inbox/admin/conexoes'
+      path: '/inbox/admin/conexoes'
+      fullPath: '/inbox/admin/conexoes'
+      preLoaderRoute: typeof InboxAdminConexoesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inbox/admin/avaliacao': {
+      id: '/inbox/admin/avaliacao'
+      path: '/inbox/admin/avaliacao'
+      fullPath: '/inbox/admin/avaliacao'
+      preLoaderRoute: typeof InboxAdminAvaliacaoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inbox/admin/agentes': {
+      id: '/inbox/admin/agentes'
+      path: '/inbox/admin/agentes'
+      fullPath: '/inbox/admin/agentes'
+      preLoaderRoute: typeof InboxAdminAgentesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app/invites/$token': {
+      id: '/_app/invites/$token'
+      path: '/invites/$token'
+      fullPath: '/invites/$token'
+      preLoaderRoute: typeof AppInvitesTokenRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/$workspaceId/settings': {
+      id: '/_app/$workspaceId/settings'
+      path: '/settings'
+      fullPath: '/$workspaceId/settings'
+      preLoaderRoute: typeof AppWorkspaceIdSettingsRouteImport
+      parentRoute: typeof AppWorkspaceIdRoute
+    }
+    '/_app/$workspaceId/members': {
+      id: '/_app/$workspaceId/members'
+      path: '/members'
+      fullPath: '/$workspaceId/members'
+      preLoaderRoute: typeof AppWorkspaceIdMembersRouteImport
+      parentRoute: typeof AppWorkspaceIdRoute
+    }
+    '/_app/$workspaceId/dashboard': {
+      id: '/_app/$workspaceId/dashboard'
+      path: '/dashboard'
+      fullPath: '/$workspaceId/dashboard'
+      preLoaderRoute: typeof AppWorkspaceIdDashboardRouteImport
+      parentRoute: typeof AppWorkspaceIdRoute
+    }
+    '/_app/$workspaceId/billing': {
+      id: '/_app/$workspaceId/billing'
+      path: '/billing'
+      fullPath: '/$workspaceId/billing'
+      preLoaderRoute: typeof AppWorkspaceIdBillingRouteImport
+      parentRoute: typeof AppWorkspaceIdRoute
+    }
+    '/_app/$workspaceId/agents': {
+      id: '/_app/$workspaceId/agents'
+      path: '/agents'
+      fullPath: '/$workspaceId/agents'
+      preLoaderRoute: typeof AppWorkspaceIdAgentsRouteImport
+      parentRoute: typeof AppWorkspaceIdRoute
+    }
   }
 }
 
+interface AppWorkspaceIdRouteChildren {
+  AppWorkspaceIdAgentsRoute: typeof AppWorkspaceIdAgentsRoute
+  AppWorkspaceIdBillingRoute: typeof AppWorkspaceIdBillingRoute
+  AppWorkspaceIdDashboardRoute: typeof AppWorkspaceIdDashboardRoute
+  AppWorkspaceIdMembersRoute: typeof AppWorkspaceIdMembersRoute
+  AppWorkspaceIdSettingsRoute: typeof AppWorkspaceIdSettingsRoute
+  AppWorkspaceIdIndexRoute: typeof AppWorkspaceIdIndexRoute
+}
+
+const AppWorkspaceIdRouteChildren: AppWorkspaceIdRouteChildren = {
+  AppWorkspaceIdAgentsRoute: AppWorkspaceIdAgentsRoute,
+  AppWorkspaceIdBillingRoute: AppWorkspaceIdBillingRoute,
+  AppWorkspaceIdDashboardRoute: AppWorkspaceIdDashboardRoute,
+  AppWorkspaceIdMembersRoute: AppWorkspaceIdMembersRoute,
+  AppWorkspaceIdSettingsRoute: AppWorkspaceIdSettingsRoute,
+  AppWorkspaceIdIndexRoute: AppWorkspaceIdIndexRoute,
+}
+
+const AppWorkspaceIdRouteWithChildren = AppWorkspaceIdRoute._addFileChildren(
+  AppWorkspaceIdRouteChildren,
+)
+
+interface AppRouteChildren {
+  AppWorkspaceIdRoute: typeof AppWorkspaceIdRouteWithChildren
+  AppNotificationsRoute: typeof AppNotificationsRoute
+  AppWorkspacesRoute: typeof AppWorkspacesRoute
+  AppInvitesTokenRoute: typeof AppInvitesTokenRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppWorkspaceIdRoute: AppWorkspaceIdRouteWithChildren,
+  AppNotificationsRoute: AppNotificationsRoute,
+  AppWorkspacesRoute: AppWorkspacesRoute,
+  AppInvitesTokenRoute: AppInvitesTokenRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AppRoute: AppRouteWithChildren,
+  LoginRoute: LoginRoute,
+  AuthCallbackRoute: AuthCallbackRoute,
+  AuthErrorRoute: AuthErrorRoute,
+  InboxActivateRoute: InboxActivateRoute,
+  InboxArquivosRoute: InboxArquivosRoute,
+  InboxLoginRoute: InboxLoginRoute,
+  InboxRelatoriosRoute: InboxRelatoriosRoute,
+  InboxRespostasRoute: InboxRespostasRoute,
+  InboxIndexRoute: InboxIndexRoute,
+  InboxAdminAgentesRoute: InboxAdminAgentesRoute,
+  InboxAdminAvaliacaoRoute: InboxAdminAvaliacaoRoute,
+  InboxAdminConexoesRoute: InboxAdminConexoesRoute,
+  InboxAdminEquipesRoute: InboxAdminEquipesRoute,
+  InboxAdminFilasRoute: InboxAdminFilasRoute,
+  InboxAdminHorariosRoute: InboxAdminHorariosRoute,
+  InboxAdminPermissoesRoute: InboxAdminPermissoesRoute,
+  InboxAdminTagsRoute: InboxAdminTagsRoute,
+  InboxBotBotIdRoute: InboxBotBotIdRoute,
+  InboxCConversationIdRoute: InboxCConversationIdRoute,
+  InboxChatChatIdRoute: InboxChatChatIdRoute,
+  InboxContatosContactIdRoute: InboxContatosContactIdRoute,
+  InboxFunisPipelineIdRoute: InboxFunisPipelineIdRoute,
+  InboxBotIndexRoute: InboxBotIndexRoute,
+  InboxChatIndexRoute: InboxChatIndexRoute,
+  InboxContatosIndexRoute: InboxContatosIndexRoute,
+  InboxFunisIndexRoute: InboxFunisIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

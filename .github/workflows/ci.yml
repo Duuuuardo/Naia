@@ -51,6 +51,8 @@ jobs:
           - campaigns/apps/session-host
           - crm/apps/api
           - crm/apps/web
+          - crm/apps/worker
+          - crm/apps/session-host
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - run: docker build --build-arg APP=${{ matrix.app }} --tag naia-ci:${{ github.sha }} .

@@ -14,16 +14,25 @@
   },
   "dependencies": {
     "@crm/db": "workspace:*",
+    "@crm/entitlements": "workspace:*",
+    "@crm/events": "workspace:*",
+    "@crm/queue": "workspace:*",
+    "@crm/schemas": "workspace:*",
+    "@crm/storage": "workspace:*",
     "@elysiajs/cors": "^1",
+    "@elysiajs/jwt": "^1",
     "@elysiajs/swagger": "^1",
     "@naia/vianova-auth": "workspace:*",
     "@naia/vianova-config": "workspace:*",
+    "@naia/vianova-email": "workspace:*",
+    "bcrypt": "^5",
     "drizzle-orm": "^0.45.2",
     "elysia": "^1",
     "logixlysia": "^6.6.0"
   },
   "devDependencies": {
     "@naia/config": "workspace:*",
+    "@types/bcrypt": "^5",
     "bun-types": "1.3.14",
     "typescript": "^5"
   }

@@ -12,7 +12,7 @@ export default defineConfig({
     tailwindcss(),
   ],
   server: {
-    port: Number(process.env.CRM_WEB_PORT ?? 3302),
+    port: Number(process.env.CRM_WEB_PORT ?? 3002),
     strictPort: true,
   },
 })

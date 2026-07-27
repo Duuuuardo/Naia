@@ -5,6 +5,7 @@ import { NotFoundEmbedded } from '../../components/error-pages'
 import { Topbar } from '../../components/topbar'
 import { MobileNav } from '../../components/mobile-nav'
 import { VerifyEmailBanner } from '../../components/verify-email-banner'
+import { WorkspaceShell } from '../../components/ui'
 import { fetchWorkspace } from '../../lib/actions'
 
 export const Route = createFileRoute('/_app/$workspaceId')({
@@ -50,18 +51,20 @@ function WorkspaceLayout() {
   )
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <Topbar
-        user={user}
-        workspaceName={workspace.name}
-        workspaceAvatarUrl={'avatarUrl' in workspace ? (workspace.avatarUrl as string | null) : null}
-        credits={{ balance: entitlements.creditsBalance, perCycle: entitlements.creditsPerCycle }}
-        workspaceId={workspaceId}
-        mobileNav={<MobileNav workspaceId={workspaceId} items={visibleItems} />}
-      />
-      {user.emailVerified === false && <VerifyEmailBanner email={user.email} />}
-      <div className="flex-1 flex max-w-6xl w-full mx-auto">
-        <aside className="hidden md:block w-48 shrink-0 border-r border-neutral-200 py-8 pr-4">
+    <WorkspaceShell
+      header={
+        <Topbar
+          user={user}
+          workspaceName={workspace.name}
+          workspaceAvatarUrl={'avatarUrl' in workspace ? (workspace.avatarUrl as string | null) : null}
+          credits={{ balance: entitlements.creditsBalance, perCycle: entitlements.creditsPerCycle }}
+          workspaceId={workspaceId}
+          mobileNav={<MobileNav workspaceId={workspaceId} items={visibleItems} />}
+        />
+      }
+      banner={user.emailVerified === false ? <VerifyEmailBanner email={user.email} /> : undefined}
+      sidebar={
+        <>
           <nav className="space-y-0.5">
             {visibleItems.map(({ icon: Icon, permission: _permission, ...item }) => (
               <Link
@@ -77,11 +80,10 @@ function WorkspaceLayout() {
               </Link>
             ))}
           </nav>
-        </aside>
-        <main className="flex-1 min-w-0 py-8 px-4 md:px-8">
-          <Outlet />
-        </main>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <Outlet />
+    </WorkspaceShell>
   )
 }

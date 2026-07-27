@@ -19,6 +19,7 @@ import { IndustrySelect } from '../../components/industry-select'
 import { fetchWorkspaces, createWorkspace } from '../../lib/actions'
 import { createHeadConfig } from '~/lib/seo'
 import { validateWorkspaceName } from '~/lib/validation'
+import { WorkspaceAvatar } from '../../components/ui'
 
 export const Route = createFileRoute('/_app/workspaces')({ head: () => createHeadConfig('Workspaces — Naia Campanhas'),
   loader: () => fetchWorkspaces(),
@@ -50,16 +51,6 @@ const tierBadge: Record<string, { label: string; color: string }> = {
   starter: { label: 'Starter', color: 'bg-blue-50 text-blue-600 border-blue-200' },
   pro: { label: 'Pro', color: 'bg-brand-50 text-brand-600 border-brand-200' },
   scale: { label: 'Scale', color: 'bg-amber-50 text-amber-700 border-amber-200' },
-}
-
-function getInitials(name: string) {
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .map((n) => n[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase()
 }
 
 function CreateWorkspaceModal({
@@ -118,7 +109,7 @@ function CreateWorkspaceModal({
           <button
             type="button"
             onClick={onClose}
-            className="size-8 rounded-lg text-neutral-400 hover:text-dark-800 hover:bg-neutral-100 flex items-center justify-center transition-all"
+            className="size-8 rounded-lg text-neutral-400 hover:text-dark-800 hover:bg-neutral-100 flex items-center justify-center transition-colors"
             aria-label="Fechar"
           >
             <X size={18} />
@@ -145,7 +136,7 @@ function CreateWorkspaceModal({
                 placeholder="Minha Empresa"
                 required
                 maxLength={80}
-                className={`w-full h-10 px-3.5 rounded-md border text-sm font-medium focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all ${nameError ? 'border-red-400' : 'border-neutral-300 text-dark-800 placeholder:text-neutral-400'}`}
+                className={`w-full h-10 px-3.5 rounded-md border text-sm font-medium focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-[border-color,box-shadow] duration-150 ease-out ${nameError ? 'border-red-400' : 'border-neutral-300 text-dark-800 placeholder:text-neutral-400'}`}
               />
               {nameError && (
                 <span className="text-[11px] text-red-500 mt-1 block" role="alert">{nameError}</span>
@@ -175,7 +166,7 @@ function CreateWorkspaceModal({
                 placeholder="O que esse workspace faz ou representa…"
                 rows={2}
                 maxLength={300}
-                className="w-full px-3.5 py-2.5 rounded-md border border-neutral-300 text-sm text-dark-800 placeholder:text-neutral-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all resize-none"
+                className="w-full px-3.5 py-2.5 rounded-md border border-neutral-300 text-sm text-dark-800 placeholder:text-neutral-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-[border-color,box-shadow] duration-150 ease-out resize-none"
               />
             </div>
 
@@ -223,14 +214,14 @@ function CreateWorkspaceModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 h-10 rounded-md border border-neutral-300 bg-white text-dark-800 text-sm font-medium hover:bg-neutral-50 active:scale-[0.98] transition-all"
+              className="flex-1 h-10 rounded-md border border-neutral-300 bg-white text-dark-800 text-sm font-medium hover:bg-neutral-50 active:scale-[0.98] transition-[background-color,transform] duration-150 ease-out"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={loading || !name.trim() || !industry || !agreed}
-              className="flex-1 h-10 rounded-md bg-brand-500 text-white text-sm font-semibold hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all shadow-sm flex items-center justify-center gap-2"
+              className="flex-1 h-10 rounded-md bg-brand-500 text-white text-sm font-semibold hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-[background-color,transform] duration-150 ease-out shadow-sm flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
@@ -308,7 +299,7 @@ function WorkspacesPage() {
 
           <button
             onClick={() => setShowCreate(true)}
-            className="h-10 px-4 rounded-md bg-brand-500 text-white text-sm font-semibold hover:bg-brand-600 active:scale-[0.98] transition-all shadow-sm inline-flex items-center justify-center gap-2 shrink-0 w-full md:w-auto"
+            className="h-10 px-4 rounded-md bg-brand-500 text-white text-sm font-semibold hover:bg-brand-600 active:scale-[0.98] transition-[background-color,transform] duration-150 ease-out shadow-sm inline-flex items-center justify-center gap-2 shrink-0 w-full md:w-auto"
           >
             <Plus size={16} aria-hidden="true" />
             <span>Criar workspace</span>
@@ -327,7 +318,7 @@ function WorkspacesPage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar workspace..."
-                className="w-full h-10 pl-10 pr-4 rounded-md bg-white border border-neutral-200 text-sm text-dark-800 placeholder:text-neutral-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all shadow-2xs"
+                className="w-full h-10 pl-10 pr-4 rounded-md bg-white border border-neutral-200 text-sm text-dark-800 placeholder:text-neutral-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-[border-color,box-shadow] duration-150 ease-out shadow-2xs"
               />
               {search && (
                 <button
@@ -353,7 +344,7 @@ function WorkspacesPage() {
                 <button
                   key={tab.id}
                   onClick={() => setRoleFilter(tab.id)}
-                  className={`h-9 px-3.5 rounded-md text-xs font-semibold transition-all shrink-0 ${
+                  className={`h-9 px-3.5 rounded-md text-xs font-semibold transition-[background-color,border-color,color,box-shadow] duration-150 ease-out shrink-0 ${
                     roleFilter === tab.id
                       ? 'bg-dark-800 text-white shadow-2xs'
                       : 'bg-white text-neutral-600 border border-neutral-200 hover:bg-neutral-50 hover:text-dark-800'
@@ -380,7 +371,7 @@ function WorkspacesPage() {
 
             <button
               onClick={() => setShowCreate(true)}
-              className="h-10 px-5 rounded-md bg-brand-500 text-white text-sm font-semibold hover:bg-brand-600 active:scale-[0.98] transition-all shadow-sm inline-flex items-center justify-center gap-2"
+              className="h-10 px-5 rounded-md bg-brand-500 text-white text-sm font-semibold hover:bg-brand-600 active:scale-[0.98] transition-[background-color,transform] duration-150 ease-out shadow-sm inline-flex items-center justify-center gap-2"
             >
               <Plus size={16} aria-hidden="true" />
               <span>Criar workspace</span>
@@ -417,13 +408,11 @@ function WorkspacesPage() {
                   onClick={() =>
                     router.navigate({ to: '/$workspaceId', params: { workspaceId: ws.id } })
                   }
-                  className="group relative text-left bg-white rounded-xl border border-neutral-200 p-6 hover:border-brand-300 hover:shadow-md transition-all duration-200 ease-out active:scale-[0.98] flex flex-col justify-between overflow-hidden outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                  className="group relative text-left bg-white rounded-xl border border-neutral-200 p-6 hover:border-brand-300 hover:shadow-md transition-[border-color,box-shadow,transform] duration-200 ease-out active:scale-[0.98] flex flex-col justify-between overflow-hidden outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
                 >
                   <div>
                     <div className="flex items-start justify-between gap-3">
-                      <div className="size-11 rounded-lg bg-brand-50 border border-brand-100 flex items-center justify-center text-base font-bold text-brand-600 shrink-0 shadow-2xs group-hover:bg-brand-500 group-hover:text-white transition-colors duration-200">
-                        {getInitials(ws.name)}
-                      </div>
+                      <WorkspaceAvatar name={ws.name} picture={ws.avatarUrl} size="md" />
                       <span
                         className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs border ${roleInfo.bg}`}
                       >
@@ -471,7 +460,7 @@ function WorkspacesPage() {
                     <span>Acessar</span>
                     <ArrowRight
                       size={16}
-                      className="text-neutral-300 group-hover:text-brand-500 group-hover:translate-x-1 transition-all duration-200 ease-out"
+                      className="text-neutral-300 group-hover:text-brand-500 transition-colors duration-150"
                     />
                   </div>
                 </button>

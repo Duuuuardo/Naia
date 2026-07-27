@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   CircleAlert,
   Crown,
-  ExternalLink,
   HardDrive,
   Link2,
   MessageSquareText,
@@ -15,12 +14,18 @@ import {
   RefreshCw,
   Send,
   ShieldAlert,
-  ShieldCheck,
   Sparkles,
   Users,
   Workflow,
   Zap,
 } from 'lucide-react'
+import {
+  BillingCurrentPlanCard,
+  BillingManageLink,
+  BillingPlanCardSurface,
+  BillingPlansGrid,
+  BillingPageHeader,
+} from '../../../components/ui'
 import {
   fetchBillingSubscription,
   fetchPlans,
@@ -312,23 +317,7 @@ function BillingPage() {
 
   return (
     <div className="max-w-5xl mx-auto py-2 font-sans">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-neutral-200">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-dark-800">Assinatura</h1>
-          <p className="text-sm text-neutral-500 mt-0.5">
-            Gerencie o plano, os add-ons e os limites do seu workspace.
-          </p>
-        </div>
-        {isOwner && (
-          <button
-            onClick={handleManage}
-            className="h-10 px-4 rounded-md border border-neutral-300 bg-white text-sm font-semibold text-dark-800 shadow-2xs hover:bg-neutral-50 transition-all active:scale-[0.98] inline-flex items-center justify-center gap-2 shrink-0 w-full sm:w-auto"
-          >
-            <span>Portal de faturas</span>
-            <ExternalLink size={14} className="text-neutral-400" />
-          </button>
-        )}
-      </div>
+      <BillingPageHeader onManage={handleManage} showManage={isOwner} />
 
       {checkoutSuccess && !paidActive && subLoaded && !activationTimedOut && (
         <div className="mt-6 rounded-xl bg-brand-50 border border-brand-100 px-4 py-3 text-sm text-brand-600 font-medium flex items-center gap-2.5">
@@ -355,60 +344,26 @@ function BillingPage() {
         </div>
       )}
 
-      <div className="my-6 bg-white rounded-xl border border-neutral-200 p-5 shadow-2xs">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="size-10 rounded-lg bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 shrink-0">
-              <ShieldCheck size={20} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-neutral-400">Plano atual:</span>
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-dark-800 text-white">
-                  {currentTierName}
-                </span>
-              </div>
-              <p className="text-xs text-neutral-500 mt-1">
-                {subscription?.cancelAtPeriodEnd && subscription.currentPeriodEnd
-                  ? `Cancelamento agendado. Ativo até ${formatDate(subscription.currentPeriodEnd)}, depois volta ao Grátis.`
-                  : paidActive && subscription?.currentPeriodEnd
-                    ? `Renova automaticamente em ${formatDate(subscription.currentPeriodEnd)}.`
-                    : entitlements.status === 'active'
-                      ? 'Assinatura ativa e sem pendências.'
-                      : 'Assinatura com restrições ou pendente.'}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-6 border-t md:border-t-0 md:border-l border-neutral-200 pt-3 md:pt-0 md:pl-6 text-xs text-dark-800">
-            <div>
-              <span className="text-neutral-400 block text-[11px]">Campanhas/mês</span>
-              <strong className="font-bold">{entitlements.campaignsPerMonth}</strong>
-            </div>
-            <div>
-              <span className="text-neutral-400 block text-[11px]">Conexões</span>
-              <strong className="font-bold">{entitlements.connections} canais</strong>
-            </div>
-            <div>
-              <span className="text-neutral-400 block text-[11px]">Equipe</span>
-              <strong className="font-bold">{entitlements.seats} membros</strong>
-            </div>
-          </div>
-        </div>
-
-        {isOwner && paidActive && (
-          <div className="mt-4 flex items-center justify-end border-t border-neutral-100 pt-4">
-            <button
-              type="button"
-              onClick={handleManage}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-semibold text-neutral-500 transition-colors duration-150 hover:bg-neutral-100 hover:text-dark-800 active:scale-[0.98]"
-            >
-              Gerenciar cancelamento, cartão e faturas
-              <ExternalLink size={13} aria-hidden="true" />
-            </button>
-          </div>
-        )}
-      </div>
+      <BillingCurrentPlanCard
+        planName={currentTierName}
+        statusText={
+          subscription?.cancelAtPeriodEnd && subscription.currentPeriodEnd
+            ? `Cancelamento agendado. Ativo até ${formatDate(subscription.currentPeriodEnd)}, depois volta ao Grátis.`
+            : paidActive && subscription?.currentPeriodEnd
+              ? `Renova automaticamente em ${formatDate(subscription.currentPeriodEnd)}.`
+              : entitlements.status === 'active'
+                ? 'Assinatura ativa e sem pendências.'
+                : 'Assinatura com restrições ou pendente.'
+        }
+        metrics={[
+          { label: 'Campanhas/mês', value: entitlements.campaignsPerMonth },
+          { label: 'Conexões', value: `${entitlements.connections} canais` },
+          { label: 'Equipe', value: `${entitlements.seats} membros` },
+        ]}
+        manageFooter={
+          isOwner && paidActive ? <BillingManageLink onClick={handleManage} /> : undefined
+        }
+      />
 
       {!isOwner && (
         <div className="rounded-xl bg-neutral-50 border border-neutral-200 px-4 py-3 text-sm text-neutral-600 font-medium flex items-center gap-2.5 mb-6">
@@ -441,7 +396,7 @@ function BillingPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-stretch mt-6">
+      <BillingPlansGrid>
         {regularPlans.map((plan) => {
           const isCurrent =
             entitlements.status === 'active' &&
@@ -478,16 +433,10 @@ function BillingPage() {
                   : `Assinar ${planTitle}`
 
           return (
-            <div
+            <BillingPlanCardSurface
               key={plan.id}
-              className={`relative rounded-xl p-6 flex flex-col justify-between transition-[transform,border-color,box-shadow] duration-200 ease-out ${
-                isCurrent
-                  ? 'border-2 border-dark-800 bg-neutral-50/50 shadow-sm'
-                  : isPopular
-                    ? 'border-2 border-brand-500 bg-white shadow-md'
-                    : 'border border-neutral-200 bg-white hover:border-brand-300 hover:shadow-sm shadow-2xs'
-              }`}
-              style={{ animation: 'fadeInUp 400ms ease-out backwards', animationDelay: `${plan.sortOrder * 60}ms` }}
+              current={isCurrent}
+              popular={isPopular}
             >
               <div>
                 <div className="flex items-center justify-between gap-2">
@@ -589,10 +538,10 @@ function BillingPage() {
                   </button>
                 )}
               </div>
-            </div>
+            </BillingPlanCardSurface>
           )
         })}
-      </div>
+      </BillingPlansGrid>
 
       {scalePlan && (
         <div className="mt-8">
@@ -606,7 +555,6 @@ function BillingPage() {
                 ? 'border-2 border-dark-800 bg-neutral-50/50'
                 : 'border border-neutral-200 bg-white hover:border-brand-300 hover:shadow-sm shadow-2xs'
             }`}
-            style={{ animation: 'fadeInUp 400ms ease-out backwards', animationDelay: '180ms' }}
           >
             <div className="flex flex-col md:flex-row md:items-start gap-6 md:gap-10">
               <div className="flex-1">
@@ -718,19 +666,6 @@ function BillingPage() {
           </div>
         </div>
       )}
-
-      <style>{`
-        @keyframes fadeInUp {
-          from {
-            opacity: 0;
-            transform: translateY(12px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-      `}</style>
 
       {plans?.addons && plans.addons.length > 0 && (
         <section className="mt-10">

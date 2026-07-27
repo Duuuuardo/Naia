@@ -19,7 +19,12 @@ import {
   Zap,
 } from 'lucide-react'
 import { fetchDashboardStats, fetchSendsTimeseries } from '../../../lib/actions'
-import { StatusBadge, ChannelBadge } from '../../../components/ui'
+import {
+  ChannelBadge,
+  DashboardMetricCard,
+  StatusBadge,
+  WorkspaceDashboardHeader,
+} from '../../../components/ui'
 import { SendsTimeseriesCard } from '../../../components/charts'
 import { createHeadConfig } from '~/lib/seo'
 
@@ -89,30 +94,16 @@ function WorkspaceHome() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 pb-20">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-neutral-200 pb-5">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="font-mono text-xs font-bold uppercase text-neutral-500 tracking-wider">
-              Workspace · {workspace.name}
-            </span>
-            <span className="h-3 w-px bg-neutral-300" />
-            <span className="text-xs font-bold text-brand-700 bg-brand-50 border border-brand-200/60 px-2.5 py-0.5 rounded-md shadow-2xs">
-              Plano {ent.tier}
-            </span>
-          </div>
-          <h1 className="font-display text-2xl font-extrabold text-dark-800 tracking-tight">
-            Visão geral
-          </h1>
-          <p className="text-sm text-neutral-500 mt-1 max-w-xl leading-relaxed">
-            Métricas de envio, entrega e leitura das suas campanhas em tempo real.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto">
+      <WorkspaceDashboardHeader
+        workspaceName={workspace.name}
+        planLabel={ent.tier}
+        description="Métricas de envio, entrega e leitura das suas campanhas em tempo real."
+        actions={
+          <>
           <Link
             to="/$workspaceId/connections"
             params={{ workspaceId: workspace.id }}
-            className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-neutral-200 bg-white text-xs font-bold text-dark-800 hover:bg-neutral-50 active:scale-[0.97] transition-all duration-150 shadow-2xs"
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-xs font-bold text-dark-800 shadow-2xs transition-[background-color,transform] duration-150 hover:bg-neutral-50 active:scale-[0.97] md:flex-none"
           >
             <Wifi size={15} className="text-emerald-600 animate-pulse" />
             <span>Canais ({summary.activeConnections})</span>
@@ -120,103 +111,84 @@ function WorkspaceHome() {
           <Link
             to="/$workspaceId/campaigns/new"
             params={{ workspaceId: workspace.id }}
-            className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-dark-800 text-xs font-bold text-white hover:bg-dark-900 active:scale-[0.97] transition-all duration-150 shadow-sm"
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-dark-800 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-[background-color,transform] duration-150 hover:bg-dark-900 active:scale-[0.97] md:flex-none"
           >
             <PlusCircle size={15} />
             <span>Nova campanha</span>
           </Link>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-2xs hover:border-neutral-300 transition-all duration-200 space-y-2 group">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-neutral-400">
-              Créditos restantes
-            </span>
-            <Zap size={14} className="text-amber-500 group-hover:scale-110 transition-transform duration-200" />
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
-            <span className="font-display text-3xl font-extrabold text-dark-800 tracking-tight">
-              {ent.creditsBalance.toLocaleString('pt-BR')}
-            </span>
-          </div>
-          <div className="h-1.5 w-full rounded-full bg-neutral-100 overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ease-out ${
-                creditsPercentage <= 10 ? 'bg-error-500' : 'bg-brand-500'
-              }`}
-              style={{ width: `${creditsPercentage}%` }}
-            />
-          </div>
-          <p className="text-xs font-medium text-neutral-500 pt-1 flex items-center justify-between border-t border-neutral-100 mt-2">
+        <DashboardMetricCard
+          icon={Zap}
+          iconClassName="text-amber-500"
+          label="Créditos restantes"
+          value={ent.creditsBalance.toLocaleString('pt-BR')}
+          progress={creditsPercentage}
+          progressClassName={creditsPercentage <= 10 ? 'bg-error-500' : 'bg-brand-500'}
+          footer={
+            <>
             <span>Total no ciclo:</span>
             <span className="font-mono font-bold text-dark-800">{ent.creditsPerCycle.toLocaleString('pt-BR')}</span>
-          </p>
-        </div>
+            </>
+          }
+        />
 
-        <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-2xs hover:border-neutral-300 transition-all duration-200 space-y-2 group">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-neutral-400">
-              Campanhas no mês
-            </span>
-            <Layers size={14} className="text-blue-500 group-hover:scale-110 transition-transform duration-200" />
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
-            <span className="font-display text-3xl font-extrabold text-dark-800 tracking-tight">
-              {usage.campaignsThisMonth}
-            </span>
+        <DashboardMetricCard
+          icon={Layers}
+          iconClassName="text-blue-500"
+          label="Campanhas no mês"
+          value={usage.campaignsThisMonth}
+          aside={
             <span className="shrink-0 self-start text-xs font-bold text-neutral-600 bg-neutral-100 border border-neutral-200/80 px-2 py-0.5 rounded">
               Limite: {ent.campaignsPerMonth}
             </span>
-          </div>
-          <p className="text-xs font-medium text-neutral-500 pt-1 flex items-center justify-between border-t border-neutral-100 mt-2">
+          }
+          footer={
+            <>
             <span>Total acumulado:</span>
             <span className="font-bold text-dark-800">{summary.totalCampaigns}</span>
-          </p>
-        </div>
+            </>
+          }
+        />
 
-        <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-2xs hover:border-neutral-300 transition-all duration-200 space-y-2 group">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-neutral-400">
-              Contatos ativos
-            </span>
-            <Users size={14} className="text-purple-500 group-hover:scale-110 transition-transform duration-200" />
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
-            <span className="font-display text-3xl font-extrabold text-dark-800 tracking-tight">
-              {(summary.totalContacts - summary.optedOutContacts).toLocaleString('pt-BR')}
-            </span>
+        <DashboardMetricCard
+          icon={Users}
+          iconClassName="text-purple-500"
+          label="Contatos ativos"
+          value={(summary.totalContacts - summary.optedOutContacts).toLocaleString('pt-BR')}
+          aside={
             <span className="shrink-0 self-start text-xs font-bold text-neutral-600 bg-neutral-100 border border-neutral-200/80 px-2 py-0.5 rounded">
               Total: {summary.totalContacts.toLocaleString('pt-BR')}
             </span>
-          </div>
-          <p className="text-xs font-medium text-neutral-500 pt-1 flex items-center justify-between border-t border-neutral-100 mt-2">
+          }
+          footer={
+            <>
             <span>Descadastrados (opt-out):</span>
             <span className="font-mono font-bold text-dark-800">{summary.optedOutContacts}</span>
-          </p>
-        </div>
+            </>
+          }
+        />
 
-        <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-2xs hover:border-neutral-300 transition-all duration-200 space-y-2 group">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-neutral-400">
-              Taxa de leitura
-            </span>
-            <TrendingUp size={14} className="text-emerald-600 group-hover:scale-110 transition-transform duration-200" />
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
-            <span className="font-display text-3xl font-extrabold text-dark-800 tracking-tight">
-              {readRate}%
-            </span>
+        <DashboardMetricCard
+          icon={TrendingUp}
+          iconClassName="text-emerald-600"
+          label="Taxa de leitura"
+          value={`${readRate}%`}
+          aside={
             <span className="shrink-0 self-start text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 rounded inline-flex items-center gap-1">
               <span>Entrega: {deliveryRate}%</span>
             </span>
-          </div>
-          <p className="text-xs font-medium text-neutral-500 pt-1 flex items-center justify-between border-t border-neutral-100 mt-2">
+          }
+          footer={
+            <>
             <span>Lidas: {summary.readCount.toLocaleString('pt-BR')}</span>
             <span>Entregues: {summary.deliveredCount.toLocaleString('pt-BR')}</span>
-          </p>
-        </div>
+            </>
+          }
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -253,7 +225,7 @@ function WorkspaceHome() {
                   </span>
                 </div>
                 <div className="h-2.5 w-full rounded-full bg-neutral-100 overflow-hidden">
-                  <div className="h-full rounded-full bg-blue-500 transition-all duration-500 ease-out" style={{ width: '100%' }} />
+                  <div className="h-full rounded-full bg-blue-500" style={{ width: '100%' }} />
                 </div>
               </div>
 
@@ -268,7 +240,7 @@ function WorkspaceHome() {
                   </span>
                 </div>
                 <div className="h-2.5 w-full rounded-full bg-neutral-100 overflow-hidden">
-                  <div className="h-full rounded-full bg-emerald-500 transition-all duration-500 ease-out" style={{ width: `${deliveryRate}%` }} />
+                  <div className="h-full rounded-full bg-emerald-500" style={{ width: `${deliveryRate}%` }} />
                 </div>
               </div>
 
@@ -283,7 +255,7 @@ function WorkspaceHome() {
                   </span>
                 </div>
                 <div className="h-2.5 w-full rounded-full bg-neutral-100 overflow-hidden">
-                  <div className="h-full rounded-full bg-brand-600 transition-all duration-500 ease-out" style={{ width: `${readRate}%` }} />
+                  <div className="h-full rounded-full bg-brand-600" style={{ width: `${readRate}%` }} />
                 </div>
               </div>
 
@@ -452,7 +424,7 @@ function WorkspaceHome() {
                       </div>
                       <div className="h-1.5 w-full rounded-full bg-neutral-100 overflow-hidden">
                         <div
-                          className="h-full rounded-full bg-dark-800 transition-all duration-500 ease-out"
+                          className="h-full rounded-full bg-dark-800"
                           style={{ width: `${Math.max(4, pct)}%` }}
                         />
                       </div>
@@ -599,7 +571,7 @@ function WorkspaceHome() {
                 <Link
                   to="/$workspaceId/campaigns/new"
                   params={{ workspaceId: workspace.id }}
-                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-dark-800 text-xs font-bold text-white hover:bg-dark-900 active:scale-[0.97] transition-all duration-150"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-dark-800 px-4 py-2.5 text-xs font-bold text-white transition-[background-color,transform] duration-150 hover:bg-dark-900 active:scale-[0.97]"
                 >
                   <PlusCircle size={14} />
                   <span>Criar campanha</span>
@@ -612,4 +584,3 @@ function WorkspaceHome() {
     </div>
   )
 }
-

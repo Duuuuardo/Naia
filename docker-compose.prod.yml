@@ -210,7 +210,7 @@ services:
         condition: service_healthy
 
   crm-api:
-    image: ${REGISTRY}/naia-crm-api:${IMAGE_TAG:-latest}
+    image: ${REGISTRY}/naia-crm-api:${CRM_IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:
       - "127.0.0.1:4002:4002"
@@ -221,6 +221,48 @@ services:
       naia-internal:
     env_file:
       - ./.env
+    environment:
+      - CRM_REDIS_URL=redis://:${NAIA_REDIS_PASSWORD}@redis:6379
+      - CRM_SESSION_HOST_URL=http://crm-session-host:4020
+    depends_on:
+      crm-postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  crm-worker:
+    image: ${REGISTRY}/naia-crm-worker:${CRM_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    environment:
+      - CRM_REDIS_URL=redis://:${NAIA_REDIS_PASSWORD}@redis:6379
+      - CRM_SESSION_HOST_URL=http://crm-session-host:4020
+    networks:
+      novaplatform:
+      naia-internal:
+    depends_on:
+      crm-postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      crm-session-host:
+        condition: service_started
+
+  crm-session-host:
+    image: ${REGISTRY}/naia-crm-session-host:${CRM_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    environment:
+      - CRM_SESSION_HOST_ID=base
+      - CRM_SESSION_HOST_PORT=4020
+      - CRM_REDIS_URL=redis://:${NAIA_REDIS_PASSWORD}@redis:6379
+    ports:
+      - "127.0.0.1:4020:4020"
+    networks:
+      novaplatform:
+      naia-internal:
     depends_on:
       crm-postgres:
         condition: service_healthy
@@ -228,7 +270,7 @@ services:
         condition: service_healthy
 
   crm-web:
-    image: ${REGISTRY}/naia-crm-web:${IMAGE_TAG:-latest}
+    image: ${REGISTRY}/naia-crm-web:${CRM_IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:
       - "127.0.0.1:3302:3302"

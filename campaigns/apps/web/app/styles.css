@@ -1,7 +1,7 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&display=swap');
 @import "tailwindcss";
 @import "@naia/config/tailwind/base.css";
-
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&display=swap');
+@source "../../../../packages/ui/src";
 
 @layer base {
   html {
@@ -97,7 +97,44 @@
   }
 
   .animate-in {
-    animation: dropdown-in 160ms ease-out;
+    animation: dropdown-in 160ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .popover-enter {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    transition:
+      opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
+      transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .panel-enter {
+    opacity: 1;
+    transform: translateY(0);
+    transition:
+      opacity 180ms cubic-bezier(0.23, 1, 0.32, 1),
+      transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .drawer-enter {
+    transform: translateX(0);
+    transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  @starting-style {
+    .popover-enter {
+      opacity: 0;
+      transform: scale(0.97) translateY(-4px);
+    }
+
+    .panel-enter {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+
+    .drawer-enter {
+      transform: translateX(-100%);
+    }
   }
 
   .industry-popover {

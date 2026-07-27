@@ -79,7 +79,9 @@ async function reconcileRunCounts(): Promise<void> {
  * será debitada de novo quando reivindicada — sem estorno, cada crash no meio
  * do envio cobraria a mensagem duas vezes. */
 async function resetStaleSending(): Promise<void> {
-  const cutoff = new Date(Date.now() - 10 * 60_000)
+  // postgres-js não serializa Date quando ele é interpolado numa query SQL
+  // crua do Drizzle; passe ISO explicitamente (o Postgres faz o cast para timestamp).
+  const cutoff = new Date(Date.now() - 10 * 60_000).toISOString()
   const refunds = (await db.execute(sql`
     WITH reset AS (
       UPDATE campaign_messages cm SET status = 'queued', updated_at = now()

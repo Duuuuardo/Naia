@@ -3,7 +3,7 @@ import { Link } from '@tanstack/react-router'
 import { Menu, X } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
-interface MobileNavItem {
+export interface MobileNavItem {
   to: string
   label: string
   icon: LucideIcon
@@ -15,14 +15,14 @@ export function MobileNav({
   items,
 }: {
   workspaceId: string
-  items: MobileNavItem[]
+  items: readonly MobileNavItem[]
 }) {
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
     if (!open) return
-    function onEscape(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false)
+    function onEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false)
     }
     document.addEventListener('keydown', onEscape)
     return () => document.removeEventListener('keydown', onEscape)
@@ -44,7 +44,7 @@ export function MobileNav({
         aria-label="Abrir menu"
         aria-expanded={open}
         aria-haspopup="dialog"
-        className="md:hidden inline-flex items-center justify-center size-9 rounded-md text-neutral-500 hover:bg-neutral-50 hover:text-dark-800 transition-colors"
+        className="inline-flex size-9 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-50 hover:text-dark-800 md:hidden"
       >
         <Menu size={20} aria-hidden="true" />
       </button>
@@ -56,25 +56,26 @@ export function MobileNav({
           aria-label="Navegação do workspace"
           className="fixed inset-0 z-40 md:hidden"
         >
-          <div
-            className="absolute inset-0 bg-black/30 backdrop-blur-xs motion-safe:animate-[fadeIn_200ms_ease-out]"
+          <button
+            type="button"
+            className="absolute inset-0 bg-dark-800/30 backdrop-blur-xs"
             onClick={() => setOpen(false)}
-            aria-hidden="true"
+            aria-label="Fechar menu"
           />
-          <div className="absolute left-0 top-0 bottom-0 w-64 max-w-[80vw] bg-neutral-0 border-r border-neutral-200 shadow-xl motion-safe:animate-[drawer-in_200ms_ease-out] flex flex-col">
-            <div className="flex items-center justify-between px-4 h-14 border-b border-neutral-200">
+          <div className="drawer-enter absolute bottom-0 left-0 top-0 flex w-64 max-w-[80vw] flex-col border-r border-neutral-200 bg-neutral-0 shadow-xl">
+            <div className="flex h-14 items-center justify-between border-b border-neutral-200 px-4">
               <span className="font-display text-sm font-bold text-dark-800">Menu</span>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Fechar menu"
-                className="inline-flex items-center justify-center size-8 rounded-md text-neutral-500 hover:bg-neutral-50 hover:text-dark-800 transition-colors"
+                className="inline-flex size-8 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-50 hover:text-dark-800"
               >
                 <X size={18} aria-hidden="true" />
               </button>
             </div>
 
-            <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
+            <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
               {items.map(({ icon: Icon, ...item }) => (
                 <Link
                   key={item.to}
@@ -82,7 +83,7 @@ export function MobileNav({
                   params={{ workspaceId }}
                   activeOptions={{ exact: item.exact }}
                   onClick={() => setOpen(false)}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-dark-800 hover:bg-neutral-50 transition-colors"
+                  className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-dark-800 transition-colors hover:bg-neutral-50"
                   activeProps={{ className: 'bg-brand-50 text-brand-600' }}
                 >
                   <Icon size={18} aria-hidden="true" className="shrink-0" />

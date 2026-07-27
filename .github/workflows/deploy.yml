@@ -3,6 +3,15 @@ name: Deploy Naia
 on:
   push:
     branches: [main]
+    paths:
+      - "apps/**"
+      - "campaigns/**"
+      - "packages/config/**"
+      - "packages/ui/**"
+      - "packages/vianova-*/**"
+      - "Dockerfile"
+      - "docker-compose.prod.yml"
+      - ".github/workflows/deploy.yml"
   workflow_dispatch:
     inputs:
       image_tag:
@@ -35,10 +44,6 @@ jobs:
             image: naia-campaigns-worker
           - app: campaigns/apps/session-host
             image: naia-campaigns-session-host
-          - app: crm/apps/api
-            image: naia-crm-api
-          - app: crm/apps/web
-            image: naia-crm-web
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Set up Docker Buildx
@@ -93,15 +98,13 @@ jobs:
               docker compose -f docker-compose.prod.yml exec -T postgres pg_dump -U naia -d naia > "backups/naia-$BACKUP_TIMESTAMP.sql"
               gzip "backups/naia-$BACKUP_TIMESTAMP.sql"
             fi
-            if [ -n "$(docker compose -f docker-compose.prod.yml ps -q crm-postgres)" ]; then
-              docker compose -f docker-compose.prod.yml exec -T crm-postgres pg_dump -U crm -d crm > "backups/crm-$BACKUP_TIMESTAMP.sql"
-              gzip "backups/crm-$BACKUP_TIMESTAMP.sql"
-            fi
             find backups -type f -name '*.sql.gz' -mtime +14 -delete
-            if ! docker compose -f docker-compose.prod.yml pull || ! docker compose -f docker-compose.prod.yml up -d --remove-orphans; then
+            CAMPAIGNS_SERVICES="landing campaigns-api campaigns-web campaigns-worker session-host-base session-host-scale"
+            if ! docker compose -f docker-compose.prod.yml pull $CAMPAIGNS_SERVICES \
+              || ! docker compose -f docker-compose.prod.yml up -d --no-deps $CAMPAIGNS_SERVICES; then
               export IMAGE_TAG="$PREVIOUS_TAG"
-              docker compose -f docker-compose.prod.yml pull
-              docker compose -f docker-compose.prod.yml up -d --remove-orphans
+              docker compose -f docker-compose.prod.yml pull $CAMPAIGNS_SERVICES
+              docker compose -f docker-compose.prod.yml up -d --no-deps $CAMPAIGNS_SERVICES
               exit 1
             fi
             healthy=false
@@ -116,8 +119,8 @@ jobs:
             done
             if [ "$healthy" != "true" ]; then
               export IMAGE_TAG="$PREVIOUS_TAG"
-              docker compose -f docker-compose.prod.yml pull
-              docker compose -f docker-compose.prod.yml up -d --remove-orphans
+              docker compose -f docker-compose.prod.yml pull $CAMPAIGNS_SERVICES
+              docker compose -f docker-compose.prod.yml up -d --no-deps $CAMPAIGNS_SERVICES
               exit 1
             fi
             echo "$TARGET_TAG" > .deploy-version

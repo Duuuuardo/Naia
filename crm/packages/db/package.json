@@ -15,6 +15,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@crm/schemas": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "postgres": "^3"
   },

@@ -2,8 +2,6 @@ import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import QRCode from 'react-qr-code'
 import {
-  ArrowLeft,
-  Check,
   CheckSquare,
   FolderPlus,
   Info,
@@ -15,7 +13,6 @@ import {
   RefreshCw,
   Search,
   Send,
-  ShieldCheck,
   Smartphone,
   Square,
   Tag,
@@ -39,7 +36,14 @@ import {
   importConnectionGroups,
   importGroupMembers,
 } from '../../../lib/actions'
-import { Button, StatusBadge, ChannelBadge, formatChannelName } from '../../../components/ui'
+import {
+  Button,
+  ChannelBadge,
+  ConnectionComposer,
+  StatusBadge,
+  formatChannelName,
+  type ConnectionPlatformOption,
+} from '../../../components/ui'
 import { createHeadConfig } from '~/lib/seo'
 import { validateConnectionName, validatePhone } from '~/lib/validation'
 
@@ -53,28 +57,28 @@ const channelIcon = {
   whatsapp: MessageCircle,
 } as const
 
-interface PlatformOption {
+interface PlatformOption extends ConnectionPlatformOption {
   id: 'whatsapp' | 'telegram_user'
-  name: string
-  channel: string
-  description: string
-  icon: typeof MessageCircle
 }
 
 const PLATFORMS: PlatformOption[] = [
   {
     id: 'whatsapp',
     name: 'WhatsApp Business / Pessoal',
+    formName: 'WhatsApp',
     channel: 'Sessão Multi-Device (QR Code)',
     description: 'Disparo automatizado de mensagens e campanhas através de pareamento seguro por QR Code.',
     icon: MessageCircle,
+    accentClass: 'border-emerald-200 bg-emerald-50 text-emerald-600',
   },
   {
     id: 'telegram_user',
     name: 'Telegram Conta Pessoal',
+    formName: 'Conta do Telegram',
     channel: 'Login por Telefone (código no app)',
     description: 'Dispare campanhas pela sua própria conta do Telegram. Informe o número, confirme o código recebido no app e pronto.',
     icon: Send,
+    accentClass: 'border-sky-200 bg-sky-50 text-sky-600',
   },
 ]
 
@@ -207,254 +211,96 @@ function ConnectionsPage() {
         </div>
       </div>
 
-      {/* Add Connection Drawer */}
       {adding && (
-        <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xs space-y-6 animate-in">
-          {step === 'platform' && (
-            <div>
-              <div className="flex items-center justify-between border-b border-neutral-100 pb-4 mb-5">
+        <ConnectionComposer
+          step={step}
+          platforms={PLATFORMS}
+          selectedId={selectedChannel}
+          platformSubtitle="Apenas canais nativos suportados pelo motor de envio em tempo real."
+          name={name}
+          nameError={nameError}
+          namePlaceholder={
+            selectedChannel === 'whatsapp'
+              ? 'Ex: WhatsApp Comercial (+55 11...)'
+              : 'Ex: Telegram Pessoal (+55 11...)'
+          }
+          nameHelp="Nome exibido na hora de selecionar o canal durante a criação de campanhas."
+          error={error}
+          saving={saving}
+          extraFields={
+            selectedChannel === 'telegram_user' ? (
+              <>
                 <div>
-                  <h2 className="font-display text-base font-bold text-dark-800">
-                    Selecione a plataforma para conectar
-                  </h2>
-                  <p className="text-xs text-neutral-500 mt-0.5">
-                    Apenas canais nativos suportados pelo motor de envio em tempo real
-                  </p>
-                </div>
-                <button onClick={() => setAdding(false)} className="text-neutral-400 hover:text-dark-800">
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl">
-                {PLATFORMS.map((plat) => {
-                  const Icon = plat.icon
-                  const chipStyle =
-                    plat.id === 'whatsapp'
-                      ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
-                      : 'bg-sky-50 text-sky-600 border-sky-200'
-                  return (
-                    <div
-                      key={plat.id}
-                      onClick={() => handleSelectPlatform(plat)}
-                      className="group cursor-pointer rounded-2xl border border-neutral-200 bg-neutral-50/50 hover:bg-white hover:border-dark-800 p-5 transition-all shadow-2xs flex flex-col justify-between"
-                    >
-                      <div>
-                        <div className="flex items-center justify-between mb-3">
-                          <span className={`grid size-11 place-items-center rounded-xl border ${chipStyle}`}>
-                            <Icon size={22} />
-                          </span>
-                          <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-neutral-100 text-neutral-600 group-hover:bg-dark-800 group-hover:text-white transition-colors">
-                            Conectar ›
-                          </span>
-                        </div>
-                        <h3 className="font-bold text-dark-800 text-base">{plat.name}</h3>
-                        <p className="text-xs font-mono text-neutral-400 mt-0.5">{plat.channel}</p>
-                        <p className="text-xs text-neutral-600 mt-3 leading-relaxed">{plat.description}</p>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {step === 'form' && selectedChannel && (
-            <div>
-              <div className="flex items-center justify-between border-b border-neutral-100 pb-4 mb-5">
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setStep('platform')}
-                    className="inline-flex items-center gap-1.5 text-xs font-bold text-neutral-500 hover:text-dark-800 transition-colors"
+                  <label
+                    htmlFor="connection-phone"
+                    className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-neutral-500"
                   >
-                    <ArrowLeft size={16} /> Voltar
-                  </button>
-                  <div className="h-4 w-px bg-neutral-200" />
-                  <h2 className="font-display text-base font-bold text-dark-800 flex items-center gap-2">
-                    {selectedChannel === 'whatsapp' ? (
-                      <MessageCircle size={18} className="text-emerald-600" />
-                    ) : (
-                      <Send size={18} className="text-sky-500" />
-                    )}
-                    <span>
-                      Configurar {selectedChannel === 'whatsapp' ? 'WhatsApp' : 'Conta do Telegram'}
-                    </span>
-                  </h2>
-                </div>
-                <button onClick={() => setAdding(false)} className="text-neutral-400 hover:text-dark-800">
-                  <X size={18} />
-                </button>
-              </div>
-
-              <form onSubmit={handleCreate} className="space-y-4 max-w-xl">
-                <div>
-                  <label htmlFor="conn-name" className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-1.5">
-                    Nome de identificação *
+                    Número do Telegram (com DDI) *
                   </label>
                   <input
-                    id="conn-name"
-                    type="text"
-                    value={name}
-                    onChange={(e) => {
-                      setName(e.target.value)
-                      setNameError(null)
+                    id="connection-phone"
+                    type="tel"
+                    value={phone}
+                    onChange={(event) => {
+                      setPhone(event.target.value)
+                      setPhoneError(null)
                     }}
-                    onBlur={() => setNameError(validateConnectionName(name))}
-                    aria-invalid={nameError ? true : undefined}
-                    placeholder={
-                      selectedChannel === 'whatsapp'
-                        ? 'Ex: WhatsApp Comercial (+55 11...)'
-                        : 'Ex: Telegram Pessoal (+55 11...)'
-                    }
-                    className={`w-full h-10 px-3.5 rounded-xl border text-sm font-medium focus:border-dark-800 outline-none transition-all ${nameError ? 'border-red-400' : 'border-neutral-200'}`}
+                    onBlur={() => setPhoneError(validatePhone(phone))}
+                    aria-invalid={phoneError ? true : undefined}
+                    placeholder="Ex: +5511999999999"
+                    className={`h-10 w-full rounded-xl border px-3.5 font-mono text-sm outline-none transition-colors duration-150 focus:border-dark-800 ${
+                      phoneError ? 'border-error-500' : 'border-neutral-200'
+                    }`}
                     required
                   />
-                  {nameError ? (
-                    <span className="text-[11px] text-red-500 mt-1 block" role="alert">{nameError}</span>
+                  {phoneError ? (
+                    <span className="mt-1 block text-[11px] text-error-500" role="alert">
+                      {phoneError}
+                    </span>
                   ) : (
-                    <p className="text-xs text-neutral-400 mt-1">
-                      Nome exibido na hora de selecionar o canal durante a criação de campanhas.
+                    <p className="mt-1 text-xs text-neutral-400">
+                      O código de confirmação chega no app do Telegram deste número.
                     </p>
                   )}
                 </div>
-
-                {selectedChannel === 'telegram_user' && (
-                  <>
-                    <div>
-                      <label htmlFor="conn-phone" className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-1.5">
-                        Número do Telegram (com DDI) *
-                      </label>
-                      <input
-                        id="conn-phone"
-                        type="tel"
-                        value={phone}
-                        onChange={(e) => {
-                          setPhone(e.target.value)
-                          setPhoneError(null)
-                        }}
-                        onBlur={() => setPhoneError(validatePhone(phone))}
-                        aria-invalid={phoneError ? true : undefined}
-                        placeholder="Ex: +5511999999999"
-                        className={`w-full h-10 px-3.5 rounded-xl border text-sm font-mono focus:border-dark-800 outline-none transition-all ${phoneError ? 'border-red-400' : 'border-neutral-200'}`}
-                        required
-                      />
-                      {phoneError ? (
-                        <span className="text-[11px] text-red-500 mt-1 block" role="alert">{phoneError}</span>
-                      ) : (
-                        <p className="text-xs text-neutral-400 mt-1">
-                          O código de confirmação chega no app do Telegram deste número.
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex items-start gap-3 rounded-xl bg-neutral-50 border border-neutral-200 p-3.5 text-xs text-neutral-700">
-                      <Info size={16} className="text-sky-600 shrink-0 mt-0.5" />
-                      <div>
-                        <strong className="font-bold text-dark-800">Login pela sua conta:</strong> Ao salvar, o Telegram envia um código de confirmação no app deste número. Digite o código (e a senha de duas etapas, se houver) na tela seguinte para conectar.
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {selectedChannel === 'whatsapp' && (
-                  <div className="space-y-3 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
-                    <div className="flex items-start gap-3">
-                      <span className="grid size-9 shrink-0 place-items-center rounded-lg border border-neutral-200 bg-white text-brand-500">
-                        <ShieldCheck size={18} aria-hidden="true" />
-                      </span>
-                      <div>
-                        <h3 className="text-sm font-bold text-dark-800">Proteja seu número antes de conectar</h3>
-                        <p className="mt-1 text-xs leading-relaxed text-neutral-600">
-                          O pareamento usa o modo de dispositivos conectados do WhatsApp. O uso inadequado pode causar limitações ou banimento do número.
-                        </p>
-                      </div>
-                    </div>
-
-                    <ul className="grid gap-2 border-y border-neutral-200 py-3 text-xs leading-relaxed text-neutral-700">
-                      {[
-                        'Envie apenas para pessoas que autorizaram receber suas mensagens.',
-                        'Comece com volume baixo e aumente aos poucos, sem picos de disparo.',
-                        'Evite mensagens repetitivas e respeite bloqueios e pedidos de saída.',
-                      ].map((guideline) => (
-                        <li key={guideline} className="flex items-start gap-2">
-                          <Check size={14} className="mt-0.5 shrink-0 text-success-500" aria-hidden="true" />
-                          <span>{guideline}</span>
-                        </li>
-                      ))}
-                    </ul>
-
-                    <label className="flex cursor-pointer items-start gap-3 rounded-lg p-2 text-xs text-neutral-700 hover:bg-white focus-within:ring-2 focus-within:ring-brand-500/30">
-                      <input
-                        type="checkbox"
-                        checked={acceptResponsibleUse}
-                        onChange={(event) => {
-                          setAcceptResponsibleUse(event.target.checked)
-                          setError(null)
-                        }}
-                        className="mt-0.5 size-4 rounded border-neutral-300 accent-brand-500"
-                      />
-                      <span>Entendi as práticas acima e assumo responsabilidade pelo uso deste número.</span>
-                    </label>
-
-                    <label className="flex cursor-pointer items-start gap-3 rounded-lg p-2 text-xs text-neutral-700 hover:bg-white focus-within:ring-2 focus-within:ring-brand-500/30">
-                      <input
-                        type="checkbox"
-                        checked={acceptTerms}
-                        onChange={(event) => {
-                          setAcceptTerms(event.target.checked)
-                          setError(null)
-                        }}
-                        className="mt-0.5 size-4 rounded border-neutral-300 accent-brand-500"
-                      />
-                      <span>
-                        Li e aceito os{' '}
-                        <a
-                          href="https://app.vianova.software/terms"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-semibold text-brand-500 underline underline-offset-2 hover:text-brand-600"
-                        >
-                          Termos de Uso
-                        </a>{' '}
-                        e autorizo a geração do QR code.
-                      </span>
-                    </label>
-
-                    <p className="flex items-center gap-2 text-[11px] text-neutral-500">
-                      <Info size={13} aria-hidden="true" />
-                      O QR code só será gerado depois das duas confirmações.
-                    </p>
+                <div className="flex items-start gap-3 rounded-xl border border-neutral-200 bg-neutral-50 p-3.5 text-xs text-neutral-700">
+                  <Info size={16} className="mt-0.5 shrink-0 text-sky-600" aria-hidden="true" />
+                  <div>
+                    <strong className="font-bold text-dark-800">Login pela sua conta:</strong> Ao
+                    salvar, o Telegram envia um código de confirmação no app deste número. Digite o
+                    código e a senha de duas etapas, se houver, na tela seguinte.
                   </div>
-                )}
-
-                {error && (
-                  <div className="rounded-xl bg-error-50 border border-error-200 p-3 text-xs text-error-700 font-semibold flex items-center gap-2">
-                    <TriangleAlert size={15} />
-                    <span>{error}</span>
-                  </div>
-                )}
-
-                <div className="flex justify-end gap-2 pt-3 border-t border-neutral-100">
-                  <button
-                    type="button"
-                    onClick={() => setAdding(false)}
-                    className="px-4 py-2 rounded-xl text-xs font-bold text-neutral-500 hover:bg-neutral-100 transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                  <Button
-                    type="submit"
-                    loading={saving}
-                    disabled={selectedChannel === 'whatsapp' && (!acceptTerms || !acceptResponsibleUse)}
-                  >
-                    Conectar {selectedChannel === 'whatsapp' ? 'WhatsApp' : 'Conta Telegram'}
-                  </Button>
                 </div>
-              </form>
-            </div>
-          )}
-        </div>
+              </>
+            ) : undefined
+          }
+          showWhatsAppSafety={selectedChannel === 'whatsapp'}
+          acceptTerms={acceptTerms}
+          acceptResponsibleUse={acceptResponsibleUse}
+          submitLabel={`Conectar ${selectedChannel === 'whatsapp' ? 'WhatsApp' : 'Conta Telegram'}`}
+          submitDisabled={
+            !selectedChannel ||
+            (selectedChannel === 'telegram_user' && Boolean(validatePhone(phone))) ||
+            (selectedChannel === 'whatsapp' && (!acceptTerms || !acceptResponsibleUse))
+          }
+          onSelect={(platform) => handleSelectPlatform(platform as PlatformOption)}
+          onNameChange={(value) => {
+            setName(value)
+            setNameError(null)
+          }}
+          onNameBlur={() => setNameError(validateConnectionName(name))}
+          onResponsibleUseChange={(checked) => {
+            setAcceptResponsibleUse(checked)
+            setError(null)
+          }}
+          onTermsChange={(checked) => {
+            setAcceptTerms(checked)
+            setError(null)
+          }}
+          onBack={() => setStep('platform')}
+          onClose={() => setAdding(false)}
+          onSubmit={handleCreate}
+        />
       )}
 
       {/* Active & Pending Connections List */}
@@ -487,7 +333,7 @@ function ConnectionsPage() {
             return (
               <div
                 key={c.id}
-                className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-2xs transition-all space-y-5"
+                className="space-y-5 rounded-2xl border border-neutral-200 bg-white p-5 shadow-2xs transition-colors duration-150"
               >
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div className="flex items-start gap-3.5">
@@ -727,7 +573,7 @@ function TelegramLoginBox({
                 value={code}
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
                 placeholder="• • • • •"
-                className="w-full h-11 px-3.5 rounded-xl border border-neutral-200 text-center text-lg font-mono font-bold tracking-[0.4em] focus:border-sky-500 outline-none transition-all"
+                className="h-11 w-full rounded-xl border border-neutral-200 px-3.5 text-center font-mono text-lg font-bold tracking-[0.4em] outline-none transition-[border-color,box-shadow] duration-150 focus:border-sky-500"
                 autoFocus
               />
               <Button type="submit" loading={submitting} disabled={!code.trim()} className="w-full">
@@ -748,7 +594,7 @@ function TelegramLoginBox({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Sua senha do Telegram"
-                className="w-full h-11 px-3.5 rounded-xl border border-neutral-200 text-sm focus:border-sky-500 outline-none transition-all"
+                className="h-11 w-full rounded-xl border border-neutral-200 px-3.5 text-sm outline-none transition-[border-color,box-shadow] duration-150 focus:border-sky-500"
                 autoFocus
               />
               <Button type="submit" loading={submitting} disabled={!password} className="w-full">
@@ -918,7 +764,7 @@ function ImportContactsModal({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar por nome ou número..."
-                className="w-full h-10 pl-9 pr-3 rounded-xl border border-neutral-200 text-xs focus:border-dark-800 outline-none transition-all"
+                className="h-10 w-full rounded-xl border border-neutral-200 pl-9 pr-3 text-xs outline-none transition-[border-color,box-shadow] duration-150 focus:border-dark-800"
               />
             </div>
             <div className="flex items-center gap-2">
@@ -1001,7 +847,7 @@ function ImportContactsModal({
               value={tagsInput}
               onChange={(e) => setTagsInput(e.target.value)}
               placeholder="Ex: origem:whatsapp, clientes-2026 (separados por vírgula)"
-              className="w-full h-10 px-3.5 rounded-xl border border-neutral-200 text-xs font-medium focus:border-dark-800 outline-none transition-all"
+              className="h-10 w-full rounded-xl border border-neutral-200 px-3.5 text-xs font-medium outline-none transition-[border-color,box-shadow] duration-150 focus:border-dark-800"
             />
           </div>
 
@@ -1184,7 +1030,7 @@ function ImportGroupsModal({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar por nome ou descrição do grupo..."
-                className="w-full h-10 pl-9 pr-3 rounded-xl border border-neutral-200 text-xs focus:border-dark-800 outline-none transition-all"
+                className="h-10 w-full rounded-xl border border-neutral-200 pl-9 pr-3 text-xs outline-none transition-[border-color,box-shadow] duration-150 focus:border-dark-800"
               />
             </div>
             <div className="flex items-center gap-2">
@@ -1280,7 +1126,7 @@ function ImportGroupsModal({
               value={tagsInput}
               onChange={(e) => setTagsInput(e.target.value)}
               placeholder="Ex: grupo, comunidade, clientes (separados por vírgula)"
-              className="w-full h-10 px-3.5 rounded-xl border border-neutral-200 text-xs font-medium focus:border-dark-800 outline-none transition-all"
+              className="h-10 w-full rounded-xl border border-neutral-200 px-3.5 text-xs font-medium outline-none transition-[border-color,box-shadow] duration-150 focus:border-dark-800"
             />
           </div>
 
