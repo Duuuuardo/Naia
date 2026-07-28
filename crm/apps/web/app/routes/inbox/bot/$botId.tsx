@@ -1,6 +1,6 @@
 import '@xyflow/react/dist/style.css'
 import { createFileRoute, redirect, Link } from '@tanstack/react-router'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type MouseEvent } from 'react'
 import {
   ArrowLeft,
   BarChart3,
@@ -8,6 +8,7 @@ import {
   CircleStop,
   FlaskConical,
   GitBranch,
+  LayoutGrid,
   List,
   ListTree,
   MessageSquare,
@@ -27,18 +28,27 @@ import {
 } from 'lucide-react'
 import {
   Background,
+  BaseEdge,
+  ConnectionLineType,
   Controls,
+  EdgeLabelRenderer,
   Handle,
+  MarkerType,
   Position,
   ReactFlow,
   addEdge,
+  getSmoothStepPath,
   useEdgesState,
   useNodesState,
+  useReactFlow,
   type Connection,
   type Edge,
+  type EdgeProps,
+  type EdgeTypes,
   type Node,
   type NodeProps,
   type NodeTypes,
+  type ReactFlowInstance,
 } from '@xyflow/react'
 import { Button, Card, ErrorNote, Modal } from '../../../components/ui'
 import { FlowSimulator } from '../../../components/bot/flow-simulator'
@@ -330,7 +340,9 @@ function BotNodeView({ type, data, selected }: NodeProps) {
         selected ? 'border-brand-500 ring-2 ring-brand-500/15' : 'border-neutral-200'
       }`}
     >
-      {kind !== 'start' && <Handle type="target" position={Position.Top} className="!bg-neutral-300" />}
+      {kind !== 'start' && (
+        <Handle type="target" position={Position.Left} className="!size-2.5 !bg-neutral-400" />
+      )}
 
       <div className="flex items-center gap-2 border-b border-neutral-100 px-3 py-2">
         <span className={`grid size-6 shrink-0 place-items-center rounded-md ${meta.chip}`}>
@@ -406,11 +418,65 @@ function BotNodeView({ type, data, selected }: NodeProps) {
       )}
 
       {kind !== 'end' && kind !== 'menu' && kind !== 'condition' && kind !== 'buttons' && (
-        <Handle type="source" position={Position.Bottom} className="!bg-neutral-300" />
+        <Handle type="source" position={Position.Right} className="!size-2.5 !bg-brand-500" />
       )}
     </div>
   )
 }
+
+// ─── Edge customizada com botão de remover ──────────────────────────────────
+// A edge padrão do React Flow só some com a tecla Delete (pouco descoberto).
+// Esta mostra um × no meio da linha ao passar o mouse ou ao selecioná-la.
+function DeletableEdge({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  markerEnd,
+  style,
+  selected,
+}: EdgeProps) {
+  const { setEdges } = useReactFlow()
+  const [edgePath, labelX, labelY] = getSmoothStepPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  })
+
+  function removeEdge(event: MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation()
+    setEdges((eds) => eds.filter((e) => e.id !== id))
+  }
+
+  return (
+    <>
+      <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} style={style} />
+      <EdgeLabelRenderer>
+        <button
+          type="button"
+          onClick={removeEdge}
+          aria-label="Remover conexão"
+          style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
+          className={`nodrag nopan pointer-events-auto absolute grid size-5 place-items-center rounded-full border bg-neutral-0 shadow-2xs transition ${
+            selected
+              ? 'border-error-500 text-error-500 opacity-100'
+              : 'border-neutral-200 text-neutral-400 opacity-0 hover:border-error-500 hover:text-error-500 hover:opacity-100'
+          }`}
+        >
+          <X size={11} aria-hidden="true" />
+        </button>
+      </EdgeLabelRenderer>
+    </>
+  )
+}
+
+const edgeTypes: EdgeTypes = { deletable: DeletableEdge }
 
 const nodeTypes: NodeTypes = {
   start: BotNodeView,
@@ -492,6 +558,90 @@ function validateFlow(nodes: FlowNode[], edges: Edge[]): string[] {
   return errors
 }
 
+// ─── Auto-organização (layout em camadas L→R) ────────────────────────────────
+
+const NODE_WIDTH = 224 // w-56
+const COLUMN_GAP = 64
+const ROW_GAP = 28
+
+// Altura aproximada do nó (espelha BotNodeView) para espaçar as linhas sem colar.
+function estimateNodeHeight(node: FlowNode): number {
+  const kind = (node.type ?? 'message') as BotNodeKind
+  const d = node.data
+  let height = 78 // cabeçalho + resumo (até 3 linhas)
+  if (kind === 'message' && str(d.attachmentFilename)) height += 28
+  if (kind === 'menu') height += strList(d.options).length * 29
+  if (kind === 'condition') height += 2 * 29
+  if (kind === 'buttons') height += (buttonOptions(d.options).length + 1) * 29
+  return height
+}
+
+// Posiciona os nós em colunas por profundidade (longest-path, à prova de ciclo).
+// Preserva a ordem de criação dentro de cada coluna e centraliza verticalmente.
+function layoutFlow(nodes: FlowNode[], edges: Edge[]): FlowNode[] {
+  if (nodes.length === 0) return nodes
+  const level = new Map(nodes.map((n) => [n.id, 0]))
+  for (let i = 0; i < nodes.length; i++) {
+    let changed = false
+    for (const edge of edges) {
+      if (!level.has(edge.source) || !level.has(edge.target)) continue
+      const candidate = level.get(edge.source)! + 1
+      if (candidate > level.get(edge.target)!) {
+        level.set(edge.target, candidate)
+        changed = true
+      }
+    }
+    if (!changed) break
+  }
+
+  const byLevel = new Map<number, FlowNode[]>()
+  for (const node of nodes) {
+    const lvl = level.get(node.id) ?? 0
+    const bucket = byLevel.get(lvl)
+    if (bucket) bucket.push(node)
+    else byLevel.set(lvl, [node])
+  }
+
+  const columnHeight = new Map<number, number>()
+  for (const [lvl, column] of byLevel) {
+    columnHeight.set(
+      lvl,
+      column.reduce((sum, node) => sum + estimateNodeHeight(node) + ROW_GAP, -ROW_GAP),
+    )
+  }
+  const tallest = Math.max(0, ...columnHeight.values())
+
+  const position = new Map<string, { x: number; y: number }>()
+  for (const [lvl, column] of byLevel) {
+    let y = (tallest - (columnHeight.get(lvl) ?? 0)) / 2
+    const x = lvl * (NODE_WIDTH + COLUMN_GAP)
+    for (const node of column) {
+      position.set(node.id, { x, y })
+      y += estimateNodeHeight(node) + ROW_GAP
+    }
+  }
+
+  return nodes.map((n) => ({ ...n, position: position.get(n.id) ?? n.position }))
+}
+
+// Detecta nós praticamente sobrepostos (fluxos salvos antes do layout automático).
+function hasOverlaps(nodes: FlowNode[]): boolean {
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const a = nodes[i].position
+      const b = nodes[j].position
+      if (Math.abs(a.x - b.x) < 60 && Math.abs(a.y - b.y) < 60) return true
+    }
+  }
+  return false
+}
+
+const defaultEdgeOptions = {
+  type: 'deletable',
+  markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: '#94a3b8' },
+  style: { strokeWidth: 1.5, stroke: '#94a3b8' },
+}
+
 // ─── Editor ──────────────────────────────────────────────────────────────────
 
 const inputClass =
@@ -510,6 +660,7 @@ function BotEditorPage() {
   const [savedFlash, setSavedFlash] = useState(false)
   const [simulatorOpen, setSimulatorOpen] = useState(false)
   const [statsOpen, setStatsOpen] = useState(false)
+  const [rfInstance, setRfInstance] = useState<ReactFlowInstance<FlowNode, Edge> | null>(null)
 
   const initialNodes: FlowNode[] = (
     bot.definition.nodes.length > 0
@@ -525,6 +676,7 @@ function BotEditorPage() {
     id: e.id,
     source: e.source,
     target: e.target,
+    type: 'deletable',
     ...(e.sourceHandle ? { sourceHandle: e.sourceHandle } : {}),
   }))
 
@@ -537,6 +689,13 @@ function BotEditorPage() {
   )
 
   const selectedNode = nodes.find((n) => n.selected) ?? null
+
+  function handleAutoLayout() {
+    setNodes((nds) => layoutFlow(nds, edges))
+    // setTimeout (não rAF): espera o React commitar as novas posições e o
+    // React Flow medir os nós antes de enquadrar, senão o fit sai torto/vazio.
+    setTimeout(() => rfInstance?.fitView({ padding: 0.2, duration: 400 }), 80)
+  }
 
   function updateNodeData(nodeId: string, patch: Record<string, JsonValue>) {
     setNodes((nds) =>
@@ -551,15 +710,19 @@ function BotEditorPage() {
 
   function addNode(kind: BotNodeKind) {
     const id = `${kind}-${crypto.randomUUID().slice(0, 8)}`
-    setNodes((nds) => [
-      ...nds,
-      {
-        id,
-        type: kind,
-        position: { x: 120 + Math.random() * 160, y: 120 + nds.length * 40 },
-        data: defaultData(kind),
-      },
-    ])
+    setNodes((nds) => {
+      // Posiciona o novo nó à direita do fluxo atual, evitando sobreposição.
+      const rightmost = nds.reduce((max, n) => Math.max(max, n.position.x), 0)
+      return [
+        ...nds,
+        {
+          id,
+          type: kind,
+          position: { x: rightmost + NODE_WIDTH + COLUMN_GAP, y: 120 },
+          data: defaultData(kind),
+        },
+      ]
+    })
   }
 
   function buildPayload() {
@@ -623,7 +786,8 @@ function BotEditorPage() {
 
   return (
     <div className="flex h-screen flex-col bg-neutral-50">
-      <header className="flex h-14 shrink-0 flex-wrap items-center gap-2 border-b border-neutral-200 bg-neutral-0 px-3">
+      <header className="flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-x-2 gap-y-2 border-b border-neutral-200 bg-neutral-0 px-3 py-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
         <Link
           to="/inbox/bot"
           aria-label="Voltar para a lista de fluxos"
@@ -665,9 +829,13 @@ function BotEditorPage() {
             className="h-8 w-48 rounded-md border border-neutral-200 bg-neutral-0 px-2 text-xs text-dark-800 placeholder:text-neutral-400 focus:border-brand-500 focus:outline-none"
           />
         )}
+        </div>
 
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           {savedFlash && <span className="text-xs font-medium text-success-500">Salvo</span>}
+          <Button size="sm" variant="ghost" icon={LayoutGrid} onClick={handleAutoLayout}>
+            Organizar
+          </Button>
           <Button size="sm" variant="ghost" icon={FlaskConical} onClick={() => setSimulatorOpen(true)}>
             Simular
           </Button>
@@ -730,7 +898,8 @@ function BotEditorPage() {
             })}
           </div>
           <p className="px-1 pt-4 text-[11px] leading-relaxed text-neutral-400">
-            Arraste das saídas de um nó até o próximo para conectar as etapas.
+            Arraste das saídas de um nó até o próximo para conectar as etapas. Para remover uma
+            conexão, passe o mouse sobre ela e clique no ×.
           </p>
         </aside>
 
@@ -743,10 +912,22 @@ function BotEditorPage() {
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            defaultEdgeOptions={defaultEdgeOptions}
+            connectionLineType={ConnectionLineType.SmoothStep}
             deleteKeyCode={['Backspace', 'Delete']}
+            proOptions={{ hideAttribution: true }}
+            onInit={(instance) => {
+              setRfInstance(instance)
+              // Fluxos salvos antes do layout automático abrem embolados: arruma na hora.
+              if (hasOverlaps(nodes)) setNodes((nds) => layoutFlow(nds, edges))
+              // Sempre enquadra ao abrir, depois das posições/medidas assentarem.
+              setTimeout(() => instance.fitView({ padding: 0.2, duration: 300 }), 120)
+            }}
+            minZoom={0.2}
             fitView
           >
-            <Background gap={20} />
+            <Background gap={20} color="#e2e8f0" />
             <Controls showInteractive={false} />
           </ReactFlow>
         </div>

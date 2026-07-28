@@ -887,7 +887,7 @@ function DealModal({
             </select>
             {editing?.conversationId && (
               <Link
-                to="/inbox/c/$conversationId"
+                to="/inbox/atendimento/c/$conversationId"
                 params={{ conversationId: editing.conversationId }}
                 className="inline-block text-xs font-semibold text-brand-600 hover:text-brand-700"
               >

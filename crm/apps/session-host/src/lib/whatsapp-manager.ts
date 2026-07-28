@@ -24,6 +24,42 @@ export const socketMap = new Map<string, SocketEntry>()
 const reconnectAttempts = new Map<string, number>()
 const MAX_RECONNECT_DELAY_MS = 60_000
 
+// Throttle da foto de perfil: buscamos no máximo 1x por contato a cada 24h por
+// processo (o profilePictureUrl é uma chamada de rede sujeita a rate limit do
+// WhatsApp). Chave: `${connectionId}:${jid}`.
+const avatarFetchedAt = new Map<string, number>()
+const AVATAR_REFETCH_MS = 24 * 60 * 60 * 1000
+
+// Busca a foto de perfil do remetente e sobe no MinIO do CRM. Retorna o
+// storageKey (para o worker gravar em contacts.avatar_storage_key) ou null
+// (sem foto, privacidade, rate limit ou falha — nunca derruba a mensagem).
+// Throttled: só refaz depois de AVATAR_REFETCH_MS para o mesmo contato.
+async function maybeFetchWhatsAppAvatar(
+  socket: any,
+  workspaceId: string,
+  connectionId: string,
+  jid: string,
+  externalId: string,
+): Promise<string | null> {
+  const throttleKey = `${connectionId}:${jid}`
+  const last = avatarFetchedAt.get(throttleKey)
+  if (last && Date.now() - last < AVATAR_REFETCH_MS) return null
+  avatarFetchedAt.set(throttleKey, Date.now())
+  try {
+    const url: string | undefined = await socket.profilePictureUrl(jid, 'image')
+    if (!url) return null
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const bytes = new Uint8Array(await res.arrayBuffer())
+    const storageKey = `${workspaceId}/avatars/whatsapp/${externalId.replace(/[^\w.-]/g, '_')}.jpg`
+    await putObject(storageKey, bytes, 'image/jpeg')
+    return storageKey
+  } catch {
+    // Sem foto pública / privacidade / rate limit: contato fica só com iniciais.
+    return null
+  }
+}
+
 const silentLogger: Record<string, unknown> = {
   level: 'silent',
   trace: () => {},
@@ -187,15 +223,24 @@ async function handleInboundMessage(
 
   const ts = Number(msg?.messageTimestamp ?? 0)
   const pushName = typeof msg?.pushName === 'string' && msg.pushName.trim() ? msg.pushName.trim() : null
+  const externalId = resolveExternalId(msg)
+  // Foto de perfil (throttled): jid real do chat p/ o profilePictureUrl.
+  const avatarJid: string = msg?.key?.remoteJid ?? `${externalId}@s.whatsapp.net`
+  const avatarStorageKey = await maybeFetchWhatsAppAvatar(socket, workspaceId, connectionId, avatarJid, externalId)
+  const metadata: Record<string, unknown> = {
+    // Extra fora do contrato tipado: o worker usa pushName para nomear o
+    // contato e avatarStorageKey para a foto de perfil.
+    ...(pushName ? { pushName } : {}),
+    ...(avatarStorageKey ? { avatarStorageKey } : {}),
+  }
   const message = {
     externalMessageId,
-    from: { channel: 'whatsapp', externalId: resolveExternalId(msg) },
+    from: { channel: 'whatsapp', externalId },
     to: { channel: 'whatsapp', externalId: (socket as any).user?.id ?? connectionId },
     text,
     attachments,
     occurredAt: ts > 0 ? new Date(ts * 1000).toISOString() : new Date().toISOString(),
-    // Extra fora do contrato tipado: o worker usa pushName para nomear o contato.
-    ...(pushName ? { metadata: { pushName } } : {}),
+    ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
   } satisfies ChannelMessage & { metadata?: Record<string, unknown> }
 
   enqueueInbound({ kind: 'message', workspaceId, connectionId, message }, `inbound:message:${connectionId}:${externalMessageId}`)

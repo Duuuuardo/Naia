@@ -1,5 +1,5 @@
 import { createFileRoute, redirect, Link } from '@tanstack/react-router'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import {
   ArrowLeft,
   ArrowRightLeft,
@@ -11,6 +11,8 @@ import {
   Clock,
   CircleCheck,
   Copy,
+  Hash,
+  MoreHorizontal,
   PanelRight,
   Pause,
   Pencil,
@@ -18,14 +20,15 @@ import {
   Star,
   UserPlus,
   X,
+  type LucideIcon,
 } from 'lucide-react'
-import { InboxShell } from '../../../components/inbox-shell'
-import { Button, Modal, getInitials } from '../../../components/ui'
-import { Composer } from '../../../components/inbox/composer'
-import { MessageAttachments } from '../../../components/inbox/message-attachments'
-import { TransferModal } from '../../../components/inbox/transfer-modal'
-import { ConversationTags } from '../../../components/inbox/conversation-tags'
-import { ContactPanel } from '../../../components/inbox/contact-panel'
+import { Button, Modal } from '../../../../components/ui'
+import { ContactAvatar } from '../../../../components/inbox/contact-avatar'
+import { Composer } from '../../../../components/inbox/composer'
+import { MessageAttachments } from '../../../../components/inbox/message-attachments'
+import { TransferModal } from '../../../../components/inbox/transfer-modal'
+import { ConversationTags } from '../../../../components/inbox/conversation-tags'
+import { ContactPanel } from '../../../../components/inbox/contact-panel'
 import {
   getInboxAgent,
   fetchConversations,
@@ -35,24 +38,31 @@ import {
   renameConversation,
   assignToMe,
   resolveConversation,
-} from '../../../lib/inbox-session'
+} from '../../../../lib/inbox-session'
 import {
   fetchConversationPage,
   markConversationRead,
   markConversationPending,
   reopenConversation,
   sendThreadMessage,
+  sendConversationProtocol,
+  resendCsatSurvey,
   stopConversationBot,
   type ThreadMessageItem,
   type ThreadTransferItem,
   type ThreadRatingItem,
-} from '../../../lib/inbox-thread'
-import { type ConversationNoteItem } from '../../../lib/inbox-notes'
-import { useInboxSocket } from '../../../lib/use-inbox-socket'
-import { createHeadConfig } from '../../../lib/seo'
+} from '../../../../lib/inbox-thread'
+import { type ConversationNoteItem } from '../../../../lib/inbox-notes'
+import { useInboxSocket } from '../../../../lib/use-inbox-socket'
+import { createHeadConfig } from '../../../../lib/seo'
 
-export const Route = createFileRoute('/inbox/c/$conversationId')({
+export const Route = createFileRoute('/inbox/atendimento/c/$conversationId')({
   head: () => createHeadConfig('Conversa — Naia CRM'),
+  // atendimento: pré-seleciona um ciclo (#N) ao abrir a partir do histórico.
+  validateSearch: (search: Record<string, unknown>): { atendimento?: number } => {
+    const n = Number(search.atendimento)
+    return Number.isInteger(n) && n > 0 ? { atendimento: n } : {}
+  },
   beforeLoad: async () => {
     const agent = await getInboxAgent()
     if (!agent) throw redirect({ to: '/inbox/login' })
@@ -115,10 +125,11 @@ function mergeLatestPage(prev: ThreadMessageItem[], page: ThreadMessageItem[]): 
 
 function ConversationView() {
   const { conversationId } = Route.useParams()
+  const search = Route.useSearch()
   const initial = Route.useLoaderData()
   const [messages, setMessages] = useState<ThreadMessageItem[]>(initial.messages)
   const [transfers, setTransfers] = useState<ThreadTransferItem[]>(initial.transfers)
-  const [rating, setRating] = useState<ThreadRatingItem | null>(initial.rating)
+  const [ratings, setRatings] = useState<ThreadRatingItem[]>(initial.ratings)
   const [status, setStatus] = useState(initial.conversation?.status ?? 'open')
   const [botFlowName, setBotFlowName] = useState<string | null>(initial.activeBotFlow?.name ?? null)
   // Confirmação do takeover (interromper o bot que atende a conversa).
@@ -140,6 +151,8 @@ function ConversationView() {
   const [blocked, setBlocked] = useState(initial.contact?.blocked ?? false)
   // Feedback efêmero de erro de ação (409 de transição, envio bloqueado…).
   const [actionError, setActionError] = useState<string | null>(null)
+  // Feedback efêmero de sucesso (protocolo/avaliação enviados).
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null)
   const [actionBusy, setActionBusy] = useState(false)
   const [protocolCopied, setProtocolCopied] = useState(false)
   // Painel do contato: aside no desktop (lg+), Modal no mobile.
@@ -150,10 +163,19 @@ function ConversationView() {
   // scrollHeight/scrollTop antes do prepend e compensa depois.
   const prependAnchor = useRef<{ height: number; top: number } | null>(null)
   const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const contact = initial.contact
   const contactDetail = initial.contactDetail
   const protocol = initial.conversation?.protocol ?? null
+  // Filtro por atendimento (ciclo resolve→reopen). 'all' = thread inteira.
+  // Inicia no ciclo indicado pela URL (link do histórico), senão mostra tudo.
+  const [atendimentoFilter, setAtendimentoFilter] = useState<number | 'all'>(search.atendimento ?? 'all')
+  // Atendimento corrente: maior seq entre a conversa e as mensagens carregadas.
+  const currentAtendimentoSeq = messages.reduce(
+    (max, m) => Math.max(max, m.atendimentoSeq ?? 1),
+    initial.conversation?.atendimentoSeq ?? 1,
+  )
 
   function flashError(message: string) {
     setActionError(message)
@@ -161,11 +183,17 @@ function ConversationView() {
     errorTimer.current = setTimeout(() => setActionError(null), 5000)
   }
 
+  function flashSuccess(message: string) {
+    setActionSuccess(message)
+    if (successTimer.current) clearTimeout(successTimer.current)
+    successTimer.current = setTimeout(() => setActionSuccess(null), 4000)
+  }
+
   async function refresh() {
     const data = await fetchConversationPage({ data: { conversationId, limit: 50 } })
     setMessages(data.messages)
     setTransfers(data.transfers)
-    setRating(data.rating)
+    setRatings(data.ratings)
     setNotes(data.notes)
     setHasMore(data.hasMore)
     setNextCursor(data.nextCursor)
@@ -177,7 +205,7 @@ function ConversationView() {
     // Reseta ao trocar de conversa.
     setMessages(initial.messages)
     setTransfers(initial.transfers)
-    setRating(initial.rating)
+    setRatings(initial.ratings)
     setStatus(initial.conversation?.status ?? 'open')
     setBotFlowName(initial.activeBotFlow?.name ?? null)
     setTitle(initial.conversation?.title ?? null)
@@ -187,6 +215,8 @@ function ConversationView() {
     setNextCursor(initial.nextCursor)
     setBlocked(initial.contact?.blocked ?? false)
     setActionError(null)
+    setActionSuccess(null)
+    setAtendimentoFilter('all')
     setEditingTitle(false)
     setPanelMobileOpen(false)
     prependAnchor.current = null
@@ -194,11 +224,27 @@ function ConversationView() {
     void markConversationRead({ data: { conversationId } })
   }, [conversationId, initial])
 
-  const timeline: TimelineEntry[] = [
+  const sortedTimeline: TimelineEntry[] = [
     ...messages.map((m) => ({ kind: 'message' as const, at: m.sentAt, message: m })),
     ...transfers.map((t) => ({ kind: 'transfer' as const, at: t.createdAt, transfer: t })),
-    ...(rating ? [{ kind: 'rating' as const, at: rating.createdAt, rating }] : []),
+    ...ratings.map((r) => ({ kind: 'rating' as const, at: r.createdAt, rating: r })),
   ].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
+
+  // Carimba cada entrada com o atendimento a que pertence: mensagens e avaliações
+  // têm o seq próprio; transferências herdam o da entrada anterior (acontecem
+  // dentro de um atendimento em curso).
+  let carrySeq = 1
+  const timeline: (TimelineEntry & { seq: number })[] = sortedTimeline.map((entry) => {
+    if (entry.kind === 'message') carrySeq = entry.message.atendimentoSeq ?? carrySeq
+    else if (entry.kind === 'rating') carrySeq = entry.rating.atendimentoSeq ?? carrySeq
+    return { ...entry, seq: carrySeq }
+  })
+
+  // Atendimentos presentes na thread carregada (para o filtro).
+  const atendimentos = [...new Set(timeline.map((e) => e.seq))].sort((a, b) => a - b)
+  const hasMultipleAtendimentos = atendimentos.length > 1
+  const visibleTimeline =
+    atendimentoFilter === 'all' ? timeline : timeline.filter((e) => e.seq === atendimentoFilter)
 
   useIsomorphicLayoutEffect(() => {
     const el = scrollRef.current
@@ -232,6 +278,20 @@ function ConversationView() {
       setLoadingOlder(false)
     }
   }
+
+  // Sincroniza o filtro com a URL (?atendimento=N): abrir um ciclo pelo histórico
+  // sem trocar de conversa não recarrega o loader, então reagimos aqui.
+  useEffect(() => {
+    setAtendimentoFilter(search.atendimento ?? 'all')
+  }, [conversationId, search.atendimento])
+
+  // Se a URL pediu um atendimento que ainda não está na página carregada, puxa
+  // páginas anteriores até ele aparecer (ou acabarem as mensagens).
+  useEffect(() => {
+    if (typeof atendimentoFilter !== 'number' || atendimentos.includes(atendimentoFilter)) return
+    if (hasMore && !loadingOlder) void loadOlder()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [atendimentoFilter, atendimentos, hasMore, loadingOlder])
 
   // Tempo real: mensagens, status de leitura, transferências e bot.
   useInboxSocket(async (event) => {
@@ -271,6 +331,12 @@ function ConversationView() {
     if (event.type === 'conversation:pending' && event.conversationId === conversationId) {
       setStatus('pending')
     }
+    if (event.type === 'conversation:rated' && event.conversationId === conversationId) {
+      // Cliente avaliou: anexa a nota na thread (idempotente por id — o evento
+      // pode chegar mais de uma vez em reconexões do WS).
+      const rating = event.rating as ThreadRatingItem
+      setRatings((prev) => (prev.some((r) => r.id === rating.id) ? prev : [...prev, rating]))
+    }
   })
 
   async function handleSend({ content, attachments }: { content: string; attachments: { fileId: string; filename: string; kind: 'image' | 'video' | 'audio' | 'document'; storageKey: string }[] }) {
@@ -286,6 +352,7 @@ function ConversationView() {
       kind: attachments[0]?.kind ?? 'text',
       status: 'queued',
       sentAt: new Date().toISOString(),
+      atendimentoSeq: currentAtendimentoSeq,
       agentName: null,
       attachments: attachments.map((a) => ({
         storageKey: a.storageKey,
@@ -362,6 +429,32 @@ function ConversationView() {
     setStatus('pending')
   }
 
+  // Envia o protocolo ao cliente pelo canal (a mensagem entra na thread via WS).
+  async function handleSendProtocol() {
+    if (actionBusy) return
+    setActionBusy(true)
+    const result = await sendConversationProtocol({ data: { conversationId } })
+    setActionBusy(false)
+    if (!result.ok) {
+      flashError(result.message ?? 'Não foi possível enviar o protocolo.')
+      return
+    }
+    flashSuccess('Protocolo enviado ao cliente.')
+  }
+
+  // Reenvia a pesquisa de avaliação (CSAT) — só em conversa resolvida.
+  async function handleResendCsat() {
+    if (actionBusy) return
+    setActionBusy(true)
+    const result = await resendCsatSurvey({ data: { conversationId } })
+    setActionBusy(false)
+    if (!result.ok) {
+      flashError(result.message ?? 'Não foi possível enviar a avaliação.')
+      return
+    }
+    flashSuccess('Pesquisa de avaliação enviada ao cliente.')
+  }
+
   async function handleCopyProtocol() {
     if (protocol == null) return
     try {
@@ -425,23 +518,21 @@ function ConversationView() {
   )
 
   return (
-    <InboxShell agentName={initial.agent.name} role={initial.agent.role}>
-      <div className="flex h-full">
+    <Fragment>
+      <div className="flex h-full w-full">
         {/* Thread principal */}
         <div className="flex h-full min-w-0 flex-1 flex-col">
           {/* Header */}
           <header className="flex items-center justify-between gap-2 border-b border-neutral-200 bg-neutral-0 px-5 py-3">
             <div className="flex min-w-0 items-center gap-3">
               <Link
-                to="/inbox"
+                to="/inbox/atendimento"
                 aria-label="Voltar para a lista de conversas"
-                className="grid size-8 shrink-0 place-items-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-dark-800"
+                className="grid size-8 shrink-0 place-items-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-dark-800 md:hidden"
               >
                 <ArrowLeft size={16} />
               </Link>
-              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-neutral-100 text-xs font-bold text-dark-800">
-                {getInitials(contact?.name ?? '?')}
-              </span>
+              <ContactAvatar name={contact?.name ?? '?'} url={contact?.avatarUrl} size={36} className="text-xs" />
               <div className="min-w-0">
                 {editingTitle ? (
                   <form
@@ -545,27 +636,32 @@ function ConversationView() {
                   Interromper bot
                 </Button>
               )}
-              <Button variant="secondary" size="sm" icon={ArrowRightLeft} onClick={() => setTransferOpen(true)}>
-                Transferir
-              </Button>
-              <Button variant="secondary" size="sm" icon={UserPlus} onClick={handleAssign}>
-                Pegar
-              </Button>
-              {status === 'resolved' && (
+              {status !== 'resolved' && (
+                <Button variant="secondary" size="sm" icon={UserPlus} onClick={handleAssign}>
+                  Pegar
+                </Button>
+              )}
+              {status === 'resolved' ? (
                 <Button variant="secondary" size="sm" icon={RotateCcw} loading={actionBusy} onClick={handleReopen}>
                   Reabrir
                 </Button>
-              )}
-              {status === 'assigned' && (
-                <Button variant="secondary" size="sm" icon={Pause} loading={actionBusy} onClick={handlePending}>
-                  Marcar pendente
-                </Button>
-              )}
-              {status !== 'resolved' && (
-                <Button variant="secondary" size="sm" icon={CircleCheck} onClick={handleResolve}>
+              ) : (
+                <Button variant="primary" size="sm" icon={CircleCheck} onClick={handleResolve}>
                   Resolver
                 </Button>
               )}
+              <ActionMenu
+                items={[
+                  { label: 'Transferir', icon: ArrowRightLeft, onClick: () => setTransferOpen(true) },
+                  { label: 'Enviar protocolo', icon: Hash, onClick: handleSendProtocol },
+                  ...(status === 'assigned'
+                    ? [{ label: 'Marcar pendente', icon: Pause, onClick: handlePending }]
+                    : []),
+                  ...(status === 'resolved'
+                    ? [{ label: 'Enviar avaliação', icon: Star, onClick: handleResendCsat }]
+                    : []),
+                ]}
+              />
               <button
                 type="button"
                 onClick={togglePanel}
@@ -587,29 +683,72 @@ function ConversationView() {
             </div>
           )}
 
+          {/* Feedback de sucesso (protocolo/avaliação enviados) */}
+          {actionSuccess && (
+            <div role="status" className="border-b border-success-500/25 bg-success-500/5 px-5 py-2">
+              <p className="text-xs text-success-500">{actionSuccess}</p>
+            </div>
+          )}
+
+          {/* Filtro por atendimento (só aparece quando há mais de um) */}
+          {hasMultipleAtendimentos && (
+            <div className="flex items-center gap-1.5 overflow-x-auto border-b border-neutral-200 bg-neutral-0 px-5 py-2">
+              <span className="shrink-0 text-[11px] font-medium text-neutral-400">Atendimento:</span>
+              <AtendimentoChip active={atendimentoFilter === 'all'} onClick={() => setAtendimentoFilter('all')}>
+                Todos
+              </AtendimentoChip>
+              {atendimentos.map((seq) => (
+                <AtendimentoChip
+                  key={seq}
+                  active={atendimentoFilter === seq}
+                  onClick={() => setAtendimentoFilter(seq)}
+                >
+                  #{seq}
+                  {seq === currentAtendimentoSeq ? ' · atual' : ''}
+                </AtendimentoChip>
+              ))}
+            </div>
+          )}
+
           {/* Mensagens + eventos de transferência */}
           <div ref={scrollRef} className="flex-1 space-y-2 overflow-y-auto bg-neutral-50 px-5 py-4">
-            {hasMore && (
+            {hasMore && atendimentoFilter === 'all' && (
               <div className="flex justify-center pb-1">
                 <Button variant="secondary" size="sm" loading={loadingOlder} onClick={loadOlder}>
                   Carregar mensagens anteriores
                 </Button>
               </div>
             )}
-            {timeline.length === 0 ? (
+            {visibleTimeline.length === 0 ? (
               <div className="grid h-full place-items-center text-sm text-neutral-400">
                 Nenhuma mensagem ainda.
               </div>
             ) : (
-              timeline.map((entry) =>
-                entry.kind === 'message' ? (
-                  <MessageBubble key={entry.message.id} message={entry.message} />
-                ) : entry.kind === 'transfer' ? (
-                  <TransferEvent key={entry.transfer.id} transfer={entry.transfer} />
-                ) : (
-                  <RatingEvent key={entry.rating.id} rating={entry.rating} />
-                ),
-              )
+              visibleTimeline.map((entry, index) => {
+                const prev = visibleTimeline[index - 1]
+                // Divisor no início de cada atendimento (só quando há mais de um).
+                const showDivider = hasMultipleAtendimentos && (!prev || prev.seq !== entry.seq)
+                const key =
+                  entry.kind === 'message'
+                    ? entry.message.id
+                    : entry.kind === 'transfer'
+                      ? entry.transfer.id
+                      : entry.rating.id
+                return (
+                  <Fragment key={key}>
+                    {showDivider && (
+                      <AtendimentoDivider seq={entry.seq} current={entry.seq === currentAtendimentoSeq} />
+                    )}
+                    {entry.kind === 'message' ? (
+                      <MessageBubble message={entry.message} />
+                    ) : entry.kind === 'transfer' ? (
+                      <TransferEvent transfer={entry.transfer} />
+                    ) : (
+                      <RatingEvent rating={entry.rating} />
+                    )}
+                  </Fragment>
+                )
+              })
             )}
           </div>
 
@@ -668,31 +807,152 @@ function ConversationView() {
           responder esta conversa e o atendimento fica com os agentes. Deseja continuar?
         </p>
       </Modal>
-    </InboxShell>
+    </Fragment>
+  )
+}
+
+// Chip do filtro de atendimento.
+function AtendimentoChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+        active
+          ? 'bg-brand-500 text-white'
+          : 'bg-neutral-100 text-neutral-500 hover:bg-neutral-200 hover:text-dark-800'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+// Divisor entre atendimentos na thread: linha com um selo central "Atendimento #N".
+function AtendimentoDivider({ seq, current }: { seq: number; current: boolean }) {
+  return (
+    <div className="flex items-center gap-3 py-2">
+      <span className="h-px flex-1 bg-neutral-200" />
+      <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 bg-neutral-0 px-3 py-1 text-[11px] font-semibold text-neutral-500">
+        Atendimento #{seq}
+        {current && <span className="rounded-full bg-success-500/10 px-1.5 py-0.5 text-[10px] text-success-500">atual</span>}
+      </span>
+      <span className="h-px flex-1 bg-neutral-200" />
+    </div>
+  )
+}
+
+// Menu compacto "Mais ações": agrupa ações secundárias para não lotar o
+// cabeçalho. Fecha ao clicar fora ou apertar Esc.
+type ActionMenuItem = { label: string; icon: LucideIcon; onClick: () => void; danger?: boolean }
+
+function ActionMenu({ items }: { items: ActionMenuItem[] }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Mais ações"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="Mais ações"
+        className={`grid size-8 shrink-0 place-items-center rounded-lg transition-colors ${
+          open ? 'bg-neutral-100 text-dark-800' : 'text-neutral-400 hover:bg-neutral-100 hover:text-dark-800'
+        }`}
+      >
+        <MoreHorizontal size={16} />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="animate-in absolute right-0 top-10 z-20 w-52 overflow-hidden rounded-lg border border-neutral-200 bg-neutral-0 py-1 shadow-lg"
+        >
+          {items.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false)
+                item.onClick()
+              }}
+              className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors hover:bg-neutral-50 ${
+                item.danger ? 'text-error-500' : 'text-dark-800'
+              }`}
+            >
+              <item.icon size={15} aria-hidden="true" className="shrink-0" />
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
 function MessageBubble({ message }: { message: ThreadMessageItem }) {
   const outbound = message.direction === 'outbound'
+  // Saída sem agente = mensagem automática (chatbot, CSAT, fora de horário).
+  // Distinguir dá clareza e evita uma "parede" de bolhas na cor da marca.
+  const automated = outbound && !message.agentName
   const hasAttachments = (message.attachments?.length ?? 0) > 0
   const hasText = message.content.trim().length > 0
+
+  // Três origens visuais: recebida (esquerda, branca) · agente (direita, marca) ·
+  // automática (direita, clara com selo de bot).
+  const bubbleClass = !outbound
+    ? 'border border-neutral-200 bg-neutral-0 text-dark-800'
+    : automated
+      ? 'border border-neutral-200 bg-neutral-0 text-dark-800'
+      : 'bg-brand-500 text-white'
+  const metaClass = outbound && !automated ? 'text-white/70' : 'text-neutral-400'
+
   return (
     <div className={`message-in flex flex-col ${outbound ? 'items-end' : 'items-start'}`}>
-      {outbound && message.agentName && (
-        <span className="mb-0.5 pr-1 text-[10px] text-neutral-400">{message.agentName}</span>
-      )}
-      <div
-        className={`max-w-[70%] rounded-2xl px-3.5 py-2 text-sm ${
-          outbound ? 'bg-brand-500 text-white' : 'border border-neutral-200 bg-neutral-0 text-dark-800'
-        }`}
-      >
+      {outbound &&
+        (message.agentName ? (
+          <span className="mb-0.5 pr-1 text-[10px] text-neutral-400">{message.agentName}</span>
+        ) : (
+          <span className="mb-0.5 flex items-center gap-1 pr-1 text-[10px] font-medium text-neutral-400">
+            <Bot size={10} aria-hidden="true" />
+            Automático
+          </span>
+        ))}
+      <div className={`max-w-[70%] rounded-2xl px-3.5 py-2 text-sm shadow-2xs ${bubbleClass}`}>
         {hasAttachments && (
           <div className={hasText ? 'mb-1.5' : ''}>
             <MessageAttachments attachments={message.attachments!} />
           </div>
         )}
         {hasText && <p className="whitespace-pre-wrap break-words">{message.content}</p>}
-        <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${outbound ? 'text-white/70' : 'text-neutral-400'}`}>
+        <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${metaClass}`}>
           <span>{new Date(message.sentAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
           {outbound && <MessageStatus status={message.status} />}
         </div>

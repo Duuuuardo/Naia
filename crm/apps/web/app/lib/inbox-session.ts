@@ -180,6 +180,8 @@ export type ConversationListItem = {
   updatedAt: string
   contactId: string
   contactName: string
+  // Avatar efetivo do contato (manual OU foto do canal). Null = usa iniciais.
+  contactAvatarUrl: string | null
   // Null quando o contato ainda não tem identity primária (legado/sem canal).
   originChannel: 'whatsapp' | 'telegram' | null
   lastMessage: ConversationLastMessage | null
@@ -560,6 +562,8 @@ export type InboxAdminSettings = {
   csatEnabled: boolean
   csatMessage: string | null
   csatThankYouMessage: string | null
+  // Prefixa o primeiro nome do atendente (em negrito) no texto enviado ao contato.
+  identifyAgent: boolean
 }
 
 export const fetchAdminSettings = createServerFn().handler(async (): Promise<InboxAdminSettings> => {
@@ -578,6 +582,7 @@ export const updateAdminSettings = createServerFn()
       csatEnabled?: boolean
       csatMessage?: string | null
       csatThankYouMessage?: string | null
+      identifyAgent?: boolean
     }) => data,
   )
   .handler(async ({ data }): Promise<InboxAdminSettings> => {
@@ -692,7 +697,12 @@ export type ContactDetail = {
   email: string | null
   company: string | null
   birthDate: string | null
+  // avatarUrl = avatar manual (editável no form). avatarDisplayUrl = avatar
+  // efetivo exibido (manual OU foto do canal via presigned URL). avatarStorageKey
+  // acompanha para o form saber se há foto do canal a exibir/remover.
   avatarUrl: string | null
+  avatarStorageKey: string | null
+  avatarDisplayUrl: string | null
   customFields: Record<string, JsonValue>
   tags: string[]
   notes: string | null
@@ -741,6 +751,7 @@ export type ContactTransferItem = {
 
 export type ContactHistoryEntry = {
   id: string
+  atendimentoSeq: number
   status: string
   createdAt: string
   resolvedAt: string | null
@@ -1261,12 +1272,22 @@ export const fetchBotStats = createServerFn()
 
 // ─── Respostas rápidas ───────────────────────────────────────────────────────
 
+// Anexo de resposta rápida já resolvido pela API (mesmo shape de ComposerAttachment).
+export type QuickReplyAttachment = {
+  fileId: string
+  filename: string
+  kind: 'image' | 'video' | 'audio' | 'document'
+  storageKey: string
+}
+
 export type QuickReplyItem = {
   id: string
   workspaceId: string
   shortcut: string
   title: string
   content: string
+  attachmentFileIds: string[]
+  attachments: QuickReplyAttachment[]
   createdByAgentId: string
   createdAt: string
 }
@@ -1279,18 +1300,27 @@ export const fetchQuickReplies = createServerFn()
   })
 
 export const createQuickReply = createServerFn()
-  .validator((data: { shortcut: string; title: string; content: string }) => data)
+  .validator((data: { shortcut: string; title: string; content: string; attachmentFileIds?: string[] }) => data)
   .handler(async ({ data }): Promise<QuickReplyItem | null> => {
     const res = await apiClient(inboxToken()).inbox['quick-replies'].post({
       shortcut: data.shortcut,
       title: data.title,
       content: data.content,
+      attachmentFileIds: data.attachmentFileIds,
     })
     return ((res.data as { quickReply?: QuickReplyItem })?.quickReply ?? null) as QuickReplyItem | null
   })
 
 export const updateQuickReply = createServerFn()
-  .validator((data: { quickReplyId: string; shortcut?: string; title?: string; content?: string }) => data)
+  .validator(
+    (data: {
+      quickReplyId: string
+      shortcut?: string
+      title?: string
+      content?: string
+      attachmentFileIds?: string[]
+    }) => data,
+  )
   .handler(async ({ data }): Promise<QuickReplyItem | null> => {
     const { quickReplyId, ...body } = data
     const res = await apiClient(inboxToken()).inbox['quick-replies']({ id: quickReplyId }).patch(body)
@@ -1332,6 +1362,28 @@ export const fetchReportsSummary = createServerFn()
   .handler(async ({ data }): Promise<ReportsSummary | null> => {
     const res = await apiClient(inboxToken()).inbox.reports.summary.get({ query: { days: data.days } })
     return (res.data ?? null) as ReportsSummary | null
+  })
+
+// Desempenho pessoal do agente autenticado (qualquer papel).
+export type ReportsPersonal = {
+  periodDays: number
+  assignedByStatus: { status: string; count: number }[]
+  resolvedCount: number
+  messagesSent: number
+  transfersMade: number
+  firstResponse: { avgSeconds: number | null; conversations: number }
+  csat: {
+    averageScore: number | null
+    totalRatings: number
+    distribution: { score: number; count: number }[]
+  }
+}
+
+export const fetchPersonalReport = createServerFn()
+  .validator((data: { days?: number }) => data)
+  .handler(async ({ data }): Promise<ReportsPersonal | null> => {
+    const res = await apiClient(inboxToken()).inbox.reports.me.get({ query: { days: data.days } })
+    return (res.data ?? null) as ReportsPersonal | null
   })
 
 // ─── Chat interno ────────────────────────────────────────────────────────────

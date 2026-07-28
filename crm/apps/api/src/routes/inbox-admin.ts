@@ -960,6 +960,7 @@ export const inboxAdminRoutes = new Elysia({ name: 'inbox-admin' })
         csatEnabled: created.csatEnabled,
         csatMessage: created.csatMessage,
         csatThankYouMessage: created.csatThankYouMessage,
+        identifyAgent: created.identifyAgent,
       }
     }
 
@@ -971,6 +972,7 @@ export const inboxAdminRoutes = new Elysia({ name: 'inbox-admin' })
       csatEnabled: settings.csatEnabled,
       csatMessage: settings.csatMessage,
       csatThankYouMessage: settings.csatThankYouMessage,
+      identifyAgent: settings.identifyAgent,
     }
   })
 
@@ -1019,6 +1021,7 @@ export const inboxAdminRoutes = new Elysia({ name: 'inbox-admin' })
           ...(body.csatEnabled !== undefined ? { csatEnabled: body.csatEnabled } : {}),
           ...(body.csatMessage !== undefined ? { csatMessage: body.csatMessage } : {}),
           ...(body.csatThankYouMessage !== undefined ? { csatThankYouMessage: body.csatThankYouMessage } : {}),
+          ...(body.identifyAgent !== undefined ? { identifyAgent: body.identifyAgent } : {}),
           updatedAt: new Date(),
         })
         .where(eq(workspaceSettings.workspaceId, agent.workspaceId))
@@ -1032,6 +1035,7 @@ export const inboxAdminRoutes = new Elysia({ name: 'inbox-admin' })
         csatEnabled: updated.csatEnabled,
         csatMessage: updated.csatMessage,
         csatThankYouMessage: updated.csatThankYouMessage,
+        identifyAgent: updated.identifyAgent,
       }
     },
     {
@@ -1057,6 +1061,7 @@ export const inboxAdminRoutes = new Elysia({ name: 'inbox-admin' })
         csatEnabled: t.Optional(t.Boolean()),
         csatMessage: t.Optional(t.Union([t.String({ maxLength: 1000 }), t.Null()])),
         csatThankYouMessage: t.Optional(t.Union([t.String({ maxLength: 1000 }), t.Null()])),
+        identifyAgent: t.Optional(t.Boolean()),
       }),
     },
   )

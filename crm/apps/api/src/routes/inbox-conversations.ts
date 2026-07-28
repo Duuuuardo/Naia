@@ -18,6 +18,7 @@ import {
   queueMembers,
   queues,
   tags,
+  workspaceSettings,
   type MessageAttachment,
 } from '@crm/db/schema'
 import { CRM_QUEUES, defaultCrmJobOptions, getCrmQueue, type OutboundMessageJob } from '@crm/queue'
@@ -28,6 +29,7 @@ import { generateId } from '../lib/crypto'
 import { assignConversation, resolveConversation, reopenConversation, markPending, canTransition, InvalidTransitionError } from '../services/conversation-state'
 import { maybeSendCsatSurvey } from '../services/csat'
 import { wsHub } from '../services/ws-hub'
+import { resolveContactAvatarUrl } from '../lib/contact-avatar'
 
 // Fila de envio real (worker consome e chama o session-host via HTTP interno).
 // Instância única e lazy para não exigir Redis no import do módulo.
@@ -37,6 +39,32 @@ function getOutboundQueue() {
     outboundQueue = getCrmQueue<OutboundMessageJob>(CRM_QUEUES.OUTBOUND_MESSAGES)
   }
   return outboundQueue
+}
+
+// Takeover humano (Pegar/atribuir/transferir): cancela a sessão de bot viva e
+// limpa o badge "Chatbot atendendo". Retorna o flowId cancelado (para broadcast)
+// ou null se não havia bot ativo. O worker também respeita o dono humano na
+// próxima mensagem; aqui garantimos que o badge some na hora do clique.
+async function silenceBotOnTakeover(conversationId: string): Promise<string | null> {
+  const [session] = await db
+    .select({ id: botSessions.id, flowId: botSessions.flowId })
+    .from(botSessions)
+    .where(
+      and(
+        eq(botSessions.conversationId, conversationId),
+        inArray(botSessions.status, ['running', 'waiting_input']),
+      ),
+    )
+    .limit(1)
+  if (!session) return null
+
+  const now = new Date()
+  await db.update(botSessions).set({ status: 'cancelled', updatedAt: now }).where(eq(botSessions.id, session.id))
+  await db
+    .update(conversations)
+    .set({ activeBotFlowId: null, updatedAt: now })
+    .where(eq(conversations.id, conversationId))
+  return session.flowId
 }
 
 // Upsert de leitura: marca a conversa como lida pelo agente até agora.
@@ -101,6 +129,8 @@ export const inboxConversationsRoutes = new Elysia({ name: 'inbox-conversations'
           updatedAt: conversations.updatedAt,
           contactId: contacts.id,
           contactName: contacts.name,
+          contactAvatarUrl: contacts.avatarUrl,
+          contactAvatarStorageKey: contacts.avatarStorageKey,
           // Canal de origem sai da identity primária do contato.
           originChannel: contactIdentities.channelType,
         })
@@ -195,9 +225,15 @@ export const inboxConversationsRoutes = new Elysia({ name: 'inbox-conversations'
 
       return {
         conversations: rows.map((r) => {
+          const { contactAvatarStorageKey, contactAvatarUrl, ...rest } = r
           const last = lastMessageByConversation.get(r.id)
           return {
-            ...r,
+            ...rest,
+            // Avatar efetivo (manual OU foto do canal via presigned URL).
+            contactAvatarUrl: resolveContactAvatarUrl({
+              avatarUrl: contactAvatarUrl,
+              avatarStorageKey: contactAvatarStorageKey,
+            }),
             labels: labelsByConversation.get(r.id) ?? [],
             lastMessage: last
               ? {
@@ -247,7 +283,11 @@ export const inboxConversationsRoutes = new Elysia({ name: 'inbox-conversations'
       return { message: 'Conversa não encontrada.' }
     }
 
-    const [contact] = await db.select().from(contacts).where(eq(contacts.id, conversation.contactId)).limit(1)
+    const [contactRow] = await db.select().from(contacts).where(eq(contacts.id, conversation.contactId)).limit(1)
+    // Avatar efetivo (manual OU foto do canal via presigned URL).
+    const contact = contactRow
+      ? { ...contactRow, avatarUrl: resolveContactAvatarUrl(contactRow) }
+      : contactRow
 
     // agentName: nome do agente autor de mensagens outbound (null em inbound/bot).
     // Com limit: página das mais recentes (desc) virada para ordem cronológica;
@@ -339,17 +379,17 @@ export const inboxConversationsRoutes = new Elysia({ name: 'inbox-conversations'
       activeBotFlow = flow ?? null
     }
 
-    // Avaliação CSAT da conversa (uma por conversa), com o nome do agente
-    // que estava atribuído na resolução.
-    const [ratingRow] = await db
+    // Avaliações CSAT (uma por ATENDIMENTO), com o nome do agente atribuído na
+    // resolução de cada uma. Cada nota é colocada no seu atendimento na thread.
+    const ratingRows = await db
       .select({ rating: conversationRatings, agentName: agents.name })
       .from(conversationRatings)
       .leftJoin(agents, eq(conversationRatings.agentId, agents.id))
       .where(eq(conversationRatings.conversationId, params.id))
-      .limit(1)
-    const rating = ratingRow ? { ...ratingRow.rating, agentName: ratingRow.agentName } : null
+      .orderBy(conversationRatings.createdAt)
+    const ratings = ratingRows.map((row) => ({ ...row.rating, agentName: row.agentName }))
 
-    return { conversation, contact, messages: msgs, hasMore, nextCursor, notes, transfers, activeBotFlow, rating }
+    return { conversation, contact, messages: msgs, hasMore, nextCursor, notes, transfers, activeBotFlow, ratings }
     },
     {
       query: t.Object({
@@ -387,11 +427,20 @@ export const inboxConversationsRoutes = new Elysia({ name: 'inbox-conversations'
 
       try {
         const updated = await assignConversation(params.id, targetAgentId)
+        // Humano assumiu: o bot sai de cena imediatamente.
+        const stoppedFlowId = await silenceBotOnTakeover(params.id)
         wsHub.broadcast(agent.workspaceId, {
           type: 'conversation:assigned',
           conversationId: params.id,
           agentId: targetAgentId,
         })
+        if (stoppedFlowId) {
+          wsHub.broadcast(agent.workspaceId, {
+            type: 'bot:stopped',
+            conversationId: params.id,
+            flowId: stoppedFlowId,
+          })
+        }
         return { conversation: updated }
       } catch (error) {
         if (error instanceof InvalidTransitionError) {
@@ -505,11 +554,21 @@ export const inboxConversationsRoutes = new Elysia({ name: 'inbox-conversations'
         .where(eq(conversations.id, params.id))
         .returning()
 
+      // Transferência é ação humana: o bot (se ainda ativo) sai de cena.
+      const stoppedFlowId = await silenceBotOnTakeover(params.id)
+
       wsHub.broadcast(agent.workspaceId, {
         type: 'conversation:transferred',
         conversationId: params.id,
         transfer,
       })
+      if (stoppedFlowId) {
+        wsHub.broadcast(agent.workspaceId, {
+          type: 'bot:stopped',
+          conversationId: params.id,
+          flowId: stoppedFlowId,
+        })
+      }
 
       return { transfer, conversation: updated }
     },
@@ -736,6 +795,129 @@ export const inboxConversationsRoutes = new Elysia({ name: 'inbox-conversations'
     return { stopped: true as const, flowId: session.flowId }
   })
 
+  // POST /inbox/conversations/:id/send-protocol — envia o número do protocolo
+  // ao contato pelo canal (mensagem automática, agentId null). Não é takeover:
+  // pode ser usado no início do atendimento, inclusive com o bot ativo.
+  .post('/inbox/conversations/:id/send-protocol', async ({ agent, params, set }) => {
+    if (!agent) {
+      set.status = 401
+      return { message: 'Não autenticado.' }
+    }
+    const [conversation] = await db
+      .select()
+      .from(conversations)
+      .where(and(eq(conversations.id, params.id), eq(conversations.workspaceId, agent.workspaceId)))
+      .limit(1)
+    if (!conversation) {
+      set.status = 404
+      return { message: 'Conversa não encontrada.' }
+    }
+
+    const [contact] = await db
+      .select({ blocked: contacts.blocked })
+      .from(contacts)
+      .where(eq(contacts.id, conversation.contactId))
+      .limit(1)
+    if (contact?.blocked) {
+      set.status = 409
+      return { message: 'Contato bloqueado: desbloqueie para enviar mensagens.' }
+    }
+
+    const [connection] = await db
+      .select()
+      .from(connections)
+      .where(eq(connections.id, conversation.connectionId))
+      .limit(1)
+    if (!connection) {
+      set.status = 500
+      return { message: 'Conexão da conversa não encontrada.' }
+    }
+
+    const identities = await db
+      .select()
+      .from(contactIdentities)
+      .where(
+        and(
+          eq(contactIdentities.contactId, conversation.contactId),
+          eq(contactIdentities.channelType, connection.kind),
+        ),
+      )
+    const targetIdentity = identities.find((i) => i.isPrimary) ?? identities[0]
+    if (!targetIdentity) {
+      set.status = 400
+      return { message: 'Contato não possui identidade no canal da conexão.' }
+    }
+
+    const protocolLabel = `#${String(conversation.protocol).padStart(5, '0')}`
+    const content = `Seu protocolo de atendimento é ${protocolLabel}. Guarde este número para acompanhar o seu atendimento.`
+
+    const messageId = generateId()
+    const [message] = await db
+      .insert(messages)
+      .values({
+        id: messageId,
+        conversationId: params.id,
+        direction: 'outbound',
+        content,
+        kind: 'text',
+        status: 'queued',
+        agentId: null,
+        connectionId: connection.id,
+      })
+      .returning()
+
+    await getOutboundQueue().add(
+      `outbound:${messageId}`,
+      {
+        workspaceId: agent.workspaceId,
+        connectionId: connection.id,
+        conversationId: params.id,
+        messageId,
+        target: targetIdentity.channelIdentifier,
+        content,
+      } satisfies OutboundMessageJob,
+      defaultCrmJobOptions,
+    )
+
+    wsHub.broadcast(agent.workspaceId, { type: 'message:new', conversationId: params.id, message })
+    return { message }
+  })
+
+  // POST /inbox/conversations/:id/csat/send — reenvia a pesquisa CSAT ao contato.
+  // Só faz sentido em conversa resolvida, com CSAT habilitado e ainda sem nota
+  // (o envio automático já ocorre ao resolver; este é o botão de reenvio).
+  .post('/inbox/conversations/:id/csat/send', async ({ agent, params, set }) => {
+    if (!agent) {
+      set.status = 401
+      return { message: 'Não autenticado.' }
+    }
+    const [conversation] = await db
+      .select({ id: conversations.id, status: conversations.status })
+      .from(conversations)
+      .where(and(eq(conversations.id, params.id), eq(conversations.workspaceId, agent.workspaceId)))
+      .limit(1)
+    if (!conversation) {
+      set.status = 404
+      return { message: 'Conversa não encontrada.' }
+    }
+    if (conversation.status !== 'resolved') {
+      set.status = 409
+      return { message: 'A pesquisa de avaliação só pode ser enviada após resolver a conversa.' }
+    }
+
+    const message = await maybeSendCsatSurvey(params.id, { force: true })
+    if (!message) {
+      set.status = 409
+      return {
+        message:
+          'Não foi possível enviar a pesquisa: verifique se o CSAT está habilitado nas configurações e se a conversa ainda não foi avaliada.',
+      }
+    }
+
+    wsHub.broadcast(agent.workspaceId, { type: 'message:new', conversationId: params.id, message })
+    return { sent: true as const }
+  })
+
   // POST /inbox/conversations/:id/messages — agente envia mensagem (com
   // anexos opcionais da biblioteca de arquivos) e enfileira o envio real.
   .post(
@@ -838,8 +1020,35 @@ export const inboxConversationsRoutes = new Elysia({ name: 'inbox-conversations'
         }
       }
 
+      // Agente respondeu direto: takeover implícito — o bot sai de cena para não
+      // reassumir o fluxo na próxima mensagem do cliente.
+      const stoppedFlowId = await silenceBotOnTakeover(params.id)
+      if (stoppedFlowId) {
+        wsHub.broadcast(agent.workspaceId, {
+          type: 'bot:stopped',
+          conversationId: params.id,
+          flowId: stoppedFlowId,
+        })
+      }
+
       // Agente enviou mensagem → conversa lida até agora para ele (zera não lidas).
       await markConversationRead(params.id, agent.id)
+
+      // Identificação do atendente: quando o workspace liga a opção, o texto
+      // enviado ao canal leva o primeiro nome do agente em negrito (*João*:\n…).
+      // O registro no banco (message.content) fica limpo — o inbox já mostra o
+      // autor via agentName. Em mídia sem legenda, envia só a identificação.
+      const [settings] = await db
+        .select({ identifyAgent: workspaceSettings.identifyAgent })
+        .from(workspaceSettings)
+        .where(eq(workspaceSettings.workspaceId, agent.workspaceId))
+        .limit(1)
+      let channelContent = body.content
+      if (settings?.identifyAgent) {
+        const firstName = agent.name.trim().split(/\s+/)[0] || agent.name
+        const trimmed = body.content.trim()
+        channelContent = trimmed ? `*${firstName}*:\n${trimmed}` : `*${firstName}*:`
+      }
 
       // Envio real: o worker consome e chama o session-host (WhatsApp/Telegram).
       await getOutboundQueue().add(
@@ -850,7 +1059,7 @@ export const inboxConversationsRoutes = new Elysia({ name: 'inbox-conversations'
           conversationId: params.id,
           messageId,
           target: targetIdentity.channelIdentifier,
-          content: body.content,
+          content: channelContent,
           media: attachments.length > 0 ? attachments : undefined,
         } satisfies OutboundMessageJob,
         defaultCrmJobOptions,

@@ -70,7 +70,11 @@ async function handleChannelMessage(job: Extract<InboundMessageJob, { kind: 'mes
     return
   }
 
-  const { conversationId, isNewConversation } = await resolveConversation(job.workspaceId, connection, contactId)
+  const { conversationId, isNewConversation, isNewAtendimento } = await resolveConversation(
+    job.workspaceId,
+    connection,
+    contactId,
+  )
 
   const attachments = mapAttachments(message)
   const occurredAt = new Date(message.occurredAt)
@@ -114,6 +118,7 @@ async function handleChannelMessage(job: Extract<InboundMessageJob, { kind: 'mes
     contactId,
     message,
     isNewConversation,
+    isNewAtendimento,
     ...(outOfHours.forceFlowId ? { forceFlowId: outOfHours.forceFlowId } : {}),
   })
 
@@ -294,14 +299,27 @@ async function tryCaptureCsatRating(
       id: generateId(),
       workspaceId,
       conversationId: latest.id,
+      atendimentoSeq: latest.atendimentoSeq,
       contactId,
       agentId: latest.assignedAgentId,
       score: parsed.score,
       comment: parsed.comment,
     })
-    .onConflictDoNothing({ target: conversationRatings.conversationId })
+    .onConflictDoNothing({
+      target: [conversationRatings.conversationId, conversationRatings.atendimentoSeq],
+    })
     .returning({ id: conversationRatings.id })
   if (inserted.length === 0) return false
+
+  // Nota registrada: publica para o inbox mostrar a avaliação na thread em
+  // tempo real (a API resolve o shape completo do rating no bridge Redis→WS).
+  await publishInboxEvent(
+    buildInboxEvent('conversation:rated', {
+      workspaceId,
+      conversationId: latest.id,
+      ratingId: inserted[0]!.id,
+    }),
+  )
 
   const [settings] = await db
     .select({ csatThankYouMessage: workspaceSettings.csatThankYouMessage })
@@ -336,6 +354,7 @@ async function resolveContact(
   message: ChannelMessage,
 ): Promise<string | null> {
   const channelIdentifier = message.from.externalId
+  const avatarStorageKey = readAvatarStorageKey(message)
   const [identity] = await db
     .select({ contactId: contactIdentities.contactId, blocked: contacts.blocked })
     .from(contactIdentities)
@@ -348,13 +367,25 @@ async function resolveContact(
       ),
     )
     .limit(1)
-  if (identity) return identity.blocked ? null : identity.contactId
+  if (identity) {
+    if (identity.blocked) return null
+    // Foto de perfil atualizada (o session-host refaz a busca a cada 24h):
+    // mantém contacts.avatar_storage_key em dia sem tocar no avatarUrl manual.
+    if (avatarStorageKey) {
+      await db
+        .update(contacts)
+        .set({ avatarStorageKey, updatedAt: new Date() })
+        .where(eq(contacts.id, identity.contactId))
+    }
+    return identity.contactId
+  }
 
   const contactId = generateId()
   await db.insert(contacts).values({
     id: contactId,
     workspaceId,
     name: readPushName(message) ?? channelIdentifier,
+    avatarStorageKey,
     firstContactAt: new Date(),
   })
   await db.insert(contactIdentities).values({
@@ -372,7 +403,7 @@ async function resolveConversation(
   workspaceId: string,
   connection: Connection,
   contactId: string,
-): Promise<{ conversationId: string; isNewConversation: boolean }> {
+): Promise<{ conversationId: string; isNewConversation: boolean; isNewAtendimento: boolean }> {
   const [latest] = await db
     .select()
     .from(conversations)
@@ -381,17 +412,27 @@ async function resolveConversation(
     .limit(1)
 
   if (latest && latest.status !== 'resolved') {
-    return { conversationId: latest.id, isNewConversation: false }
+    return { conversationId: latest.id, isNewConversation: false, isNewAtendimento: false }
   }
 
   if (latest) {
-    // Cliente voltou a falar numa conversa resolvida: reabre e desatribui
-    // (alinha com reopenConversation da state machine).
+    // Cliente voltou a falar numa conversa resolvida: reabre, desatribui e
+    // ABRE UM NOVO ATENDIMENTO (incrementa o seq). A mensagem que reabre já é
+    // carimbada com o novo atendimento pelo trigger. Alinha com a state machine.
     await db
       .update(conversations)
-      .set({ status: 'open', assignedAgentId: null, resolvedAt: null, updatedAt: new Date() })
+      .set({
+        status: 'open',
+        assignedAgentId: null,
+        resolvedAt: null,
+        atendimentoSeq: sql`${conversations.atendimentoSeq} + 1`,
+        // Novo atendimento: zera o marcador de pesquisa enviada para que o CSAT
+        // possa ser disparado de novo ao resolver este atendimento.
+        csatSentAt: null,
+        updatedAt: new Date(),
+      })
       .where(eq(conversations.id, latest.id))
-    return { conversationId: latest.id, isNewConversation: false }
+    return { conversationId: latest.id, isNewConversation: false, isNewAtendimento: true }
   }
 
   // Nova conversa: protocolo sequencial por workspace, com o contador
@@ -409,7 +450,7 @@ async function resolveConversation(
       protocol,
     })
   })
-  return { conversationId, isNewConversation: true }
+  return { conversationId, isNewConversation: true, isNewAtendimento: true }
 }
 
 // Contador atômico por workspace: insere a linha de settings com o primeiro
@@ -432,6 +473,14 @@ function readPushName(message: ChannelMessage): string | null {
   const metadata = (message as { metadata?: Record<string, unknown> }).metadata
   const pushName = metadata?.pushName
   return typeof pushName === 'string' && pushName.trim().length > 0 ? pushName.trim() : null
+}
+
+// storageKey da foto de perfil que o session-host subiu no MinIO (metadata
+// extra, igual ao pushName). Ausente quando não há foto ou está throttled.
+function readAvatarStorageKey(message: ChannelMessage): string | null {
+  const metadata = (message as { metadata?: Record<string, unknown> }).metadata
+  const key = metadata?.avatarStorageKey
+  return typeof key === 'string' && key.trim().length > 0 ? key.trim() : null
 }
 
 // ChannelAttachment.url carrega o storageKey do objeto no MinIO (o session-host

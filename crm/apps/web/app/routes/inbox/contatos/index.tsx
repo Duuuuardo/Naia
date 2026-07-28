@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Building2, Download, MessageCircle, Plus, Search, Send, Upload, Users, X } from 'lucide-react'
 import { InboxShell } from '../../../components/inbox-shell'
 import { ImportContactsModal } from '../../../components/contatos/import-contacts-modal'
-import { Badge, Button, EmptyState, ErrorNote, Modal, getInitials } from '../../../components/ui'
+import { Badge, Button, EmptyState, ErrorNote, Modal } from '../../../components/ui'
+import { ContactAvatar } from '../../../components/inbox/contact-avatar'
 import {
   createContact,
   exportContactsCsv,
@@ -181,9 +182,7 @@ function ContactsIndex() {
                   params={{ contactId: c.id }}
                   className="flex items-center gap-3 border-b border-neutral-50 px-4 py-3 transition-colors hover:bg-neutral-50"
                 >
-                  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-neutral-100 text-xs font-bold text-dark-800">
-                    {getInitials(c.name)}
-                  </span>
+                  <ContactAvatar name={c.name} url={c.avatarUrl} size={40} className="text-xs" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-dark-800">{c.name}</p>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-neutral-400">

@@ -10,7 +10,8 @@ import {
   Send,
   StickyNote,
 } from 'lucide-react'
-import { Badge, Button, ErrorNote, Modal, getInitials } from '../ui'
+import { Badge, Button, ErrorNote, Modal } from '../ui'
+import { ContactAvatar } from './contact-avatar'
 import { blockContact, unblockContact } from '../../lib/inbox-thread'
 import {
   type ContactDealItem,
@@ -96,6 +97,11 @@ export function ContactPanel({
 
   const tagColorByName = new Map(tags.map((t) => [t.name, t.color]))
   const recentHistory = history.slice(0, 5)
+  // Atendimento atual da conversa aberta = maior seq entre os itens dela.
+  const currentConversationSeq = Math.max(
+    0,
+    ...history.filter((h) => h.id === conversationId).map((h) => h.atendimentoSeq),
+  )
 
   async function handleConfirmBlock() {
     if (blockBusy) return
@@ -129,17 +135,7 @@ export function ContactPanel({
       {/* Dados do contato */}
       <section>
         <div className="flex flex-col items-center gap-2 pb-3 text-center">
-          {contact.avatarUrl ? (
-            <img
-              src={contact.avatarUrl}
-              alt=""
-              className="size-14 rounded-full border border-neutral-200 object-cover"
-            />
-          ) : (
-            <span className="grid size-14 place-items-center rounded-full bg-neutral-100 text-sm font-bold text-dark-800">
-              {getInitials(contact.name)}
-            </span>
-          )}
+          <ContactAvatar name={contact.name} url={contact.avatarDisplayUrl} size={56} className="text-sm" />
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-dark-800">{contact.name}</p>
             {(contact.company || contact.email) && (
@@ -259,12 +255,13 @@ export function ContactPanel({
           <ul className="space-y-1.5">
             {recentHistory.map((entry) => {
               const meta = conversationStatusMeta[entry.status] ?? conversationStatusMeta.open
-              const current = entry.id === conversationId
+              const current = entry.id === conversationId && entry.atendimentoSeq === currentConversationSeq
               return (
-                <li key={entry.id}>
+                <li key={`${entry.id}:${entry.atendimentoSeq}`}>
                   <Link
-                    to="/inbox/c/$conversationId"
+                    to="/inbox/atendimento/c/$conversationId"
                     params={{ conversationId: entry.id }}
+                    search={{ atendimento: entry.atendimentoSeq }}
                     className={`block rounded-lg border p-2.5 transition-colors ${
                       current
                         ? 'border-brand-200 bg-brand-50'
@@ -272,6 +269,7 @@ export function ContactPanel({
                     }`}
                   >
                     <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-semibold text-dark-800">Atendimento #{entry.atendimentoSeq}</span>
                       <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${meta.color}`}>
                         {meta.label}
                       </span>

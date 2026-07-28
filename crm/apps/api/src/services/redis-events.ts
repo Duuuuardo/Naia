@@ -1,5 +1,5 @@
 import { db } from '@crm/db'
-import { botFlows, connections, contactIdentities, conversations, messages } from '@crm/db/schema'
+import { agents, botFlows, connections, contactIdentities, conversationRatings, conversations, messages } from '@crm/db/schema'
 import { CRM_EVENT_CHANNELS, type CrmInboxEvent, type CrmSessionEvent } from '@crm/events'
 import { createCrmRedisConnection } from '@crm/queue'
 import { and, desc, eq } from 'drizzle-orm'
@@ -31,6 +31,8 @@ function isInboxEvent(value: unknown): value is CrmInboxEvent {
       || event.type === 'bot:started'
       || event.type === 'bot:handoff'
       || event.type === 'bot:finished'
+      || event.type === 'conversation:rated'
+      || event.type === 'message:sent'
     )
     && typeof event.payload === 'object'
     && event.payload !== null
@@ -129,6 +131,18 @@ async function handleInboxEvent(raw: string): Promise<void> {
     return
   }
 
+  // Avaliação CSAT do cliente → mostra a nota na thread em tempo real.
+  if (parsed.type === 'conversation:rated') {
+    await handleConversationRated(parsed.payload)
+    return
+  }
+
+  // Mensagem outbound gerada no worker (bot/sistema) → message:new no inbox.
+  if (parsed.type === 'message:sent') {
+    await handleMessageSent(parsed.payload)
+    return
+  }
+
   // Ciclo de vida do bot → badge "Chatbot atendendo" no inbox.
   if (parsed.type === 'bot:started') {
     const [flow] = await db
@@ -211,5 +225,46 @@ async function handleMessageReceived(payload: {
     type: 'message:new',
     conversationId: conversation.id,
     message: stored ?? message,
+  })
+}
+
+// conversation:rated → resolve o rating persistido (com nome do agente
+// atribuído na resolução) no mesmo shape das rotas REST e faz broadcast para
+// a thread anexar a nota sem reload.
+async function handleConversationRated(payload: {
+  workspaceId: string
+  conversationId: string
+  ratingId: string
+}): Promise<void> {
+  const [row] = await db
+    .select({ rating: conversationRatings, agentName: agents.name })
+    .from(conversationRatings)
+    .leftJoin(agents, eq(conversationRatings.agentId, agents.id))
+    .where(eq(conversationRatings.id, payload.ratingId))
+    .limit(1)
+  if (!row) return
+
+  wsHub.broadcast(payload.workspaceId, {
+    type: 'conversation:rated',
+    conversationId: payload.conversationId,
+    rating: { ...row.rating, agentName: row.agentName },
+  })
+}
+
+// message:sent → carrega a mensagem persistida pelo worker e faz o mesmo
+// broadcast message:new das mensagens do agente/inbound (a thread refaz o
+// fetch da página; a lista invalida — o payload só precisa disparar o evento).
+async function handleMessageSent(payload: {
+  workspaceId: string
+  conversationId: string
+  messageId: string
+}): Promise<void> {
+  const [stored] = await db.select().from(messages).where(eq(messages.id, payload.messageId)).limit(1)
+  if (!stored) return
+
+  wsHub.broadcast(payload.workspaceId, {
+    type: 'message:new',
+    conversationId: payload.conversationId,
+    message: stored,
   })
 }

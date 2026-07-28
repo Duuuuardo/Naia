@@ -1,15 +1,69 @@
 import { Elysia, t } from 'elysia'
 import { db } from '@crm/db'
-import { quickReplies } from '@crm/db/schema'
-import { eq, and, or, ilike, asc } from 'drizzle-orm'
+import { files, quickReplies, type QuickReply } from '@crm/db/schema'
+import { eq, and, or, ilike, asc, inArray } from 'drizzle-orm'
 import { authInboxPlugin } from '../plugins/auth-inbox'
 import { generateId } from '../lib/crypto'
 import { isSuperadmin } from '../lib/superadmin'
+
+// Anexo de resposta rápida já resolvido (o que o composer precisa para virar
+// anexo da mensagem). Espelha ComposerAttachment do web.
+type ResolvedAttachment = {
+  fileId: string
+  filename: string
+  kind: 'image' | 'video' | 'audio' | 'document'
+  storageKey: string
+}
 
 // Normaliza o atalho: sem '/' inicial, minúsculo, sem espaços nas pontas.
 // O composer dispara por "/saudacao"; no banco fica só "saudacao".
 function normalizeShortcut(shortcut: string): string {
   return shortcut.trim().replace(/^\/+/, '').toLowerCase()
+}
+
+// Valida ids de arquivo do body: precisam existir, estar prontos e ser do mesmo
+// workspace. Retorna os ids válidos na ordem enviada (ignora duplicatas), ou
+// null se algum id for inválido (para o handler responder 400).
+async function validateAttachmentFileIds(
+  workspaceId: string,
+  fileIds: string[],
+): Promise<string[] | null> {
+  const unique = [...new Set(fileIds)]
+  if (unique.length === 0) return []
+  const found = await db
+    .select({ id: files.id, status: files.status })
+    .from(files)
+    .where(and(inArray(files.id, unique), eq(files.workspaceId, workspaceId)))
+  if (found.length !== unique.length || found.some((f) => f.status !== 'ready')) return null
+  return unique
+}
+
+// Resolve os attachmentFileIds de várias respostas em um único query. Arquivos
+// que já não existem/não estão prontos somem silenciosamente (a resposta
+// continua utilizável só com o texto).
+async function resolveAttachments(
+  workspaceId: string,
+  rows: QuickReply[],
+): Promise<Map<string, ResolvedAttachment[]>> {
+  const allIds = [...new Set(rows.flatMap((r) => r.attachmentFileIds))]
+  const byId = new Map<string, ResolvedAttachment>()
+  if (allIds.length > 0) {
+    const found = await db
+      .select()
+      .from(files)
+      .where(and(inArray(files.id, allIds), eq(files.workspaceId, workspaceId), eq(files.status, 'ready')))
+    for (const f of found) {
+      byId.set(f.id, { fileId: f.id, filename: f.filename, kind: f.kind, storageKey: f.storageKey })
+    }
+  }
+  const result = new Map<string, ResolvedAttachment[]>()
+  for (const r of rows) {
+    result.set(
+      r.id,
+      r.attachmentFileIds.map((id) => byId.get(id)).filter((a): a is ResolvedAttachment => a !== undefined),
+    )
+  }
+  return result
 }
 
 export const inboxQuickRepliesRoutes = new Elysia({ name: 'inbox-quick-replies' })
@@ -44,7 +98,8 @@ export const inboxQuickRepliesRoutes = new Elysia({ name: 'inbox-quick-replies' 
         .orderBy(asc(quickReplies.shortcut))
         .limit(200)
 
-      return { quickReplies: rows }
+      const attachmentsById = await resolveAttachments(agent.workspaceId, rows)
+      return { quickReplies: rows.map((r) => ({ ...r, attachments: attachmentsById.get(r.id) ?? [] })) }
     },
     {
       query: t.Object({ search: t.Optional(t.String()) }),
@@ -77,6 +132,12 @@ export const inboxQuickRepliesRoutes = new Elysia({ name: 'inbox-quick-replies' 
         return { message: `Já existe uma resposta rápida com o atalho /${shortcut}.` }
       }
 
+      const attachmentFileIds = await validateAttachmentFileIds(agent.workspaceId, body.attachmentFileIds ?? [])
+      if (attachmentFileIds === null) {
+        set.status = 400
+        return { message: 'Anexo inválido: arquivo não encontrado ou upload não confirmado.' }
+      }
+
       const [quickReply] = await db
         .insert(quickReplies)
         .values({
@@ -85,18 +146,21 @@ export const inboxQuickRepliesRoutes = new Elysia({ name: 'inbox-quick-replies' 
           shortcut,
           title: body.title,
           content: body.content,
+          attachmentFileIds,
           createdByAgentId: agent.id,
         })
         .returning()
 
+      const attachmentsById = await resolveAttachments(agent.workspaceId, [quickReply])
       set.status = 201
-      return { quickReply }
+      return { quickReply: { ...quickReply, attachments: attachmentsById.get(quickReply.id) ?? [] } }
     },
     {
       body: t.Object({
         shortcut: t.String({ minLength: 1, maxLength: 50 }),
         title: t.String({ minLength: 1, maxLength: 100 }),
         content: t.String({ minLength: 1, maxLength: 4000 }),
+        attachmentFileIds: t.Optional(t.Array(t.String(), { maxItems: 10 })),
       }),
     },
   )
@@ -144,23 +208,36 @@ export const inboxQuickRepliesRoutes = new Elysia({ name: 'inbox-quick-replies' 
         }
       }
 
+      let attachmentFileIds: string[] | undefined
+      if (body.attachmentFileIds !== undefined) {
+        const validated = await validateAttachmentFileIds(agent.workspaceId, body.attachmentFileIds)
+        if (validated === null) {
+          set.status = 400
+          return { message: 'Anexo inválido: arquivo não encontrado ou upload não confirmado.' }
+        }
+        attachmentFileIds = validated
+      }
+
       const [quickReply] = await db
         .update(quickReplies)
         .set({
           ...(shortcut !== undefined ? { shortcut } : {}),
           ...(body.title !== undefined ? { title: body.title } : {}),
           ...(body.content !== undefined ? { content: body.content } : {}),
+          ...(attachmentFileIds !== undefined ? { attachmentFileIds } : {}),
         })
         .where(eq(quickReplies.id, params.id))
         .returning()
 
-      return { quickReply }
+      const attachmentsById = await resolveAttachments(agent.workspaceId, [quickReply])
+      return { quickReply: { ...quickReply, attachments: attachmentsById.get(quickReply.id) ?? [] } }
     },
     {
       body: t.Object({
         shortcut: t.Optional(t.String({ minLength: 1, maxLength: 50 })),
         title: t.Optional(t.String({ minLength: 1, maxLength: 100 })),
         content: t.Optional(t.String({ minLength: 1, maxLength: 4000 })),
+        attachmentFileIds: t.Optional(t.Array(t.String(), { maxItems: 10 })),
       }),
     },
   )

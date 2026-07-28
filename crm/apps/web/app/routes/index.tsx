@@ -13,7 +13,8 @@ export const Route = createFileRoute('/')({
     const { isInboxHost } = await getHostContext()
     if (isInboxHost) {
       const agentId = await getInboxAgentId()
-      throw redirect({ to: agentId ? '/inbox' : '/inbox/login' })
+      // A tela inicial do agente é o desempenho pessoal (não o inbox).
+      throw redirect({ to: agentId ? '/inbox/meu-desempenho' : '/inbox/login' })
     }
     const user = await getSessionUser()
     throw redirect({ to: user ? '/workspaces' : '/login' })

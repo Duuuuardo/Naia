@@ -2,6 +2,7 @@ import { db } from '@crm/db'
 import {
   connections,
   contactIdentities,
+  conversationRatings,
   conversations,
   messages,
   workspaceSettings,
@@ -27,13 +28,19 @@ function getOutboundQueue() {
 // quando: workspace com csatEnabled, conversa sem pesquisa anterior
 // (csatSentAt null — nunca duplica) e contato com identidade no canal da
 // conexão. Retorna a mensagem persistida (para broadcast WS) ou null.
-export const maybeSendCsatSurvey = async (conversationId: string): Promise<Message | null> => {
+export const maybeSendCsatSurvey = async (
+  conversationId: string,
+  options: { force?: boolean } = {},
+): Promise<Message | null> => {
   const [conversation] = await db
     .select()
     .from(conversations)
     .where(eq(conversations.id, conversationId))
     .limit(1)
-  if (!conversation || conversation.status !== 'resolved' || conversation.csatSentAt) return null
+  if (!conversation || conversation.status !== 'resolved') return null
+  // Envio automático (na resolução): só se a pesquisa ainda não foi enviada.
+  // Reenvio manual (force): ignora csatSentAt e dispara de novo.
+  if (!options.force && conversation.csatSentAt) return null
 
   const [settings] = await db
     .select()
@@ -41,6 +48,20 @@ export const maybeSendCsatSurvey = async (conversationId: string): Promise<Messa
     .where(eq(workspaceSettings.workspaceId, conversation.workspaceId))
     .limit(1)
   if (!settings?.csatEnabled) return null
+
+  // Atendimento atual já avaliado: não há o que coletar, não reenvia. (A nota
+  // é por atendimento — um ciclo resolve→reopen anterior não bloqueia o atual.)
+  const [existingRating] = await db
+    .select({ id: conversationRatings.id })
+    .from(conversationRatings)
+    .where(
+      and(
+        eq(conversationRatings.conversationId, conversationId),
+        eq(conversationRatings.atendimentoSeq, conversation.atendimentoSeq),
+      ),
+    )
+    .limit(1)
+  if (existingRating) return null
 
   const [connection] = await db.select().from(connections).where(eq(connections.id, conversation.connectionId)).limit(1)
   if (!connection) return null

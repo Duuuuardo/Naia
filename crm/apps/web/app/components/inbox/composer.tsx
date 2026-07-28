@@ -29,6 +29,16 @@ export function Composer({
   const slashOpen = draft.startsWith('/') && !slashDismissed
   const query = slashOpen ? draft.slice(1).toLowerCase() : ''
 
+  // Auto-grow: acompanha a altura do conteúdo (limitada por max-h-32 no CSS,
+  // que ativa a rolagem interna). Sem isso o textarea fica travado em 1 linha
+  // e corta tanto o texto digitado quanto o placeholder quando o campo estreita.
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [draft])
+
   // Carrega as respostas rápidas só na primeira vez que o autocomplete abre.
   useEffect(() => {
     if (slashOpen && replies === null) {
@@ -52,7 +62,15 @@ export function Composer({
   }, [query])
 
   function pickReply(reply: QuickReplyItem) {
-    setDraft(reply.content)
+    // content ' ' é o placeholder de resposta só-anexo — não vira texto.
+    setDraft(reply.content.trim())
+    // Anexos da resposta entram no composer (dedup por fileId).
+    if (reply.attachments.length > 0) {
+      setAttachments((prev) => {
+        const existing = new Set(prev.map((a) => a.fileId))
+        return [...prev, ...reply.attachments.filter((a) => !existing.has(a.fileId))]
+      })
+    }
     setSlashDismissed(false)
     textareaRef.current?.focus()
   }
@@ -191,9 +209,9 @@ export function Composer({
               setSlashDismissed(false)
             }}
             onKeyDown={handleKeyDown}
-            placeholder="Escreva uma mensagem… (/ para respostas rápidas)"
+            placeholder="Escreva uma mensagem…  ( / respostas rápidas )"
             rows={1}
-            className="max-h-32 w-full flex-1 resize-none !py-2.5"
+            className="block max-h-32 w-full flex-1 resize-none overflow-y-auto !py-2.5 placeholder:truncate"
           />
         </div>
 

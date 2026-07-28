@@ -92,6 +92,41 @@ async function downloadTelegramFile(bot: Bot, token: string, fileId: string): Pr
   return new Uint8Array(await res.arrayBuffer())
 }
 
+// Throttle da foto de perfil: no máximo 1x por contato a cada 24h por processo
+// (mesma razão do WhatsApp). Chave: `${connectionId}:${userId}`.
+const avatarFetchedAt = new Map<string, number>()
+const AVATAR_REFETCH_MS = 24 * 60 * 60 * 1000
+
+// Busca a foto de perfil do usuário via getUserProfilePhotos, baixa a maior
+// resolução e sobe no MinIO do CRM. Retorna o storageKey ou null (sem foto,
+// privacidade ou falha — nunca derruba a mensagem). Throttled por 24h.
+async function maybeFetchTelegramAvatar(
+  bot: Bot,
+  token: string,
+  workspaceId: string,
+  connectionId: string,
+  userId: number,
+  externalId: string,
+): Promise<string | null> {
+  const throttleKey = `${connectionId}:${userId}`
+  const last = avatarFetchedAt.get(throttleKey)
+  if (last && Date.now() - last < AVATAR_REFETCH_MS) return null
+  avatarFetchedAt.set(throttleKey, Date.now())
+  try {
+    const photos = await bot.api.getUserProfilePhotos(userId, { limit: 1 })
+    const sizes = photos.photos[0]
+    if (!sizes || sizes.length === 0) return null
+    // A última size é a maior resolução.
+    const largest = sizes[sizes.length - 1]!
+    const bytes = await downloadTelegramFile(bot, token, largest.file_id)
+    const storageKey = `${workspaceId}/avatars/telegram/${externalId.replace(/[^\w.-]/g, '_')}.jpg`
+    await putObject(storageKey, bytes, 'image/jpeg')
+    return storageKey
+  } catch {
+    return null
+  }
+}
+
 export async function startTelegramBot(connectionId: string): Promise<void> {
   const current = botMap.get(connectionId)
   if (current?.status === 'connected' || current?.status === 'connecting') {
@@ -165,15 +200,24 @@ export async function startTelegramBot(connectionId: string): Promise<void> {
 
       const pushName = [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(' ').trim()
         || (msg.from?.username ?? '')
+      const externalId = String(msg.chat.id)
+      const avatarStorageKey = msg.from
+        ? await maybeFetchTelegramAvatar(bot, token, workspaceId, connectionId, msg.from.id, externalId)
+        : null
+      const metadata: Record<string, unknown> = {
+        // Extra fora do contrato tipado: o worker usa pushName para nomear o
+        // contato e avatarStorageKey para a foto de perfil.
+        ...(pushName ? { pushName } : {}),
+        ...(avatarStorageKey ? { avatarStorageKey } : {}),
+      }
       const message = {
         externalMessageId,
-        from: { channel: 'telegram', externalId: String(msg.chat.id) },
+        from: { channel: 'telegram', externalId },
         to: { channel: 'telegram', externalId: String(me.id) },
         text,
         attachments,
         occurredAt: new Date(msg.date * 1000).toISOString(),
-        // Extra fora do contrato tipado: o worker usa pushName para nomear o contato.
-        ...(pushName ? { metadata: { pushName } } : {}),
+        ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
       } satisfies ChannelMessage & { metadata?: Record<string, unknown> }
 
       enqueueInbound(externalMessageId, message)

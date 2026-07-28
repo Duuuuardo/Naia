@@ -23,7 +23,12 @@ export const contacts = pgTable('contacts', {
   email: text('email'),
   company: text('company'),
   birthDate: date('birth_date'),
+  // Avatar definido manualmente pelo agente (URL pública qualquer).
   avatarUrl: text('avatar_url'),
+  // Foto de perfil puxada do canal (WhatsApp/Telegram) e guardada no MinIO do
+  // CRM. Guarda o storageKey; a API serve via presigned URL. avatarUrl (manual)
+  // tem precedência quando ambos existem.
+  avatarStorageKey: text('avatar_storage_key'),
   customFields: jsonb('custom_fields').$type<Record<string, unknown>>().notNull().default({}),
   notes: text('notes'),
   // Contato bloqueado: inbound é descartado no worker e outbound retorna 409.
@@ -137,6 +142,10 @@ export const conversations = pgTable(
     // partir do contador workspace_settings.next_protocol).
     protocol: integer('protocol').notNull(),
     status: text('status').$type<'open' | 'assigned' | 'pending' | 'resolved'>().notNull().default('open'),
+    // Atendimento atual: cada ciclo resolve→reopen é um NOVO atendimento (ticket)
+    // dentro da mesma conversa. Incrementa na reabertura; carimba mensagens e
+    // sessões de bot para separar a thread por atendimento.
+    atendimentoSeq: integer('atendimento_seq').notNull().default(1),
     assignedAgentId: text('assigned_agent_id').references(() => agents.id, { onDelete: 'set null' }),
     queueId: text('queue_id').references(() => queues.id, { onDelete: 'set null' }),
     // Bot atendendo a conversa agora (fonte do badge no inbox). Null = sem bot.
@@ -168,6 +177,9 @@ export const messages = pgTable('messages', {
   conversationId: text('conversation_id').notNull().references(() => conversations.id, { onDelete: 'cascade' }),
   direction: text('direction').$type<'inbound' | 'outbound'>().notNull(),
   content: text('content').notNull(),
+  // Atendimento a que a mensagem pertence (carimbado por trigger a partir da
+  // conversa no INSERT — ver migration). Base da separação da thread por atendimento.
+  atendimentoSeq: integer('atendimento_seq').notNull().default(1),
   kind: text('kind').$type<'text' | 'image' | 'audio' | 'video' | 'document'>().notNull().default('text'),
   status: text('status').$type<'queued' | 'sent' | 'delivered' | 'read' | 'failed'>().notNull().default('queued'),
   // Agente autor (outbound manual); null em inbound e mensagens de bot.
@@ -260,8 +272,10 @@ export const conversationRatings = pgTable(
     workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
     conversationId: text('conversation_id')
       .notNull()
-      .unique()
       .references(() => conversations.id, { onDelete: 'cascade' }),
+    // Uma avaliação por ATENDIMENTO (não por conversa): cada ciclo resolve→reopen
+    // pode coletar sua própria nota.
+    atendimentoSeq: integer('atendimento_seq').notNull().default(1),
     contactId: text('contact_id').notNull().references(() => contacts.id, { onDelete: 'cascade' }),
     // Agente atribuído quando a conversa foi resolvida (null = sem dono/bot).
     agentId: text('agent_id').references(() => agents.id, { onDelete: 'set null' }),
@@ -270,7 +284,10 @@ export const conversationRatings = pgTable(
     comment: text('comment'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
-  (table) => [index('idx_conversation_ratings_workspace_id').on(table.workspaceId)],
+  (table) => [
+    index('idx_conversation_ratings_workspace_id').on(table.workspaceId),
+    unique().on(table.conversationId, table.atendimentoSeq),
+  ],
 )
 
 // Histórico de transferências de conversa (entre agentes e/ou filas).
@@ -296,6 +313,10 @@ export const quickReplies = pgTable(
     shortcut: text('shortcut').notNull(),
     title: text('title').notNull(),
     content: text('content').notNull(),
+    // Arquivos anexados à resposta (ids em `files`, mesmo workspace). Ao usar o
+    // atalho no composer, viram anexos da mensagem; ids que já não existem/estão
+    // prontos são descartados na leitura.
+    attachmentFileIds: jsonb('attachment_file_ids').$type<string[]>().notNull().default([]),
     createdByAgentId: text('created_by_agent_id').notNull().references(() => agents.id, { onDelete: 'cascade' }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
@@ -324,6 +345,9 @@ export const botSessions = pgTable('bot_sessions', {
   workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
   flowId: text('flow_id').notNull().references(() => botFlows.id, { onDelete: 'cascade' }),
   conversationId: text('conversation_id').notNull().references(() => conversations.id, { onDelete: 'cascade' }),
+  // Atendimento (ciclo resolve→reopen) em que esta sessão de bot rodou. Escopa
+  // o "1 bot por atendimento": ao reabrir, o bot pode atender de novo.
+  atendimentoSeq: integer('atendimento_seq').notNull().default(1),
   currentNodeId: text('current_node_id'),
   variables: jsonb('variables').$type<Record<string, unknown>>().notNull().default({}),
   status: text('status')

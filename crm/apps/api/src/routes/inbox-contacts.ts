@@ -19,6 +19,7 @@ import { eq, and, or, ilike, desc, count, inArray, sql } from 'drizzle-orm'
 import { authInboxPlugin } from '../plugins/auth-inbox'
 import { generateId } from '../lib/crypto'
 import { isSuperadmin } from '../lib/superadmin'
+import { resolveContactAvatarUrl } from '../lib/contact-avatar'
 
 // Handle de query que aceita tanto o db global quanto uma transaction.
 type DbHandle = Pick<typeof db, 'select' | 'insert' | 'delete'>
@@ -102,6 +103,7 @@ export const inboxContactsRoutes = new Elysia({ name: 'inbox-contacts' })
           email: contacts.email,
           company: contacts.company,
           avatarUrl: contacts.avatarUrl,
+          avatarStorageKey: contacts.avatarStorageKey,
           createdAt: contacts.createdAt,
           primaryChannelType: contactIdentities.channelType,
           primaryChannelIdentifier: contactIdentities.channelIdentifier,
@@ -131,7 +133,16 @@ export const inboxContactsRoutes = new Elysia({ name: 'inbox-contacts' })
         tagsByContact.set(tr.contactId, list)
       }
 
-      return { contacts: rows.map((r) => ({ ...r, tags: tagsByContact.get(r.id) ?? [] })) }
+      return {
+        contacts: rows.map((r) => {
+          const { avatarStorageKey, avatarUrl, ...rest } = r
+          return {
+            ...rest,
+            avatarUrl: resolveContactAvatarUrl({ avatarUrl, avatarStorageKey }),
+            tags: tagsByContact.get(r.id) ?? [],
+          }
+        }),
+      }
     },
     {
       query: t.Object({
@@ -195,7 +206,9 @@ export const inboxContactsRoutes = new Elysia({ name: 'inbox-contacts' })
     const contactTagNames = await fetchContactTagNames(db, contact.id)
 
     return {
-      contact: { ...contact, tags: contactTagNames },
+      // Mantém avatarUrl (manual, p/ o form de edição) + avatarStorageKey e
+      // expõe avatarDisplayUrl como avatar efetivo (manual OU foto do canal).
+      contact: { ...contact, avatarDisplayUrl: resolveContactAvatarUrl(contact), tags: contactTagNames },
       identities,
       deals: contactDeals,
       counts: { conversations: conversationCount, deals: contactDeals.length },
@@ -653,10 +666,11 @@ export const inboxContactsRoutes = new Elysia({ name: 'inbox-contacts' })
       return { message: 'Contato não encontrado.' }
     }
 
-    const rows = await db
+    const convRows = await db
       .select({
         id: conversations.id,
         status: conversations.status,
+        atendimentoSeq: conversations.atendimentoSeq,
         createdAt: conversations.createdAt,
         resolvedAt: conversations.resolvedAt,
         connectionKind: connections.kind,
@@ -673,19 +687,36 @@ export const inboxContactsRoutes = new Elysia({ name: 'inbox-contacts' })
       .where(eq(conversations.contactId, contact.id))
       .orderBy(desc(conversations.createdAt))
 
-    if (rows.length === 0) {
+    if (convRows.length === 0) {
       return { history: [] }
     }
 
-    const conversationIds = rows.map((r) => r.id)
+    const conversationIds = convRows.map((r) => r.id)
 
-    // Contagem de mensagens por conversa.
-    const messageCounts = await db
-      .select({ conversationId: messages.conversationId, value: count() })
+    // Estatísticas por ATENDIMENTO (conversa + atendimento_seq): contagem de
+    // mensagens e janela de tempo (primeira/última mensagem) de cada ciclo
+    // resolve→reopen. É a base para separar o histórico como a thread faz.
+    const seqStats = await db
+      .select({
+        conversationId: messages.conversationId,
+        seq: messages.atendimentoSeq,
+        messageCount: count(),
+        startedAt: sql<Date>`min(${messages.sentAt})`,
+        endedAt: sql<Date>`max(${messages.sentAt})`,
+      })
       .from(messages)
       .where(inArray(messages.conversationId, conversationIds))
-      .groupBy(messages.conversationId)
-    const countByConversation = new Map(messageCounts.map((r) => [r.conversationId, r.value]))
+      .groupBy(messages.conversationId, messages.atendimentoSeq)
+
+    const statsByConversation = new Map<
+      string,
+      { seq: number; messageCount: number; startedAt: Date; endedAt: Date }[]
+    >()
+    for (const s of seqStats) {
+      const list = statsByConversation.get(s.conversationId) ?? []
+      list.push({ seq: s.seq, messageCount: s.messageCount, startedAt: s.startedAt, endedAt: s.endedAt })
+      statsByConversation.set(s.conversationId, list)
+    }
 
     // Transferências das conversas do contato.
     const transfers = await db
@@ -728,28 +759,65 @@ export const inboxContactsRoutes = new Elysia({ name: 'inbox-contacts' })
       transfersByConversation.set(tr.conversationId, list)
     }
 
-    const history = rows.map((row) => ({
-      id: row.id,
-      status: row.status,
-      createdAt: row.createdAt,
-      resolvedAt: row.resolvedAt,
-      connection: { kind: row.connectionKind, name: row.connectionName },
-      assignedAgent: row.assignedAgentId
-        ? { id: row.assignedAgentId, name: row.assignedAgentName }
-        : null,
-      queue: row.queueId ? { id: row.queueId, name: row.queueName } : null,
-      messageCount: countByConversation.get(row.id) ?? 0,
-      transfers: (transfersByConversation.get(row.id) ?? []).map((tr) => ({
-        id: tr.id,
-        fromAgent: tr.fromAgentId ? { id: tr.fromAgentId, name: agentNames.get(tr.fromAgentId) ?? null } : null,
-        toAgent: tr.toAgentId ? { id: tr.toAgentId, name: agentNames.get(tr.toAgentId) ?? null } : null,
-        fromQueue: tr.fromQueueId ? { id: tr.fromQueueId, name: queueNames.get(tr.fromQueueId) ?? null } : null,
-        toQueue: tr.toQueueId ? { id: tr.toQueueId, name: queueNames.get(tr.toQueueId) ?? null } : null,
-        note: tr.note,
-        transferredBy: { id: tr.transferredByAgentId, name: agentNames.get(tr.transferredByAgentId) ?? null },
-        createdAt: tr.createdAt,
-      })),
-    }))
+    const mapTransfer = (tr: (typeof transfers)[number]) => ({
+      id: tr.id,
+      fromAgent: tr.fromAgentId ? { id: tr.fromAgentId, name: agentNames.get(tr.fromAgentId) ?? null } : null,
+      toAgent: tr.toAgentId ? { id: tr.toAgentId, name: agentNames.get(tr.toAgentId) ?? null } : null,
+      fromQueue: tr.fromQueueId ? { id: tr.fromQueueId, name: queueNames.get(tr.fromQueueId) ?? null } : null,
+      toQueue: tr.toQueueId ? { id: tr.toQueueId, name: queueNames.get(tr.toQueueId) ?? null } : null,
+      note: tr.note,
+      transferredBy: { id: tr.transferredByAgentId, name: agentNames.get(tr.transferredByAgentId) ?? null },
+      createdAt: tr.createdAt,
+    })
+
+    // Expande cada conversa em um item por ATENDIMENTO, espelhando a separação
+    // #1/#2/… da thread. Atendimentos anteriores ao atual já foram resolvidos;
+    // o atual herda o status/resolução da conversa.
+    const history = convRows.flatMap((conv) => {
+      const stats = statsByConversation.get(conv.id) ?? []
+      // Atendimentos com mensagens + o atual (uma reabertura manual pode não ter
+      // mensagens ainda), em ordem crescente de seq.
+      const seqs = new Set<number>(stats.map((s) => s.seq))
+      seqs.add(conv.atendimentoSeq)
+      const ordered = [...seqs].sort((a, b) => a - b)
+      // Início de cada atendimento: #1 nasce com a conversa; os demais na 1ª
+      // mensagem do ciclo (fallback para a criação, caso ainda sem mensagens).
+      const startOf = (seq: number): Date =>
+        seq === 1 ? conv.createdAt : stats.find((s) => s.seq === seq)?.startedAt ?? conv.createdAt
+      const windows = ordered.map((seq) => ({ seq, startedAt: startOf(seq) }))
+      // Posiciona cada transferência no atendimento cuja janela a contém.
+      const bucketSeq = (at: Date): number => {
+        let chosen = windows[0]?.seq ?? conv.atendimentoSeq
+        for (const w of windows) {
+          if (w.startedAt.getTime() <= at.getTime()) chosen = w.seq
+          else break
+        }
+        return chosen
+      }
+      const convTransfers = transfersByConversation.get(conv.id) ?? []
+
+      return ordered.map((seq) => {
+        const st = stats.find((s) => s.seq === seq)
+        const isCurrent = seq === conv.atendimentoSeq
+        return {
+          id: conv.id,
+          atendimentoSeq: seq,
+          status: isCurrent ? conv.status : 'resolved',
+          createdAt: startOf(seq),
+          resolvedAt: isCurrent ? (conv.status === 'resolved' ? conv.resolvedAt : null) : st?.endedAt ?? null,
+          connection: { kind: conv.connectionKind, name: conv.connectionName },
+          assignedAgent: conv.assignedAgentId
+            ? { id: conv.assignedAgentId, name: conv.assignedAgentName }
+            : null,
+          queue: conv.queueId ? { id: conv.queueId, name: conv.queueName } : null,
+          messageCount: st?.messageCount ?? 0,
+          transfers: convTransfers.filter((tr) => bucketSeq(tr.createdAt) === seq).map(mapTransfer),
+        }
+      })
+    })
+
+    // Mais recentes primeiro (por início do atendimento).
+    history.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
     return { history }
   })

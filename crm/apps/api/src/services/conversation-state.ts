@@ -1,6 +1,6 @@
 import { db } from '@crm/db'
 import { conversations } from '@crm/db/schema'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import type { Conversation } from '@crm/db/schema'
 
 export type ConversationStatus = 'open' | 'assigned' | 'pending' | 'resolved'
@@ -94,7 +94,16 @@ export const reopenConversation = async (conversationId: string): Promise<Conver
 
   const [updated] = await db
     .update(conversations)
-    .set({ status: 'open', assignedAgentId: null, resolvedAt: null, updatedAt: new Date() })
+    .set({
+      status: 'open',
+      assignedAgentId: null,
+      resolvedAt: null,
+      // Reabertura manual também inicia um novo atendimento.
+      atendimentoSeq: sql`${conversations.atendimentoSeq} + 1`,
+      // Zera o marcador de CSAT para o novo atendimento poder ser pesquisado.
+      csatSentAt: null,
+      updatedAt: new Date(),
+    })
     .where(eq(conversations.id, conversationId))
     .returning()
   return updated

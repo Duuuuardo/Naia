@@ -43,7 +43,8 @@ function InboxLogin() {
       setError(result.message ?? 'Não foi possível entrar.')
       return
     }
-    router.navigate({ to: '/inbox' })
+    // Tela inicial do agente = desempenho pessoal.
+    router.navigate({ to: '/inbox/meu-desempenho' })
   }
 
   return (

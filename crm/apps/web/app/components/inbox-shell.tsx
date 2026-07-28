@@ -5,6 +5,8 @@ import {
   Bot,
   Clock,
   FolderOpen,
+  Gauge,
+  IdCard,
   KanbanSquare,
   ListTree,
   LogOut,
@@ -29,15 +31,18 @@ import { useInboxSocket } from '../lib/use-inbox-socket'
 type NavItem = { to: string; label: string; icon: LucideIcon }
 
 const mainNav: NavItem[] = [
-  { to: '/inbox', label: 'Inbox', icon: MessageSquare },
+  { to: '/inbox/meu-desempenho', label: 'Meu desempenho', icon: Gauge },
+  { to: '/inbox/atendimento', label: 'Atendimento', icon: MessageSquare },
   { to: '/inbox/funis', label: 'Funis', icon: KanbanSquare },
   { to: '/inbox/contatos', label: 'Contatos', icon: Users },
   { to: '/inbox/chat', label: 'Chat interno', icon: MessagesSquare },
   { to: '/inbox/bot', label: 'Bot', icon: Bot },
   { to: '/inbox/arquivos', label: 'Arquivos', icon: FolderOpen },
   { to: '/inbox/respostas', label: 'Respostas rápidas', icon: Zap },
-  { to: '/inbox/relatorios', label: 'Relatórios', icon: BarChart3 },
 ]
+
+// Relatórios gerais da workspace (todos os agentes/filas/CSAT): só admin.
+const workspaceReportsNav: NavItem = { to: '/inbox/relatorios', label: 'Relatórios', icon: BarChart3 }
 
 const adminNav: NavItem[] = [
   { to: '/inbox/admin/conexoes', label: 'Conexões', icon: Plug },
@@ -48,6 +53,7 @@ const adminNav: NavItem[] = [
   { to: '/inbox/admin/tags', label: 'Tags', icon: Tags },
   { to: '/inbox/admin/horarios', label: 'Horários', icon: Clock },
   { to: '/inbox/admin/avaliacao', label: 'Avaliação', icon: Star },
+  { to: '/inbox/admin/identificacao', label: 'Identificação', icon: IdCard },
 ]
 
 const roleMeta: Record<InboxAgentRole, { label: string; className: string }> = {
@@ -57,8 +63,8 @@ const roleMeta: Record<InboxAgentRole, { label: string; className: string }> = {
 }
 
 function isActive(pathname: string, to: string): boolean {
-  // /inbox cobre também a thread (/inbox/c/:id); as demais casam por prefixo.
-  if (to === '/inbox') return pathname === '/inbox' || pathname.startsWith('/inbox/c')
+  // Atendimento cobre a lista e a thread (/inbox/atendimento e .../c/:id); as
+  // demais casam por prefixo (rota exata ou com um segmento abaixo).
   return pathname === to || pathname.startsWith(`${to}/`)
 }
 
@@ -132,6 +138,10 @@ function SidebarContent({
             onNavigate={onNavigate}
           />
         ))}
+
+        {(role === 'superadmin' || role === 'admin') && (
+          <NavLink item={workspaceReportsNav} pathname={pathname} onNavigate={onNavigate} />
+        )}
 
         {role === 'superadmin' && (
           <>

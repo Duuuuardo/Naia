@@ -68,8 +68,11 @@ export type BotRuntime = {
 
 export type BotInboundContext = BotRuntime & {
   message: ChannelMessage
-  // true quando o inbound criou a conversa agora (trigger new_conversation).
+  // true quando o inbound criou a conversa agora.
   isNewConversation: boolean
+  // true quando o inbound iniciou um NOVO atendimento (conversa nova OU reabertura
+  // de conversa resolvida). É o que dispara o gatilho new_conversation.
+  isNewAtendimento: boolean
   // Força um fluxo específico (bot de fora de horário), ignorando triggers.
   forceFlowId?: string
 }
@@ -99,6 +102,26 @@ function getBotResumeQueue(): Queue<BotResumeJob> {
 export async function evaluateBotForInbound(ctx: BotInboundContext): Promise<void> {
   let session: BotSession | null = null
   try {
+    // Propriedade humana: se um agente já assumiu a conversa (atribuída a
+    // alguém, ou em atendimento humano — assigned/pending), o bot sai de cena.
+    // O bot é o PRIMEIRO atendimento; depois que o humano pega, ele não inicia
+    // nem retoma fluxo. Cancela qualquer sessão viva e limpa o badge para não
+    // "voltar ao fluxo" na próxima mensagem do cliente.
+    const [conversation] = await db
+      .select({ status: conversations.status, assignedAgentId: conversations.assignedAgentId })
+      .from(conversations)
+      .where(eq(conversations.id, ctx.conversationId))
+      .limit(1)
+    if (!conversation) return
+    const humanOwned =
+      conversation.assignedAgentId !== null ||
+      conversation.status === 'assigned' ||
+      conversation.status === 'pending'
+    if (humanOwned) {
+      await silenceActiveSession(ctx.workspaceId, ctx.conversationId)
+      return
+    }
+
     const [active] = await db
       .select()
       .from(botSessions)
@@ -133,6 +156,30 @@ export async function evaluateBotForInbound(ctx: BotInboundContext): Promise<voi
 // ─── Início de fluxo (triggers) ──────────────────────────────────────────────
 
 async function maybeStartFlow(ctx: BotInboundContext): Promise<void> {
+  // Atendimento atual da conversa (ciclo resolve→reopen). O bot atende UMA vez
+  // POR ATENDIMENTO: ao reabrir (novo atendimento), ele pode atender de novo.
+  const [conv] = await db
+    .select({ atendimentoSeq: conversations.atendimentoSeq })
+    .from(conversations)
+    .where(eq(conversations.id, ctx.conversationId))
+    .limit(1)
+  const atendimentoSeq = conv?.atendimentoSeq ?? 1
+
+  // Já existe sessão encerrada NESTE atendimento (finalizada, transferida,
+  // interrompida ou falha)? Não reengata — evita o bot voltar a cada mensagem.
+  const [priorSession] = await db
+    .select({ id: botSessions.id })
+    .from(botSessions)
+    .where(
+      and(
+        eq(botSessions.conversationId, ctx.conversationId),
+        eq(botSessions.atendimentoSeq, atendimentoSeq),
+        inArray(botSessions.status, ['finished', 'handed_off', 'cancelled', 'failed']),
+      ),
+    )
+    .limit(1)
+  if (priorSession) return
+
   // Fluxo forçado (bot de fora de horário): ignora triggers. Se o fluxo não
   // existe ou não está ativo, cai na avaliação normal.
   if (ctx.forceFlowId) {
@@ -148,7 +195,7 @@ async function maybeStartFlow(ctx: BotInboundContext): Promise<void> {
       )
       .limit(1)
     if (forced) {
-      await startFlow(ctx, forced)
+      await startFlow(ctx, forced, atendimentoSeq)
       return
     }
     console.warn(`[crm-worker:bot] fluxo fora de horário ${ctx.forceFlowId} indisponível; avaliação normal`)
@@ -163,7 +210,9 @@ async function maybeStartFlow(ctx: BotInboundContext): Promise<void> {
   const text = (ctx.message.text ?? '').trim().toLowerCase()
   const flow = flows.find((candidate) => {
     if (candidate.triggerKind === 'always') return true
-    if (candidate.triggerKind === 'new_conversation') return ctx.isNewConversation
+    // new_conversation dispara no início de CADA atendimento (conversa nova ou
+    // reabertura de conversa resolvida), não só na primeira conversa do contato.
+    if (candidate.triggerKind === 'new_conversation') return ctx.isNewAtendimento
     return candidate.triggerKeywords.some((keyword) => {
       const normalized = keyword.trim().toLowerCase()
       return normalized.length > 0 && text.includes(normalized)
@@ -171,10 +220,10 @@ async function maybeStartFlow(ctx: BotInboundContext): Promise<void> {
   })
   if (!flow) return
 
-  await startFlow(ctx, flow)
+  await startFlow(ctx, flow, atendimentoSeq)
 }
 
-async function startFlow(ctx: BotInboundContext, flow: BotFlow): Promise<void> {
+async function startFlow(ctx: BotInboundContext, flow: BotFlow, atendimentoSeq: number): Promise<void> {
   const definition = parseDefinition(flow.definition)
   const startNode = definition.nodes.find((node) => node.kind === 'start')
   if (!startNode) {
@@ -189,6 +238,7 @@ async function startFlow(ctx: BotInboundContext, flow: BotFlow): Promise<void> {
       workspaceId: ctx.workspaceId,
       flowId: flow.id,
       conversationId: ctx.conversationId,
+      atendimentoSeq,
       currentNodeId: startNode.id,
       status: 'running',
     })
@@ -500,6 +550,21 @@ export async function resumeDelayedSession(botSessionId: string): Promise<void> 
       .limit(1)
     if (!conversation) throw new Error(`conversa ${session.conversationId} da sessão ${session.id} não existe mais`)
 
+    // Humano assumiu durante a espera (Pegar/atribuir/transferir/respondeu):
+    // aborta a retomada agendada — o bot não pode "voltar ao fluxo" depois do
+    // takeover. Defesa em profundidade além do cancelamento na hora do takeover.
+    if (
+      conversation.assignedAgentId !== null ||
+      conversation.status === 'assigned' ||
+      conversation.status === 'pending'
+    ) {
+      await db
+        .update(botSessions)
+        .set({ status: 'cancelled', updatedAt: new Date() })
+        .where(eq(botSessions.id, session.id))
+      return
+    }
+
     const [connection] = await db
       .select()
       .from(connections)
@@ -696,6 +761,36 @@ async function callWebhook(
 }
 
 // Falha best-effort: nunca propaga — o atendimento humano não pode depender do bot.
+// Humano assumiu a conversa: encerra silenciosamente qualquer sessão viva
+// (running/waiting_input → cancelled) e limpa o badge, SEM tocar no status da
+// conversa (o agente é o dono agora). Publica bot:finished para o inbox desligar
+// o badge "Chatbot atendendo" em tempo real.
+async function silenceActiveSession(workspaceId: string, conversationId: string): Promise<void> {
+  try {
+    const now = new Date()
+    const cancelled = await db
+      .update(botSessions)
+      .set({ status: 'cancelled', updatedAt: now })
+      .where(
+        and(
+          eq(botSessions.conversationId, conversationId),
+          inArray(botSessions.status, ['running', 'waiting_input']),
+        ),
+      )
+      .returning({ id: botSessions.id, flowId: botSessions.flowId })
+    if (cancelled.length === 0) return
+    await db
+      .update(conversations)
+      .set({ activeBotFlowId: null, updatedAt: now })
+      .where(eq(conversations.id, conversationId))
+    await publishInboxEvent(
+      buildInboxEvent('bot:finished', { workspaceId, conversationId, flowId: cancelled[0].flowId }),
+    )
+  } catch (error) {
+    console.error('[crm-worker:bot] falha ao silenciar sessão do bot (takeover):', error)
+  }
+}
+
 async function failSession(sessionId: string | null, conversationId: string): Promise<void> {
   try {
     const now = new Date()
@@ -736,6 +831,15 @@ async function sendBotMessage(rt: Runtime, content: string, media: MediaRef[], b
     connectionId: rt.connectionId,
     attachments: media,
   })
+  // Aparece na thread/lista em tempo real (a API faz o bridge → message:new).
+  // Sem isto, mensagens de bot/sistema só surgiriam após reload.
+  await publishInboxEvent(
+    buildInboxEvent('message:sent', {
+      workspaceId: rt.workspaceId,
+      conversationId: rt.conversationId,
+      messageId,
+    }),
+  )
   await getOutboundQueue().add(
     'send',
     {

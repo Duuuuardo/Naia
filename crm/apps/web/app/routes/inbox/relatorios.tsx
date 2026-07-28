@@ -23,6 +23,10 @@ export const Route = createFileRoute('/inbox/relatorios')({
   beforeLoad: async () => {
     const agent = await getInboxAgent()
     if (!agent) throw redirect({ to: '/inbox/login' })
+    // Relatórios gerais são só de admin/superadmin; agente vai ao pessoal.
+    if (agent.role !== 'superadmin' && agent.role !== 'admin') {
+      throw redirect({ to: '/inbox/meu-desempenho' })
+    }
   },
   loader: async () => {
     const agent = (await getInboxAgent())!

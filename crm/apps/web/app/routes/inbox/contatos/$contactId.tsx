@@ -20,6 +20,7 @@ import { InboxShell } from '../../../components/inbox-shell'
 import { ContactTagsSection } from '../../../components/contatos/contact-tags-section'
 import { BlockContactModal } from '../../../components/inbox/contact-panel'
 import { Badge, Button, Card, EmptyState, ErrorNote, Modal, getInitials } from '../../../components/ui'
+import { ContactAvatar } from '../../../components/inbox/contact-avatar'
 import {
   blockContact,
   fetchContactBlockState,
@@ -226,17 +227,7 @@ function ContactDetailView() {
             >
               <ArrowLeft size={16} />
             </Link>
-            {contact.avatarUrl ? (
-              <img
-                src={contact.avatarUrl}
-                alt=""
-                className="size-9 shrink-0 rounded-full border border-neutral-200 object-cover"
-              />
-            ) : (
-              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-neutral-100 text-xs font-bold text-dark-800">
-                {getInitials(contact.name)}
-              </span>
-            )}
+            <ContactAvatar name={contact.name} url={contact.avatarDisplayUrl} size={36} className="text-xs" />
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <p className="truncate text-sm font-semibold text-dark-800">{contact.name}</p>
@@ -855,15 +846,17 @@ function HistorySection({ history }: { history: ContactHistoryEntry[] }) {
             const ChannelIcon = channelIcon[entry.connection.kind as 'whatsapp' | 'telegram'] ?? MessageCircle
             const meta = conversationStatusMeta[entry.status] ?? conversationStatusMeta.open
             return (
-              <li key={entry.id} className="relative">
+              <li key={`${entry.id}:${entry.atendimentoSeq}`} className="relative">
                 <span className="absolute -left-[26.5px] top-2.5 grid size-3 place-items-center rounded-full border-2 border-neutral-0 bg-neutral-300" />
                 <Link
-                  to="/inbox/c/$conversationId"
+                  to="/inbox/atendimento/c/$conversationId"
                   params={{ conversationId: entry.id }}
+                  search={{ atendimento: entry.atendimentoSeq }}
                   className="block rounded-lg border border-neutral-100 bg-neutral-0 p-3 transition-colors hover:border-neutral-200 hover:bg-neutral-50"
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <ChannelIcon size={13} className="shrink-0 text-neutral-400" aria-hidden="true" />
+                    <span className="text-xs font-semibold text-dark-800">Atendimento #{entry.atendimentoSeq}</span>
                     <span className="text-xs text-neutral-400">{entry.connection.name}</span>
                     <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${meta.color}`}>
                       {meta.label}

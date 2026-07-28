@@ -11,6 +11,8 @@ export type InboxEvent =
   | { type: 'conversation:reopened'; conversationId: string }
   | { type: 'conversation:pending'; conversationId: string }
   | { type: 'conversation:transferred'; conversationId: string; transfer: unknown }
+  // Avaliação CSAT do cliente (nota registrada) → nota aparece na thread.
+  | { type: 'conversation:rated'; conversationId: string; rating: unknown }
   | { type: 'connection:status'; connectionId: string; status: string }
   | { type: 'deal:new'; deal: unknown }
   | { type: 'deal:moved'; deal: unknown }

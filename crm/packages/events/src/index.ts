@@ -62,5 +62,29 @@ export type BotFinished = EventEnvelope<
   { workspaceId: string; conversationId: string; flowId: string }
 >
 
+// Avaliação CSAT registrada: o contato respondeu à pesquisa (nota 1-5) numa
+// conversa resolvida. Alimenta a exibição da nota na thread em tempo real —
+// a API resolve o shape completo do rating (com nome do agente) no bridge.
+export type ConversationRated = EventEnvelope<
+  'conversation:rated',
+  { workspaceId: string; conversationId: string; ratingId: string }
+>
+
+// Mensagem outbound persistida pelo worker (bot, boas-vindas, auto-reply de
+// fora de horário, agradecimento do CSAT) — as enviadas pelo agente já são
+// broadcastadas pela própria rota da API. Sem este evento, mensagens geradas
+// no worker só apareceriam na thread após um reload.
+export type MessageSent = EventEnvelope<
+  'message:sent',
+  { workspaceId: string; conversationId: string; messageId: string }
+>
+
 export type CrmSessionEvent = SessionConnected | SessionDisconnected | SessionQrUpdated
-export type CrmInboxEvent = InboundMessageReceived | MessageStatusUpdated | BotStarted | BotHandoff | BotFinished
+export type CrmInboxEvent =
+  | InboundMessageReceived
+  | MessageStatusUpdated
+  | BotStarted
+  | BotHandoff
+  | BotFinished
+  | ConversationRated
+  | MessageSent

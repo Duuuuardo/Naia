@@ -1,8 +1,9 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useState } from 'react'
-import { Pencil, Plus, Search, Trash2, Zap } from 'lucide-react'
+import { FileText, Image as ImageIcon, Paperclip, Pencil, Plus, Search, Trash2, X, Zap } from 'lucide-react'
 import { InboxShell } from '../../components/inbox-shell'
 import { Button, Card, EmptyState, Modal } from '../../components/ui'
+import { AttachmentPicker, type ComposerAttachment } from '../../components/inbox/attachment-picker'
 import {
   createQuickReply,
   deleteQuickReply,
@@ -42,6 +43,8 @@ function QuickRepliesPage() {
   const [shortcut, setShortcut] = useState('')
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([])
+  const [pickerOpen, setPickerOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
@@ -64,6 +67,7 @@ function QuickRepliesPage() {
     setShortcut('')
     setTitle('')
     setContent('')
+    setAttachments([])
     setFormError(null)
     setModalOpen(true)
   }
@@ -73,6 +77,7 @@ function QuickRepliesPage() {
     setShortcut(item.shortcut)
     setTitle(item.title)
     setContent(item.content)
+    setAttachments(item.attachments)
     setFormError(null)
     setModalOpen(true)
   }
@@ -88,19 +93,28 @@ function QuickRepliesPage() {
       setFormError('Informe um título.')
       return
     }
-    if (!content.trim()) {
-      setFormError('Informe o conteúdo da resposta.')
+    if (!content.trim() && attachments.length === 0) {
+      setFormError('Informe o conteúdo da resposta ou anexe pelo menos um arquivo.')
       return
     }
     setFormError(null)
     setSaving(true)
+    // A API exige content com minLength 1 — só-anexo vai com ' '.
+    const contentToSave = content.trim() || ' '
+    const attachmentFileIds = attachments.map((a) => a.fileId)
     try {
       const result = editing
         ? await updateQuickReply({
-            data: { quickReplyId: editing.id, shortcut: cleanShortcut, title: title.trim(), content: content.trim() },
+            data: {
+              quickReplyId: editing.id,
+              shortcut: cleanShortcut,
+              title: title.trim(),
+              content: contentToSave,
+              attachmentFileIds,
+            },
           })
         : await createQuickReply({
-            data: { shortcut: cleanShortcut, title: title.trim(), content: content.trim() },
+            data: { shortcut: cleanShortcut, title: title.trim(), content: contentToSave, attachmentFileIds },
           })
       if (!result) {
         setFormError('Não foi possível salvar. Você só pode editar respostas que criou.')
@@ -202,6 +216,12 @@ function QuickRepliesPage() {
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-dark-800">{qr.title}</p>
                     <p className="mt-0.5 line-clamp-2 text-xs text-neutral-500">{qr.content}</p>
+                    {qr.attachments.length > 0 && (
+                      <p className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-neutral-400">
+                        <Paperclip size={11} aria-hidden="true" />
+                        {qr.attachments.length} anexo{qr.attachments.length > 1 ? 's' : ''}
+                      </p>
+                    )}
                   </div>
                   {canManage(qr) && (
                     <div className="flex shrink-0 gap-1">
@@ -285,9 +305,50 @@ function QuickRepliesPage() {
               rows={5}
             />
           </div>
+          <div>
+            <label>Anexos</label>
+            {attachments.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {attachments.map((a) => (
+                  <span
+                    key={a.fileId}
+                    className="inline-flex max-w-56 items-center gap-1.5 rounded-full border border-neutral-200 bg-neutral-50 py-1 pl-2.5 pr-1 text-xs font-medium text-dark-800"
+                  >
+                    {a.kind === 'image' ? (
+                      <ImageIcon size={12} className="shrink-0 text-brand-500" aria-hidden="true" />
+                    ) : (
+                      <FileText size={12} className="shrink-0 text-brand-500" aria-hidden="true" />
+                    )}
+                    <span className="truncate">{a.filename}</span>
+                    <button
+                      type="button"
+                      onClick={() => setAttachments((prev) => prev.filter((p) => p.fileId !== a.fileId))}
+                      aria-label={`Remover anexo ${a.filename}`}
+                      className="grid size-4 shrink-0 place-items-center rounded-full text-neutral-400 transition-colors hover:bg-neutral-200 hover:text-dark-800"
+                    >
+                      <X size={11} aria-hidden="true" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <Button type="button" variant="secondary" size="sm" icon={Paperclip} onClick={() => setPickerOpen(true)}>
+              {attachments.length > 0 ? 'Gerenciar anexos' : 'Anexar arquivo'}
+            </Button>
+            <p className="mt-1 text-xs text-neutral-400">
+              Enviados junto com o texto quando a resposta é usada no atendimento.
+            </p>
+          </div>
           {formError && <p className="text-sm text-error-500">{formError}</p>}
         </form>
       </Modal>
+
+      <AttachmentPicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        selected={attachments}
+        onChange={setAttachments}
+      />
 
       <Modal
         open={deleting !== null}

@@ -15,7 +15,9 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as InboxIndexRouteImport } from './routes/inbox/index'
 import { Route as InboxRespostasRouteImport } from './routes/inbox/respostas'
 import { Route as InboxRelatoriosRouteImport } from './routes/inbox/relatorios'
+import { Route as InboxMeuDesempenhoRouteImport } from './routes/inbox/meu-desempenho'
 import { Route as InboxLoginRouteImport } from './routes/inbox/login'
+import { Route as InboxAtendimentoRouteImport } from './routes/inbox/atendimento'
 import { Route as InboxArquivosRouteImport } from './routes/inbox/arquivos'
 import { Route as InboxActivateRouteImport } from './routes/inbox/activate'
 import { Route as AuthErrorRouteImport } from './routes/auth/error'
@@ -27,14 +29,15 @@ import { Route as InboxFunisIndexRouteImport } from './routes/inbox/funis/index'
 import { Route as InboxContatosIndexRouteImport } from './routes/inbox/contatos/index'
 import { Route as InboxChatIndexRouteImport } from './routes/inbox/chat/index'
 import { Route as InboxBotIndexRouteImport } from './routes/inbox/bot/index'
+import { Route as InboxAtendimentoIndexRouteImport } from './routes/inbox/atendimento/index'
 import { Route as AppWorkspaceIdIndexRouteImport } from './routes/_app/$workspaceId/index'
 import { Route as InboxFunisPipelineIdRouteImport } from './routes/inbox/funis/$pipelineId'
 import { Route as InboxContatosContactIdRouteImport } from './routes/inbox/contatos/$contactId'
 import { Route as InboxChatChatIdRouteImport } from './routes/inbox/chat/$chatId'
-import { Route as InboxCConversationIdRouteImport } from './routes/inbox/c/$conversationId'
 import { Route as InboxBotBotIdRouteImport } from './routes/inbox/bot/$botId'
 import { Route as InboxAdminTagsRouteImport } from './routes/inbox/admin/tags'
 import { Route as InboxAdminPermissoesRouteImport } from './routes/inbox/admin/permissoes'
+import { Route as InboxAdminIdentificacaoRouteImport } from './routes/inbox/admin/identificacao'
 import { Route as InboxAdminHorariosRouteImport } from './routes/inbox/admin/horarios'
 import { Route as InboxAdminFilasRouteImport } from './routes/inbox/admin/filas'
 import { Route as InboxAdminEquipesRouteImport } from './routes/inbox/admin/equipes'
@@ -47,6 +50,7 @@ import { Route as AppWorkspaceIdMembersRouteImport } from './routes/_app/$worksp
 import { Route as AppWorkspaceIdDashboardRouteImport } from './routes/_app/$workspaceId/dashboard'
 import { Route as AppWorkspaceIdBillingRouteImport } from './routes/_app/$workspaceId/billing'
 import { Route as AppWorkspaceIdAgentsRouteImport } from './routes/_app/$workspaceId/agents'
+import { Route as InboxAtendimentoCConversationIdRouteImport } from './routes/inbox/atendimento/c/$conversationId'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -77,9 +81,19 @@ const InboxRelatoriosRoute = InboxRelatoriosRouteImport.update({
   path: '/inbox/relatorios',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InboxMeuDesempenhoRoute = InboxMeuDesempenhoRouteImport.update({
+  id: '/inbox/meu-desempenho',
+  path: '/inbox/meu-desempenho',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InboxLoginRoute = InboxLoginRouteImport.update({
   id: '/inbox/login',
   path: '/inbox/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InboxAtendimentoRoute = InboxAtendimentoRouteImport.update({
+  id: '/inbox/atendimento',
+  path: '/inbox/atendimento',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InboxArquivosRoute = InboxArquivosRouteImport.update({
@@ -137,6 +151,11 @@ const InboxBotIndexRoute = InboxBotIndexRouteImport.update({
   path: '/inbox/bot/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InboxAtendimentoIndexRoute = InboxAtendimentoIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => InboxAtendimentoRoute,
+} as any)
 const AppWorkspaceIdIndexRoute = AppWorkspaceIdIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -157,11 +176,6 @@ const InboxChatChatIdRoute = InboxChatChatIdRouteImport.update({
   path: '/inbox/chat/$chatId',
   getParentRoute: () => rootRouteImport,
 } as any)
-const InboxCConversationIdRoute = InboxCConversationIdRouteImport.update({
-  id: '/inbox/c/$conversationId',
-  path: '/inbox/c/$conversationId',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const InboxBotBotIdRoute = InboxBotBotIdRouteImport.update({
   id: '/inbox/bot/$botId',
   path: '/inbox/bot/$botId',
@@ -175,6 +189,11 @@ const InboxAdminTagsRoute = InboxAdminTagsRouteImport.update({
 const InboxAdminPermissoesRoute = InboxAdminPermissoesRouteImport.update({
   id: '/inbox/admin/permissoes',
   path: '/inbox/admin/permissoes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InboxAdminIdentificacaoRoute = InboxAdminIdentificacaoRouteImport.update({
+  id: '/inbox/admin/identificacao',
+  path: '/inbox/admin/identificacao',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InboxAdminHorariosRoute = InboxAdminHorariosRouteImport.update({
@@ -237,6 +256,12 @@ const AppWorkspaceIdAgentsRoute = AppWorkspaceIdAgentsRouteImport.update({
   path: '/agents',
   getParentRoute: () => AppWorkspaceIdRoute,
 } as any)
+const InboxAtendimentoCConversationIdRoute =
+  InboxAtendimentoCConversationIdRouteImport.update({
+    id: '/c/$conversationId',
+    path: '/c/$conversationId',
+    getParentRoute: () => InboxAtendimentoRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -248,7 +273,9 @@ export interface FileRoutesByFullPath {
   '/auth/error': typeof AuthErrorRoute
   '/inbox/activate': typeof InboxActivateRoute
   '/inbox/arquivos': typeof InboxArquivosRoute
+  '/inbox/atendimento': typeof InboxAtendimentoRouteWithChildren
   '/inbox/login': typeof InboxLoginRoute
+  '/inbox/meu-desempenho': typeof InboxMeuDesempenhoRoute
   '/inbox/relatorios': typeof InboxRelatoriosRoute
   '/inbox/respostas': typeof InboxRespostasRoute
   '/inbox/': typeof InboxIndexRoute
@@ -264,18 +291,20 @@ export interface FileRoutesByFullPath {
   '/inbox/admin/equipes': typeof InboxAdminEquipesRoute
   '/inbox/admin/filas': typeof InboxAdminFilasRoute
   '/inbox/admin/horarios': typeof InboxAdminHorariosRoute
+  '/inbox/admin/identificacao': typeof InboxAdminIdentificacaoRoute
   '/inbox/admin/permissoes': typeof InboxAdminPermissoesRoute
   '/inbox/admin/tags': typeof InboxAdminTagsRoute
   '/inbox/bot/$botId': typeof InboxBotBotIdRoute
-  '/inbox/c/$conversationId': typeof InboxCConversationIdRoute
   '/inbox/chat/$chatId': typeof InboxChatChatIdRoute
   '/inbox/contatos/$contactId': typeof InboxContatosContactIdRoute
   '/inbox/funis/$pipelineId': typeof InboxFunisPipelineIdRoute
   '/$workspaceId/': typeof AppWorkspaceIdIndexRoute
+  '/inbox/atendimento/': typeof InboxAtendimentoIndexRoute
   '/inbox/bot/': typeof InboxBotIndexRoute
   '/inbox/chat/': typeof InboxChatIndexRoute
   '/inbox/contatos/': typeof InboxContatosIndexRoute
   '/inbox/funis/': typeof InboxFunisIndexRoute
+  '/inbox/atendimento/c/$conversationId': typeof InboxAtendimentoCConversationIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -287,6 +316,7 @@ export interface FileRoutesByTo {
   '/inbox/activate': typeof InboxActivateRoute
   '/inbox/arquivos': typeof InboxArquivosRoute
   '/inbox/login': typeof InboxLoginRoute
+  '/inbox/meu-desempenho': typeof InboxMeuDesempenhoRoute
   '/inbox/relatorios': typeof InboxRelatoriosRoute
   '/inbox/respostas': typeof InboxRespostasRoute
   '/inbox': typeof InboxIndexRoute
@@ -302,18 +332,20 @@ export interface FileRoutesByTo {
   '/inbox/admin/equipes': typeof InboxAdminEquipesRoute
   '/inbox/admin/filas': typeof InboxAdminFilasRoute
   '/inbox/admin/horarios': typeof InboxAdminHorariosRoute
+  '/inbox/admin/identificacao': typeof InboxAdminIdentificacaoRoute
   '/inbox/admin/permissoes': typeof InboxAdminPermissoesRoute
   '/inbox/admin/tags': typeof InboxAdminTagsRoute
   '/inbox/bot/$botId': typeof InboxBotBotIdRoute
-  '/inbox/c/$conversationId': typeof InboxCConversationIdRoute
   '/inbox/chat/$chatId': typeof InboxChatChatIdRoute
   '/inbox/contatos/$contactId': typeof InboxContatosContactIdRoute
   '/inbox/funis/$pipelineId': typeof InboxFunisPipelineIdRoute
   '/$workspaceId': typeof AppWorkspaceIdIndexRoute
+  '/inbox/atendimento': typeof InboxAtendimentoIndexRoute
   '/inbox/bot': typeof InboxBotIndexRoute
   '/inbox/chat': typeof InboxChatIndexRoute
   '/inbox/contatos': typeof InboxContatosIndexRoute
   '/inbox/funis': typeof InboxFunisIndexRoute
+  '/inbox/atendimento/c/$conversationId': typeof InboxAtendimentoCConversationIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -327,7 +359,9 @@ export interface FileRoutesById {
   '/auth/error': typeof AuthErrorRoute
   '/inbox/activate': typeof InboxActivateRoute
   '/inbox/arquivos': typeof InboxArquivosRoute
+  '/inbox/atendimento': typeof InboxAtendimentoRouteWithChildren
   '/inbox/login': typeof InboxLoginRoute
+  '/inbox/meu-desempenho': typeof InboxMeuDesempenhoRoute
   '/inbox/relatorios': typeof InboxRelatoriosRoute
   '/inbox/respostas': typeof InboxRespostasRoute
   '/inbox/': typeof InboxIndexRoute
@@ -343,18 +377,20 @@ export interface FileRoutesById {
   '/inbox/admin/equipes': typeof InboxAdminEquipesRoute
   '/inbox/admin/filas': typeof InboxAdminFilasRoute
   '/inbox/admin/horarios': typeof InboxAdminHorariosRoute
+  '/inbox/admin/identificacao': typeof InboxAdminIdentificacaoRoute
   '/inbox/admin/permissoes': typeof InboxAdminPermissoesRoute
   '/inbox/admin/tags': typeof InboxAdminTagsRoute
   '/inbox/bot/$botId': typeof InboxBotBotIdRoute
-  '/inbox/c/$conversationId': typeof InboxCConversationIdRoute
   '/inbox/chat/$chatId': typeof InboxChatChatIdRoute
   '/inbox/contatos/$contactId': typeof InboxContatosContactIdRoute
   '/inbox/funis/$pipelineId': typeof InboxFunisPipelineIdRoute
   '/_app/$workspaceId/': typeof AppWorkspaceIdIndexRoute
+  '/inbox/atendimento/': typeof InboxAtendimentoIndexRoute
   '/inbox/bot/': typeof InboxBotIndexRoute
   '/inbox/chat/': typeof InboxChatIndexRoute
   '/inbox/contatos/': typeof InboxContatosIndexRoute
   '/inbox/funis/': typeof InboxFunisIndexRoute
+  '/inbox/atendimento/c/$conversationId': typeof InboxAtendimentoCConversationIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -368,7 +404,9 @@ export interface FileRouteTypes {
     | '/auth/error'
     | '/inbox/activate'
     | '/inbox/arquivos'
+    | '/inbox/atendimento'
     | '/inbox/login'
+    | '/inbox/meu-desempenho'
     | '/inbox/relatorios'
     | '/inbox/respostas'
     | '/inbox/'
@@ -384,18 +422,20 @@ export interface FileRouteTypes {
     | '/inbox/admin/equipes'
     | '/inbox/admin/filas'
     | '/inbox/admin/horarios'
+    | '/inbox/admin/identificacao'
     | '/inbox/admin/permissoes'
     | '/inbox/admin/tags'
     | '/inbox/bot/$botId'
-    | '/inbox/c/$conversationId'
     | '/inbox/chat/$chatId'
     | '/inbox/contatos/$contactId'
     | '/inbox/funis/$pipelineId'
     | '/$workspaceId/'
+    | '/inbox/atendimento/'
     | '/inbox/bot/'
     | '/inbox/chat/'
     | '/inbox/contatos/'
     | '/inbox/funis/'
+    | '/inbox/atendimento/c/$conversationId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -407,6 +447,7 @@ export interface FileRouteTypes {
     | '/inbox/activate'
     | '/inbox/arquivos'
     | '/inbox/login'
+    | '/inbox/meu-desempenho'
     | '/inbox/relatorios'
     | '/inbox/respostas'
     | '/inbox'
@@ -422,18 +463,20 @@ export interface FileRouteTypes {
     | '/inbox/admin/equipes'
     | '/inbox/admin/filas'
     | '/inbox/admin/horarios'
+    | '/inbox/admin/identificacao'
     | '/inbox/admin/permissoes'
     | '/inbox/admin/tags'
     | '/inbox/bot/$botId'
-    | '/inbox/c/$conversationId'
     | '/inbox/chat/$chatId'
     | '/inbox/contatos/$contactId'
     | '/inbox/funis/$pipelineId'
     | '/$workspaceId'
+    | '/inbox/atendimento'
     | '/inbox/bot'
     | '/inbox/chat'
     | '/inbox/contatos'
     | '/inbox/funis'
+    | '/inbox/atendimento/c/$conversationId'
   id:
     | '__root__'
     | '/'
@@ -446,7 +489,9 @@ export interface FileRouteTypes {
     | '/auth/error'
     | '/inbox/activate'
     | '/inbox/arquivos'
+    | '/inbox/atendimento'
     | '/inbox/login'
+    | '/inbox/meu-desempenho'
     | '/inbox/relatorios'
     | '/inbox/respostas'
     | '/inbox/'
@@ -462,18 +507,20 @@ export interface FileRouteTypes {
     | '/inbox/admin/equipes'
     | '/inbox/admin/filas'
     | '/inbox/admin/horarios'
+    | '/inbox/admin/identificacao'
     | '/inbox/admin/permissoes'
     | '/inbox/admin/tags'
     | '/inbox/bot/$botId'
-    | '/inbox/c/$conversationId'
     | '/inbox/chat/$chatId'
     | '/inbox/contatos/$contactId'
     | '/inbox/funis/$pipelineId'
     | '/_app/$workspaceId/'
+    | '/inbox/atendimento/'
     | '/inbox/bot/'
     | '/inbox/chat/'
     | '/inbox/contatos/'
     | '/inbox/funis/'
+    | '/inbox/atendimento/c/$conversationId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -484,7 +531,9 @@ export interface RootRouteChildren {
   AuthErrorRoute: typeof AuthErrorRoute
   InboxActivateRoute: typeof InboxActivateRoute
   InboxArquivosRoute: typeof InboxArquivosRoute
+  InboxAtendimentoRoute: typeof InboxAtendimentoRouteWithChildren
   InboxLoginRoute: typeof InboxLoginRoute
+  InboxMeuDesempenhoRoute: typeof InboxMeuDesempenhoRoute
   InboxRelatoriosRoute: typeof InboxRelatoriosRoute
   InboxRespostasRoute: typeof InboxRespostasRoute
   InboxIndexRoute: typeof InboxIndexRoute
@@ -494,10 +543,10 @@ export interface RootRouteChildren {
   InboxAdminEquipesRoute: typeof InboxAdminEquipesRoute
   InboxAdminFilasRoute: typeof InboxAdminFilasRoute
   InboxAdminHorariosRoute: typeof InboxAdminHorariosRoute
+  InboxAdminIdentificacaoRoute: typeof InboxAdminIdentificacaoRoute
   InboxAdminPermissoesRoute: typeof InboxAdminPermissoesRoute
   InboxAdminTagsRoute: typeof InboxAdminTagsRoute
   InboxBotBotIdRoute: typeof InboxBotBotIdRoute
-  InboxCConversationIdRoute: typeof InboxCConversationIdRoute
   InboxChatChatIdRoute: typeof InboxChatChatIdRoute
   InboxContatosContactIdRoute: typeof InboxContatosContactIdRoute
   InboxFunisPipelineIdRoute: typeof InboxFunisPipelineIdRoute
@@ -551,11 +600,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InboxRelatoriosRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/inbox/meu-desempenho': {
+      id: '/inbox/meu-desempenho'
+      path: '/inbox/meu-desempenho'
+      fullPath: '/inbox/meu-desempenho'
+      preLoaderRoute: typeof InboxMeuDesempenhoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/inbox/login': {
       id: '/inbox/login'
       path: '/inbox/login'
       fullPath: '/inbox/login'
       preLoaderRoute: typeof InboxLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inbox/atendimento': {
+      id: '/inbox/atendimento'
+      path: '/inbox/atendimento'
+      fullPath: '/inbox/atendimento'
+      preLoaderRoute: typeof InboxAtendimentoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/inbox/arquivos': {
@@ -635,6 +698,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InboxBotIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/inbox/atendimento/': {
+      id: '/inbox/atendimento/'
+      path: '/'
+      fullPath: '/inbox/atendimento/'
+      preLoaderRoute: typeof InboxAtendimentoIndexRouteImport
+      parentRoute: typeof InboxAtendimentoRoute
+    }
     '/_app/$workspaceId/': {
       id: '/_app/$workspaceId/'
       path: '/'
@@ -663,13 +733,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InboxChatChatIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/inbox/c/$conversationId': {
-      id: '/inbox/c/$conversationId'
-      path: '/inbox/c/$conversationId'
-      fullPath: '/inbox/c/$conversationId'
-      preLoaderRoute: typeof InboxCConversationIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/inbox/bot/$botId': {
       id: '/inbox/bot/$botId'
       path: '/inbox/bot/$botId'
@@ -689,6 +752,13 @@ declare module '@tanstack/react-router' {
       path: '/inbox/admin/permissoes'
       fullPath: '/inbox/admin/permissoes'
       preLoaderRoute: typeof InboxAdminPermissoesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inbox/admin/identificacao': {
+      id: '/inbox/admin/identificacao'
+      path: '/inbox/admin/identificacao'
+      fullPath: '/inbox/admin/identificacao'
+      preLoaderRoute: typeof InboxAdminIdentificacaoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/inbox/admin/horarios': {
@@ -775,6 +845,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppWorkspaceIdAgentsRouteImport
       parentRoute: typeof AppWorkspaceIdRoute
     }
+    '/inbox/atendimento/c/$conversationId': {
+      id: '/inbox/atendimento/c/$conversationId'
+      path: '/c/$conversationId'
+      fullPath: '/inbox/atendimento/c/$conversationId'
+      preLoaderRoute: typeof InboxAtendimentoCConversationIdRouteImport
+      parentRoute: typeof InboxAtendimentoRoute
+    }
   }
 }
 
@@ -816,6 +893,19 @@ const AppRouteChildren: AppRouteChildren = {
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
+interface InboxAtendimentoRouteChildren {
+  InboxAtendimentoIndexRoute: typeof InboxAtendimentoIndexRoute
+  InboxAtendimentoCConversationIdRoute: typeof InboxAtendimentoCConversationIdRoute
+}
+
+const InboxAtendimentoRouteChildren: InboxAtendimentoRouteChildren = {
+  InboxAtendimentoIndexRoute: InboxAtendimentoIndexRoute,
+  InboxAtendimentoCConversationIdRoute: InboxAtendimentoCConversationIdRoute,
+}
+
+const InboxAtendimentoRouteWithChildren =
+  InboxAtendimentoRoute._addFileChildren(InboxAtendimentoRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
@@ -824,7 +914,9 @@ const rootRouteChildren: RootRouteChildren = {
   AuthErrorRoute: AuthErrorRoute,
   InboxActivateRoute: InboxActivateRoute,
   InboxArquivosRoute: InboxArquivosRoute,
+  InboxAtendimentoRoute: InboxAtendimentoRouteWithChildren,
   InboxLoginRoute: InboxLoginRoute,
+  InboxMeuDesempenhoRoute: InboxMeuDesempenhoRoute,
   InboxRelatoriosRoute: InboxRelatoriosRoute,
   InboxRespostasRoute: InboxRespostasRoute,
   InboxIndexRoute: InboxIndexRoute,
@@ -834,10 +926,10 @@ const rootRouteChildren: RootRouteChildren = {
   InboxAdminEquipesRoute: InboxAdminEquipesRoute,
   InboxAdminFilasRoute: InboxAdminFilasRoute,
   InboxAdminHorariosRoute: InboxAdminHorariosRoute,
+  InboxAdminIdentificacaoRoute: InboxAdminIdentificacaoRoute,
   InboxAdminPermissoesRoute: InboxAdminPermissoesRoute,
   InboxAdminTagsRoute: InboxAdminTagsRoute,
   InboxBotBotIdRoute: InboxBotBotIdRoute,
-  InboxCConversationIdRoute: InboxCConversationIdRoute,
   InboxChatChatIdRoute: InboxChatChatIdRoute,
   InboxContatosContactIdRoute: InboxContatosContactIdRoute,
   InboxFunisPipelineIdRoute: InboxFunisPipelineIdRoute,

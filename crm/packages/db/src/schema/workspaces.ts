@@ -104,6 +104,11 @@ export const workspaceSettings = pgTable('workspace_settings', {
   // Null = usa os textos padrão (CSAT_DEFAULT_MESSAGE / CSAT_DEFAULT_THANK_YOU_MESSAGE).
   csatMessage: text('csat_message'),
   csatThankYouMessage: text('csat_thank_you_message'),
+  // Identifica o atendente ao contato: quando ligado, o outbound manual leva o
+  // primeiro nome do agente em negrito antes da mensagem (*João*:\n…). Só afeta
+  // o texto enviado ao canal; o registro no banco continua limpo (o inbox já
+  // mostra o autor via agentName).
+  identifyAgent: boolean('identify_agent').notNull().default(false),
   // Próximo número de protocolo de conversa do workspace (incremento atômico
   // na mesma transação que cria a conversa, no worker).
   nextProtocol: integer('next_protocol').notNull().default(1),

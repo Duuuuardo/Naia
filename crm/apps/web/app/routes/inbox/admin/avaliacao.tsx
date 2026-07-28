@@ -86,8 +86,9 @@ function AdminCsat() {
                 Pesquisa de satisfação
               </h2>
               <p className="mt-0.5 text-xs text-neutral-500">
-                Ao resolver a conversa, o contato recebe a pergunta e responde com uma nota de 1 a 5. A nota não
-                reabre a conversa e aparece nos relatórios.
+                Ao resolver um atendimento, o contato recebe a pergunta e responde com uma nota de 1 a 5. A nota
+                não reabre a conversa e aparece nos relatórios. Cada atendimento (ciclo resolver → reabrir) tem
+                sua própria pesquisa.
               </p>
             </div>
 
@@ -103,10 +104,12 @@ function AdminCsat() {
                   className="mt-0.5 size-4 accent-brand-500"
                 />
                 <span>
-                  <span className="block text-sm font-medium text-dark-800">Enviar pesquisa ao resolver</span>
+                  <span className="block text-sm font-medium text-dark-800">
+                    Enviar pesquisa automaticamente ao finalizar
+                  </span>
                   <span className="mt-0.5 block text-xs text-neutral-500">
-                    Cada conversa recebe a pesquisa uma única vez. Se o contato responder qualquer outra coisa, a
-                    conversa reabre normalmente.
+                    Sempre que um atendimento é resolvido, a pesquisa é enviada (uma vez por atendimento). Se o
+                    contato responder qualquer outra coisa, o atendimento reabre normalmente.
                   </span>
                 </span>
               </label>

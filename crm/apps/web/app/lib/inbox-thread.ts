@@ -21,6 +21,9 @@ export type ThreadMessageItem = {
   kind: string
   status: string
   sentAt: string
+  // Atendimento (ciclo resolve→reopen) a que a mensagem pertence. Base dos
+  // divisores da thread por atendimento.
+  atendimentoSeq: number
   // Nome do agente autor em outbound manual; null em inbound e em mensagens de bot.
   agentName: string | null
   attachments?: ThreadMessageAttachment[]
@@ -49,6 +52,7 @@ export type ThreadRatingItem = {
   score: number
   comment: string | null
   createdAt: string
+  atendimentoSeq: number
   agentId: string | null
   agentName: string | null
 }
@@ -67,6 +71,7 @@ export type ConversationPage = {
     contactId: string
     title: string | null
     protocol: number
+    atendimentoSeq: number
   } | null
   contact: ThreadContactInfo | null
   messages: ThreadMessageItem[]
@@ -74,7 +79,7 @@ export type ConversationPage = {
   nextCursor: string | null
   notes: { id: string; content: string; createdAt: string }[]
   transfers: ThreadTransferItem[]
-  rating: ThreadRatingItem | null
+  ratings: ThreadRatingItem[]
   activeBotFlow: { id: string; name: string } | null
 }
 
@@ -99,7 +104,7 @@ export const fetchConversationPage = createServerFn()
       nextCursor?: string | null
       notes?: { id: string; content: string; createdAt: string }[]
       transfers?: ThreadTransferItem[]
-      rating?: ThreadRatingItem | null
+      ratings?: ThreadRatingItem[]
       activeBotFlow?: { id: string; name: string } | null
     } | null
     return {
@@ -110,7 +115,7 @@ export const fetchConversationPage = createServerFn()
       nextCursor: body?.nextCursor ?? null,
       notes: body?.notes ?? [],
       transfers: (body?.transfers ?? []) as ThreadTransferItem[],
-      rating: body?.rating ?? null,
+      ratings: (body?.ratings ?? []) as ThreadRatingItem[],
       activeBotFlow: body?.activeBotFlow ?? null,
     }
   })
@@ -183,6 +188,28 @@ export const stopConversationBot = createServerFn()
       }
       return { ok: false, message: errorMessage(res.error) }
     }
+    return { ok: true, message: null }
+  })
+
+// Envia o número do protocolo ao contato pelo canal (mensagem automática).
+export const sendConversationProtocol = createServerFn()
+  .validator((data: { conversationId: string }) => data)
+  .handler(async ({ data }): Promise<ThreadActionResult> => {
+    const res = await apiClient(inboxToken())
+      .inbox.conversations({ id: data.conversationId })['send-protocol'].post()
+    if (res.error) return { ok: false, message: errorMessage(res.error) }
+    return { ok: true, message: null }
+  })
+
+// Reenvia a pesquisa CSAT ao contato (conversa resolvida, CSAT habilitado,
+// ainda sem nota). 409 traz o motivo para a thread exibir.
+export const resendCsatSurvey = createServerFn()
+  .validator((data: { conversationId: string }) => data)
+  .handler(async ({ data }): Promise<ThreadActionResult> => {
+    const res = await apiClient(inboxToken())
+      .inbox.conversations({ id: data.conversationId })
+      .csat.send.post()
+    if (res.error) return { ok: false, message: errorMessage(res.error) }
     return { ok: true, message: null }
   })
 
