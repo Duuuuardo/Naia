@@ -151,7 +151,11 @@ export const campaignMessages = pgTable(
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
-  (table) => [index('campaign_messages_run_status_idx').on(table.runId, table.status)],
+  (table) => [
+    index('campaign_messages_run_status_idx').on(table.runId, table.status),
+    index('campaign_messages_external_id_idx').on(table.externalMessageId),
+    index('campaign_messages_campaign_status_idx').on(table.campaignId, table.status),
+  ],
 )
 
 export const whatsappSessions = pgTable(
