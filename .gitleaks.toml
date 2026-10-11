@@ -1,0 +1,9 @@
+[allowlist]
+paths = [
+  '''(^|/)dist/''',
+  '''(^|/)node_modules/''',
+  '''(^|/)\.turbo/''',
+  '''(^|/)\.output/''',
+  '''bun\.lock$''',
+  '''\.map$''',
+]
