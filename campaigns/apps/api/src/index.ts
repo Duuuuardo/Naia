@@ -74,6 +74,11 @@ async function bootstrap() {
   const port = Number(process.env.PORT ?? 4001)
 
   const app = new Elysia()
+    .onAfterHandle(({ set }) => {
+      set.headers['x-content-type-options'] = 'nosniff'
+      set.headers['x-frame-options'] = 'DENY'
+      set.headers['referrer-policy'] = 'no-referrer'
+    })
     .use(errorSanitizerPlugin)
     .use(rateLimitPlugin({ windowMs: rateLimitWindowMs, max: rateLimitMax, exclude: ['/auth/me', '/health'] }))
     .use(

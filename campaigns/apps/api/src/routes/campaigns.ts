@@ -699,13 +699,29 @@ export const campaignRoutes = new Elysia()
         inArray(campaignRuns.status, ['pending', 'running', 'paused']),
       ))
 
+      const refunded = await db.update(campaignMessages).set({
+        status: 'failed',
+        failureReason: 'Campanha cancelada',
+        updatedAt: now,
+      }).where(and(
+        eq(campaignMessages.campaignId, params.campaignId),
+        eq(campaignMessages.status, 'sending'),
+      )).returning({ id: campaignMessages.id })
+
+      if (refunded.length > 0) {
+        await db.execute(sql`
+          UPDATE entitlements SET credits_balance = credits_balance + ${refunded.length}, updated_at = now()
+          WHERE workspace_id = ${params.workspaceId}
+        `)
+      }
+
       await db.update(campaignMessages).set({
         status: 'failed',
         failureReason: 'Campanha cancelada',
         updatedAt: now,
       }).where(and(
         eq(campaignMessages.campaignId, params.campaignId),
-        inArray(campaignMessages.status, ['queued', 'sending']),
+        eq(campaignMessages.status, 'queued'),
       ))
 
       return { message: 'Campanha cancelada.' }

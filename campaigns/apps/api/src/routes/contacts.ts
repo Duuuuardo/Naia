@@ -230,7 +230,7 @@ export async function resolveCampaignTargets(workspaceId: string, connectionIds:
           avatarUrl: avatarUrl || null,
           isGroup: true,
           optInStatus: true,
-          optInAt: new Date(),
+          optInAt: null,
           createdAt: new Date(),
           updatedAt: new Date(),
         }
@@ -328,7 +328,7 @@ export async function resolveCampaignTargets(workspaceId: string, connectionIds:
           avatarUrl: avatarUrl || null,
           isGroup: false,
           optInStatus: true,
-          optInAt: new Date(),
+          optInAt: null,
           createdAt: new Date(),
           updatedAt: new Date(),
         }

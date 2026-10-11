@@ -16,8 +16,8 @@ interface Bucket {
 function getClientIp(request: Request): string {
   const forwarded = request.headers.get('x-forwarded-for')
   if (forwarded) {
-    const first = forwarded.split(',')[0]
-    if (first) return first.trim()
+    const last = forwarded.split(',').pop()?.trim()
+    if (last) return last
   }
   return request.headers.get('x-real-ip') ?? 'unknown'
 }

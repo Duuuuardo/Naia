@@ -220,59 +220,60 @@ async function launchRun(
     .orderBy(asc(campaignVariants.position))
 
   const runId = generateId()
-  await db.insert(campaignRuns).values({
-    id: runId,
-    campaignId,
-    runNumber,
-    status: 'running',
-    scheduledFor,
-    startedAt: now,
-    totalContacts: eligible.length,
-    quotaTruncated,
-    failedCount: excess.length,
-    nextPacerAt: now,
-  })
 
-  // Variantes rotacionadas por índice — anti-spam por variação de texto
-  const messageRows = batch.map((e, i) => ({
-    id: generateId(),
-    campaignId,
-    runId,
-    contactId: e.contact.id,
-    channel: e.channel,
-    variantId: variants.length > 0 ? variants[i % variants.length]!.id : null,
-    status: 'queued' as const,
-  }))
-
-  // Contatos além da cota entram como 'failed' imediatamente — visíveis na UI
-  const failedRows = excess.map((e) => ({
-    id: generateId(),
-    campaignId,
-    runId,
-    contactId: e.contact.id,
-    channel: e.channel,
-    variantId: null as string | null,
-    status: 'failed' as const,
-    failureReason: 'Créditos de disparo esgotados.',
-  }))
-
-  const allRows = [...messageRows, ...failedRows]
-  for (let i = 0; i < allRows.length; i += 500) {
-    await db.insert(campaignMessages).values(allRows.slice(i, i + 500))
-  }
-
-  await db
-    .update(campaigns)
-    .set({
+  await db.transaction(async (tx) => {
+    await tx.insert(campaignRuns).values({
+      id: runId,
+      campaignId,
+      runNumber,
       status: 'running',
-      startedAt: campaign.startedAt ?? now,
-      totalContacts: sql`${campaigns.totalContacts} + ${eligible.length}`,
-      failedCount: sql`${campaigns.failedCount} + ${excess.length}`,
-      occurrenceCount: runNumber,
-      nextRunAt,
-      updatedAt: now,
+      scheduledFor,
+      startedAt: now,
+      totalContacts: eligible.length,
+      quotaTruncated,
+      failedCount: excess.length,
+      nextPacerAt: now,
     })
-    .where(eq(campaigns.id, campaignId))
+
+    const messageRows = batch.map((e, i) => ({
+      id: generateId(),
+      campaignId,
+      runId,
+      contactId: e.contact.id,
+      channel: e.channel,
+      variantId: variants.length > 0 ? variants[i % variants.length]!.id : null,
+      status: 'queued' as const,
+    }))
+
+    const failedRows = excess.map((e) => ({
+      id: generateId(),
+      campaignId,
+      runId,
+      contactId: e.contact.id,
+      channel: e.channel,
+      variantId: null as string | null,
+      status: 'failed' as const,
+      failureReason: 'Créditos de disparo esgotados.',
+    }))
+
+    const allRows = [...messageRows, ...failedRows]
+    for (let i = 0; i < allRows.length; i += 500) {
+      await tx.insert(campaignMessages).values(allRows.slice(i, i + 500))
+    }
+
+    await tx
+      .update(campaigns)
+      .set({
+        status: 'running',
+        startedAt: campaign.startedAt ?? now,
+        totalContacts: sql`${campaigns.totalContacts} + ${eligible.length}`,
+        failedCount: sql`${campaigns.failedCount} + ${excess.length}`,
+        occurrenceCount: runNumber,
+        nextRunAt,
+        updatedAt: now,
+      })
+      .where(eq(campaigns.id, campaignId))
+  })
 
   await getQueue<PacerJob>(QUEUES.CAMPAIGN_PACER).add(
     `pacer:${runId}:0`,

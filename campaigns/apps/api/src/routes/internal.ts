@@ -23,6 +23,8 @@ import { verifyServiceToken } from '@naia/vianova-auth'
 import { canCreateCampaign, hasActiveSubscription } from '@naia/entitlements'
 import { dayKeyInTz, todayMonthDay } from '@naia/scheduling'
 import { disconnectSession } from '@naia/session-host-client'
+import { getQueue, getActiveScaleOutboundQueues, QUEUES } from '@naia/queue'
+import type { SendMessageJob, StatusWebhookJob, PacerJob } from '@naia/schemas'
 import { isTelegramUserConfig } from '../lib/telegram-helpers'
 import { sanitizeErrorMessage } from '@naia/schemas'
 import { startCampaignRun } from '../lib/campaign-runner'
@@ -386,6 +388,60 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
       body: t.Object({
         enrollmentIds: t.Array(t.String(), { minItems: 1 }),
       }),
+    },
+  )
+
+  .get(
+    '/queue-health',
+    async ({ headers, set }) => {
+      if (!verifySecret(headers['x-internal-secret'], NAIA_INTERNAL_SECRET)) {
+        set.status = 401
+        return { message: 'Não autorizado.' }
+      }
+
+      const names: string[] = [
+        QUEUES.WHATSAPP_OUTBOUND_BASE,
+        QUEUES.TELEGRAM_OUTBOUND_BASE,
+        QUEUES.STATUS_WEBHOOK,
+        QUEUES.CAMPAIGN_PACER,
+        ...(await getActiveScaleOutboundQueues().catch(() => [] as string[])),
+      ]
+
+      const queues: Record<string, unknown> = {}
+      for (const name of names) {
+        try {
+          const queue = name === QUEUES.CAMPAIGN_PACER
+            ? getQueue<PacerJob>(name)
+            : name === QUEUES.STATUS_WEBHOOK
+              ? getQueue<StatusWebhookJob>(name)
+              : getQueue<SendMessageJob>(name)
+          queues[name] = await queue.getJobCounts('waiting', 'active', 'delayed', 'failed')
+        } catch (err) {
+          queues[name] = { error: sanitizeErrorMessage(err, 'falha ao ler fila') }
+        }
+      }
+
+      const staleCutoff = new Date(Date.now() - 10 * 60_000)
+      const pacerCutoff = new Date(Date.now() - 3 * 60_000)
+      const [stale] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(campaignMessages)
+        .where(and(eq(campaignMessages.status, 'sending'), sql`${campaignMessages.updatedAt} < ${staleCutoff}`))
+      const [lostPacers] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(campaignRuns)
+        .where(and(
+          eq(campaignRuns.status, 'running'),
+          sql`(${campaignRuns.nextPacerAt} < ${pacerCutoff} OR (${campaignRuns.nextPacerAt} IS NULL AND ${campaignRuns.updatedAt} < ${pacerCutoff}))`,
+        ))
+
+      return {
+        queues,
+        postgres: {
+          staleSending: stale?.count ?? 0,
+          lostPacers: lostPacers?.count ?? 0,
+        },
+      }
     },
   )
 

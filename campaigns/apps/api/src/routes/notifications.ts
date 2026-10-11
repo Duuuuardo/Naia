@@ -70,7 +70,7 @@ export const notificationRoutes = new Elysia()
         return { message: 'Não autenticado.' }
       }
 
-      const res = await vianovaFetch(`/notifications/${params.id}/read`, rawToken, { method: 'POST' })
+      const res = await vianovaFetch(`/notifications/${encodeURIComponent(params.id)}/read`, rawToken, { method: 'POST' })
       if (!res.ok) {
         set.status = res.status
         return { message: 'Erro ao marcar notificação.' }

@@ -384,6 +384,10 @@ export const automationRoutes = new Elysia()
       if (!existing) { set.status = 404; return { message: 'Automação não encontrada.' } }
 
       if (!existing.active) {
+        if (!session?.emailVerified) {
+          set.status = 403
+          return { message: 'Confirme o email da sua conta Vianova para ativar automações. Se já confirmou, saia e entre novamente.' }
+        }
         const activeCount = await countActiveAutomations(params.workspaceId)
         const activationCheck = canActivateAutomation(ctx.entitlements, activeCount)
         if (!activationCheck.allowed) { set.status = 403; return { message: activationCheck.reason } }

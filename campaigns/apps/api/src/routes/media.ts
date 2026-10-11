@@ -99,6 +99,12 @@ export const mediaRoutes = new Elysia()
       }
 
       const size = await objectSize(asset.storageKey)
+      const limit = SIZE_LIMITS[asset.kind]
+      if (size > limit) {
+        await deleteObject(asset.storageKey).catch(() => {})
+        set.status = 400
+        return { message: `Arquivo excede o limite de ${Math.round(limit / 1024 / 1024)}MB para ${asset.kind === 'image' ? 'imagens' : 'este tipo de mídia'}.` }
+      }
       await db.update(mediaAssets).set({ status: 'ready', sizeBytes: size }).where(eq(mediaAssets.id, asset.id))
 
       const [updated] = await db.select().from(mediaAssets).where(eq(mediaAssets.id, asset.id)).limit(1)

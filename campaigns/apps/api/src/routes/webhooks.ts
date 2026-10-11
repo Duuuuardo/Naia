@@ -63,7 +63,7 @@ export const webhookRoutes = new Elysia()
   .get(
     '/webhooks/whatsapp/:connectionId',
     ({ query }) => {
-      if (!WEBHOOK_SECRET || query['hub.verify_token'] !== WEBHOOK_SECRET) {
+      if (!WEBHOOK_SECRET || !verifySecret(query['hub.verify_token'], WEBHOOK_SECRET)) {
         return new Response('Forbidden', { status: 403 })
       }
       return new Response(query['hub.challenge'] ?? 'ok')
