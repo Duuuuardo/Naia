@@ -45,12 +45,6 @@ async function pickWhatsAppConnectionId(workspaceId: string, connectionIds: stri
   return (await getActiveWhatsAppConnectionForWorkspace(workspaceId)) ?? connectionIds[0] ?? ''
 }
 
-/**
- * Resolve a usable WhatsApp phone number from a group participant object.
- * Modern Baileys returns participants in @lid (Linked Identity) format instead
- * of @s.whatsapp.net. When the id ends with @lid, the actual phone number lives
- * in the separate `phoneNumber` field (format: "5511999999999@s.whatsapp.net").
- */
 function resolveParticipantPhone(p: { id: string; phoneNumber?: string | null; name?: string | null }): string | null {
   if (p.phoneNumber) {
     const pn = p.phoneNumber.replace(/@.*$/, '').replace(/\D/g, '')
@@ -67,7 +61,6 @@ function resolveParticipantPhone(p: { id: string; phoneNumber?: string | null; n
   }
   return null
 }
-
 
 function parseCSV(text: string): Array<Record<string, string>> {
   const lines = text.trim().split(/\r?\n/)
@@ -107,8 +100,6 @@ export type SegmentFilter =
       targetMode: 'group' | 'members'
       tagOnCreate?: string[]
     }
-  // Aniversariantes do dia (usado pelas automações; monthDay 'MM-DD' — quando
-  // ausente, o resolvedor usa o dia corrente no fuso da campanha/automação)
   | { type: 'birthday'; monthDay?: string; timezone?: string }
 
 export function buildContactsQuery(workspaceId: string, filter: SegmentFilter) {
@@ -157,8 +148,6 @@ export function buildContactsQuery(workspaceId: string, filter: SegmentFilter) {
 
 export async function resolveCampaignTargets(workspaceId: string, connectionIds: string[], filter: SegmentFilter): Promise<typeof contacts.$inferSelect[]> {
   if (filter.type === 'birthday') {
-    // Formatos de birthDate são bagunçados ('YYYY-MM-DD', 'DD/MM', 'DD/MM/YYYY')
-    // — comparação em código, não em SQL.
     const monthDay = filter.monthDay ?? todayMonthDay(new Date(), filter.timezone ?? DEFAULT_TIMEZONE)
     const withBirthDate = await db
       .select()
@@ -171,8 +160,6 @@ export async function resolveCampaignTargets(workspaceId: string, connectionIds:
     return buildContactsQuery(workspaceId, filter)
   }
 
-  // Operações de grupo precisam de um socket Baileys — usa a primeira conexão
-  // WhatsApp ativa entre as selecionadas (fallback: qualquer uma do workspace).
   const connectionId = await pickWhatsAppConnectionId(workspaceId, connectionIds)
 
   if (!filter.groupIds || filter.groupIds.length === 0) {
@@ -247,7 +234,6 @@ export async function resolveCampaignTargets(workspaceId: string, connectionIds:
     return result
   }
 
-  // targetMode === 'members': expand group members into individual contacts
   const membersMap = new Map<string, typeof contacts.$inferSelect>()
 
   for (const gId of filter.groupIds) {
@@ -350,11 +336,8 @@ export async function resolveCampaignTargets(workspaceId: string, connectionIds:
   return Array.from(membersMap.values())
 }
 
-
 type ImportResult = { imported: number; skipped: number; failed: number; errors: string[] }
 
-/** Pipeline de import compartilhado entre /import (CSV colado), /import-file
- * (upload csv/xlsx) e o público manual do wizard. */
 async function importContactRows(
   workspaceId: string,
   rows: Array<Record<string, string>>,
@@ -468,7 +451,6 @@ async function importContactRows(
         }).onConflictDoNothing()
       }
 
-      // Gatilhos de automação: contato novo + tags que vieram no import
       await handleContactCreated(workspaceId, newId)
       if (tags.length > 0) await handleTagsAdded(workspaceId, [newId], tags)
 
@@ -482,11 +464,6 @@ async function importContactRows(
   return { imported, skipped, failed, errors }
 }
 
-/**
- * Garante a tag em todos os contatos com os identificadores dados — inclusive
- * os que o import pulou por duplicidade. Essencial quando a tag é a audiência
- * de uma campanha (arquivo/manual): contato existente também precisa entrar.
- */
 async function applyTagToIdentifiers(
   workspaceId: string,
   tag: string,
@@ -526,7 +503,6 @@ function slugify(value: string): string {
 export const contactRoutes = new Elysia()
   .use(authPlugin)
 
-  // GET /workspaces/:workspaceId/contacts
   .get(
     '/workspaces/:workspaceId/contacts',
     async ({ session, params, query, set }) => {
@@ -599,8 +575,6 @@ export const contactRoutes = new Elysia()
     },
   )
 
-
-  // GET /workspaces/:workspaceId/contacts/tags
   .get(
     '/workspaces/:workspaceId/contacts/tags',
     async ({ session, params, set }) => {
@@ -643,7 +617,6 @@ export const contactRoutes = new Elysia()
     },
   )
 
-  // POST /workspaces/:workspaceId/contacts/tags
   .post(
     '/workspaces/:workspaceId/contacts/tags',
     async ({ session, params, body, set }) => {
@@ -690,7 +663,6 @@ export const contactRoutes = new Elysia()
     },
   )
 
-  // PATCH /workspaces/:workspaceId/contacts/tags/:tagId
   .patch(
     '/workspaces/:workspaceId/contacts/tags/:tagId',
     async ({ session, params, body, set }) => {
@@ -739,7 +711,6 @@ export const contactRoutes = new Elysia()
     },
   )
 
-  // DELETE /workspaces/:workspaceId/contacts/tags/:tagId
   .delete(
     '/workspaces/:workspaceId/contacts/tags/:tagId',
     async ({ session, params, set }) => {
@@ -767,8 +738,6 @@ export const contactRoutes = new Elysia()
     },
   )
 
-
-  // POST /workspaces/:workspaceId/contacts
   .post(
     '/workspaces/:workspaceId/contacts',
     async ({ session, params, body, set }) => {
@@ -813,7 +782,6 @@ export const contactRoutes = new Elysia()
         optInAt: (body.optInStatus ?? true) ? new Date() : null,
       })
 
-
       if (body.telegramChatId) {
         await db.insert(contactIdentities).values({
           id: generateId(),
@@ -849,7 +817,6 @@ export const contactRoutes = new Elysia()
         }
       }
 
-      // Gatilhos de automação: contato novo + tags definidas no cadastro
       await handleContactCreated(params.workspaceId, id)
       if (body.tags && body.tags.length > 0) await handleTagsAdded(params.workspaceId, [id], body.tags)
 
@@ -879,8 +846,6 @@ export const contactRoutes = new Elysia()
     },
   )
 
-
-  // GET /workspaces/:workspaceId/contacts/:contactId
   .get(
     '/workspaces/:workspaceId/contacts/:contactId',
     async ({ session, params, set }) => {
@@ -905,7 +870,6 @@ export const contactRoutes = new Elysia()
     },
   )
 
-  // PATCH /workspaces/:workspaceId/contacts/:contactId
   .patch(
     '/workspaces/:workspaceId/contacts/:contactId',
     async ({ session, params, body, set }) => {
@@ -937,10 +901,8 @@ export const contactRoutes = new Elysia()
         if (body.optInStatus && !existing.optInStatus) updates.optInAt = new Date()
       }
 
-
       await db.update(contacts).set(updates).where(eq(contacts.id, params.contactId))
 
-      // Tags novas acionam automações (tag_added) e o freio de mão das réguas
       if (body.tags !== undefined) {
         const addedTags = body.tags.filter((tag) => !existing.tags.includes(tag))
         if (addedTags.length > 0) await handleTagsAdded(params.workspaceId, [params.contactId], addedTags)
@@ -1006,7 +968,6 @@ export const contactRoutes = new Elysia()
     },
   )
 
-  // POST /workspaces/:workspaceId/contacts/merge — Unificar/mesclar contatos sob um perfil canônico
   .post(
     '/workspaces/:workspaceId/contacts/merge',
     async ({ session, params, body, set }) => {
@@ -1123,7 +1084,6 @@ export const contactRoutes = new Elysia()
     },
   )
 
-  // POST /workspaces/:workspaceId/contacts/:contactId/identities — Adicionar canal/identidade
   .post(
     '/workspaces/:workspaceId/contacts/:contactId/identities',
     async ({ session, params, body, set }) => {
@@ -1167,7 +1127,6 @@ export const contactRoutes = new Elysia()
     },
   )
 
-  // DELETE /workspaces/:workspaceId/contacts/:contactId/identities/:identityId
   .delete(
     '/workspaces/:workspaceId/contacts/:contactId/identities/:identityId',
     async ({ session, params, set }) => {
@@ -1187,7 +1146,6 @@ export const contactRoutes = new Elysia()
     },
   )
 
-  // DELETE /workspaces/:workspaceId/contacts/:contactId
   .delete(
     '/workspaces/:workspaceId/contacts/:contactId',
     async ({ session, params, set }) => {
@@ -1210,7 +1168,6 @@ export const contactRoutes = new Elysia()
     },
   )
 
-  // DELETE /workspaces/:workspaceId/contacts — bulk delete
   .delete(
     '/workspaces/:workspaceId/contacts',
     async ({ session, params, body, set }) => {
@@ -1255,7 +1212,6 @@ export const contactRoutes = new Elysia()
     { body: t.Object({ ids: t.Array(t.String()) }) },
   )
 
-  // POST /workspaces/:workspaceId/contacts/:contactId/sync-members
   .post(
     '/workspaces/:workspaceId/contacts/:contactId/sync-members',
     async ({ session, params, set }) => {
@@ -1400,7 +1356,6 @@ export const contactRoutes = new Elysia()
     },
   )
 
-  // POST /workspaces/:workspaceId/contacts/import — CSV import
   .post(
     '/workspaces/:workspaceId/contacts/import',
     async ({ session, params, body, set }) => {
@@ -1419,9 +1374,6 @@ export const contactRoutes = new Elysia()
     },
   )
 
-  // POST /workspaces/:workspaceId/contacts/import-file — upload csv/xlsx.
-  // Todos os contatos do arquivo (novos e existentes) recebem uma tag gerada
-  // 'import:<slug>-<data>' — a audiência da campanha vira um filtro por ela.
   .post(
     '/workspaces/:workspaceId/contacts/import-file',
     async ({ session, params, body, set }) => {
@@ -1461,7 +1413,6 @@ export const contactRoutes = new Elysia()
         extraTags: [tag],
       })
 
-      // Contatos que o import pulou por duplicidade também recebem a tag
       const phones = rows.map((r) => r.whatsapp_phone ?? r.whatsapp ?? r.phone ?? r.telefone ?? '').filter(Boolean)
       const telegramIds = rows.map((r) => r.telegram_chat_id ?? r.telegram ?? '').filter(Boolean)
       await applyTagToIdentifiers(params.workspaceId, tag, { phones, telegramIds })
@@ -1476,8 +1427,6 @@ export const contactRoutes = new Elysia()
     },
   )
 
-  // POST /workspaces/:workspaceId/contacts/bulk-upsert — público manual do
-  // wizard: linhas nome+telefone digitadas, upsert por whatsapp_phone.
   .post(
     '/workspaces/:workspaceId/contacts/bulk-upsert',
     async ({ session, params, body, set }) => {

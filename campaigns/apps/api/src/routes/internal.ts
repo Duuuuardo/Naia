@@ -43,12 +43,8 @@ async function requireServiceScope(headers: { authorization?: string }, scope: s
   return verifyServiceToken(token, scope)
 }
 
-// Canal service-to-service (Vianova → Naia). Nunca aceita o JWT de usuário —
-// só token de serviço assinado pelo Vianova, verificado localmente via JWKS
-// (mesmo par de chaves usado pro login, escopo diferente).
 export const internalRoutes = new Elysia({ prefix: '/internal' })
 
-  // Única forma de escrita de entitlement no banco do Naia.
   .post(
     '/entitlements',
     async ({ headers, body, set }) => {
@@ -67,8 +63,6 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
           maxFileSizeBytes: isFree ? 5_242_880 : (body.limits.maxFileSizeBytes ?? 0),
         }
 
-        // INSERT: workspace novo — concede os créditos do ciclo como saldo inicial.
-        // UPDATE: só atualiza limites estáticos; saldo é gerenciado por /credits/grant.
         const inserted = await db
           .insert(entitlements)
           .values({
@@ -96,8 +90,6 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
           })
           .returning({ workspaceId: entitlements.workspaceId })
 
-        // Se o limite de conexões diminuiu ou expirou, inativa as conexões excedentes,
-        // mantendo apenas as primeiras `limits.connections` ativas.
         if (limits.connections >= 0) {
           const activeConns = await db
             .select()
@@ -120,8 +112,6 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
           }
         }
 
-        // Se o limite de automações ativas diminuiu, desativa as mais recentes
-        // e mantém as mais antigas dentro do novo teto.
         if (limits.automations >= 0) {
           const activeAutomations = await db
             .select()
@@ -157,8 +147,6 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
     },
   )
 
-  // Concessão de créditos — chamada pelo Vianova em invoice.paid (renovação,
-  // nova assinatura, compra de pacote). Acumula sobre o saldo existente.
   .post(
     '/credits/grant',
     async ({ headers, body, set }) => {
@@ -187,8 +175,6 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
     },
   )
 
-  // Reset de créditos — chamado pelo Vianova em estorno/chargeback ou quando a
-  // subscription paga é cancelada. Zera o saldo imediatamente.
   .post(
     '/credits/reset',
     async ({ headers, body, set }) => {
@@ -215,8 +201,6 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
     },
   )
 
-  // Chamado pelo tick do scheduler (worker) quando next_run_at vence. Vive na
-  // API porque a resolução de audiência pode expandir grupos via session-host.
   .post(
     '/campaigns/:campaignId/start-run',
     async ({ params, body, headers, set }) => {
@@ -240,8 +224,6 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
     },
   )
 
-  // Avaliação diária de automação (tick do scheduler). Sempre grava
-  // lastEvaluatedDate — é a guarda de idempotência contra reexecução no dia.
   .post(
     '/automations/:automationId/evaluate',
     async ({ params, headers, set }) => {
@@ -301,7 +283,6 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
           return await finish({ matched: 0 })
         }
 
-        // Campanha de automação passa pelos mesmos gates de entitlement
         const [ent] = await db.select().from(entitlements).where(eq(entitlements.workspaceId, automation.workspaceId)).limit(1)
         if (!ent) return await finish({ matched: eligible.length, skipReason: 'Workspace sem entitlement sincronizado.' })
         const subCheck = hasActiveSubscription(ent)
@@ -367,9 +348,6 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
     },
   )
 
-  // Executa os passos devidos da régua (tick do scheduler). O worker já fez o
-  // claim com lease (next_step_at empurrado) — aqui roda o motor: delays,
-  // add_tag e disparo dos passos de mensagem via campanha persistente do passo.
   .post(
     '/automations/:automationId/execute-steps',
     async ({ params, body, headers, set }) => {
@@ -445,9 +423,6 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
     },
   )
 
-  // Base do single sign-out imediato: o Vianova avisa quais sids caíram, o
-  // Naia passa a rejeitar tokens com esse `sid` sem precisar consultar o
-  // Vianova de novo (ver plugins/auth.ts).
   .post(
     '/session-revoked',
     async ({ headers, body, set }) => {
@@ -468,7 +443,6 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
     },
   )
 
-  // Consulta de consumo atual de recursos do workspace por serviço do ecossistema (Vianova Billing).
   .get(
     '/usage/:workspaceId',
     async ({ headers, params, set }) => {
@@ -525,10 +499,6 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
       }
     },
   )
-
-  // ============================================================
-  // Admin routes (Vianova admin panel → Naia Campaigns)
-  // ============================================================
 
   .get(
     '/admin/workspaces',
@@ -727,7 +697,6 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
     },
   )
 
-  // Configurações globais do produto — leitura/escrita pelo admin do Vianova.
   .get('/admin/product-settings', async ({ headers, set }) => {
     const ok = await requireServiceScope(headers, 'service:admin:read')
     if (!ok) { set.status = 401; return { message: 'Não autorizado.' } }
@@ -778,7 +747,6 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
     },
   )
 
-  // Configurações por workspace — overrides de product_settings.
   .get('/admin/workspaces/:workspaceId/settings', async ({ headers, params, set }) => {
     const ok = await requireServiceScope(headers, 'service:admin:read')
     if (!ok) { set.status = 401; return { message: 'Não autorizado.' } }
@@ -804,7 +772,6 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
         return { message: 'Nenhuma configuração enviada.' }
       }
 
-      // Merge parcial: preserva chaves existentes e atualiza/envia as novas.
       const [existing] = await db
         .select()
         .from(workspaceSettings)
@@ -846,8 +813,6 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
     },
   )
 
-  // Override manual de entitlement — usado pelo admin para desligar/reativar
-  // um workspace sem depender do ciclo de billing.
   .post(
     '/admin/workspaces/:workspaceId/entitlements',
     async ({ headers, params, body, set }) => {
@@ -910,7 +875,6 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
     },
   )
 
-  // Suspende um workspace (status de entitlement -> suspended).
   .post(
     '/admin/workspaces/:workspaceId/suspend',
     async ({ headers, params, body, set }) => {
@@ -965,7 +929,6 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
     },
   )
 
-  // Reativa um workspace suspenso (status de entitlement -> active).
   .post(
     '/admin/workspaces/:workspaceId/reactivate',
     async ({ headers, params, body, set }) => {
@@ -1020,8 +983,6 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
     },
   )
 
-  // Transfere a titularidade de um workspace para outro usuário.
-  // O novo dono precisa ser membro do workspace; o antigo dono vira admin.
   .post(
     '/admin/workspaces/:workspaceId/transfer-ownership',
     async ({ headers, params, body, set }) => {
@@ -1093,7 +1054,6 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
     },
   )
 
-  // Remove um membro do workspace. O dono não pode ser removido.
   .post(
     '/admin/workspaces/:workspaceId/members/:userId/remove',
     async ({ headers, params, body, set }) => {
@@ -1140,7 +1100,6 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
     },
   )
 
-  // Cancela um convite pendente.
   .post(
     '/admin/workspaces/:workspaceId/invites/:inviteId/cancel',
     async ({ headers, params, body, set }) => {
@@ -1190,7 +1149,6 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
     },
   )
 
-  // Audit logs de um workspace (usado pela aba "Visão geral" do admin).
   .get(
     '/admin/workspaces/:workspaceId/audit-logs',
     async ({ headers, params, query, set }) => {

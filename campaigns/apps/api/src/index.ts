@@ -45,15 +45,12 @@ process.on('uncaughtException', (err: any) => {
 })
 
 function validateRequiredEnv() {
-  // Segredos: fallbacks nunca são aceitos — a aplicação não sobe sem eles.
   getRequiredEnv('NAIA_INTERNAL_SECRET')
   getRequiredEnv('VIANOVA_INTERNAL_SECRET')
   getRequiredEnv('WHATSAPP_VERIFY_TOKEN')
 
-  // Endpoints obrigatórios para a API funcionar.
   getRequiredEnv('VIANOVA_API_URL')
 
-  // Em produção a origem do frontend deve ser explícita — nunca localhost.
   requireInProd('NAIA_WEB_URL')
 }
 
@@ -68,8 +65,6 @@ async function bootstrap() {
     : /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
 
   const rateLimitWindowMs = Number(process.env.RATE_LIMIT_WINDOW_MS ?? 60_000)
-  // Limite global por IP generoso: SPA carrega vários endpoints em paralelo
-  // ao trocar de aba pela sidebar. Ajustável via env.
   const rateLimitMax = Number(process.env.RATE_LIMIT_MAX ?? 2_000)
   const port = Number(process.env.PORT ?? 4001)
 

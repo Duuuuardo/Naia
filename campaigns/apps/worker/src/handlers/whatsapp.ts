@@ -10,8 +10,6 @@ import { requeueSendingMessage, refundCredits } from '../lib/requeue'
 export async function handleWhatsAppSend(job: SendMessageJob): Promise<void> {
   const { campaignId, campaignMessageId, contactId, connectionId, content } = job
 
-  // Follow-up de opt-out: melhor esforço, sem escrita no banco, falha nunca
-  // propaga — um erro aqui não pode reprocessar a mensagem da campanha.
   if (job.kind === 'followup') {
     try {
       const phone = await resolveWhatsAppPhone(contactId)
@@ -22,8 +20,6 @@ export async function handleWhatsAppSend(job: SendMessageJob): Promise<void> {
     return
   }
 
-  // Cancelamento no meio do run: a rota de cancel já marcou esta mensagem
-  // como 'failed' — o job em trânsito não pode colocá-la na rua mesmo assim.
   const [campaign] = await db
     .select({ status: campaigns.status, workspaceId: campaigns.workspaceId })
     .from(campaigns)
@@ -80,8 +76,6 @@ export async function handleWhatsAppSend(job: SendMessageJob): Promise<void> {
   try {
     const result = await sendWhatsAppMessage(connectionId, phone, content, job.media, { idempotencyKey: campaignMessageId })
 
-    // Só 'sending' vira 'sent' — não ressuscita mensagem marcada 'failed'
-    // por um cancel concorrente, e retry duplicado do BullMQ não conta 2x.
     const updated = await db.update(campaignMessages).set({
       status: 'sent',
       externalMessageId: result.externalMessageId || null,
@@ -140,7 +134,6 @@ async function resolveWhatsAppPhone(contactId: string, direct?: string | null): 
   return idRow?.identifier ?? null
 }
 
-// Conclusão de run/campanha é responsabilidade do pacer — aqui só contadores.
 export async function markFailed(
   messageId: string,
   campaignId: string,

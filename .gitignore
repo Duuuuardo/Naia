@@ -9,8 +9,6 @@ dist
 coverage/
 *.tsbuildinfo
 
-# Environment files — never commit real or backup env files.
-# (.env.example stays tracked on purpose.)
 .env
 .env.bak*
 .env.local

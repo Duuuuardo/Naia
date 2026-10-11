@@ -67,7 +67,6 @@ export const defaultJobOptions: JobsOptions = {
   removeOnFail: { count: 5000 },
 }
 
-/** SCAN em vez de KEYS — roda a cada 30s e KEYS bloqueia o Redis inteiro. */
 async function scanQueueMeta(pattern: string): Promise<string[]> {
   const redis = getRedis()
   const found: string[] = []

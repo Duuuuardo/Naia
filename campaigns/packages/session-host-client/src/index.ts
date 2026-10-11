@@ -36,12 +36,6 @@ function getSecret(): string {
   return requireEnv('NAIA_INTERNAL_SECRET')
 }
 
-/**
- * Erro de envio com classificação de retentativa. `retryable: false` = falha
- * permanente (destino inexistente, bloqueio) — o worker marca a mensagem como
- * falha sem gastar tentativas do BullMQ. `retryable: true` = transitório
- * (rede, socket caído, flood wait, 5xx) — o worker relança pro BullMQ retentar.
- */
 export class SendError extends Error {
   readonly retryable: boolean
   constructor(message: string, retryable: boolean) {
@@ -51,7 +45,6 @@ export class SendError extends Error {
   }
 }
 
-/** Erro desconhecido é tratado como transitório: falha silenciosa é pior que retry. */
 export function isRetryableSendError(err: unknown): boolean {
   if (err instanceof SendError) return err.retryable
   return true
@@ -217,8 +210,6 @@ export async function importTelegramGroupMembers(
     tags,
   })
 }
-
-
 
 export async function enrichWhatsAppContact(
   connectionId: string,

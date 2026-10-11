@@ -4,7 +4,6 @@ export interface RateLimitOptions {
   windowMs: number
   max: number
   keyPrefix?: string
-  /** Path prefixes that should not count toward the rate limit (e.g. auth checks). */
   exclude?: string[]
 }
 
@@ -22,9 +21,6 @@ function getClientIp(request: Request): string {
   return request.headers.get('x-real-ip') ?? 'unknown'
 }
 
-// Rate limiter simples em memória (janela fixa por IP + rota/prefixo).
-// Em deploy multi-instância ele atua por réplica; para limites globais,
-// substituir por um backend compartilhado (Redis) no futuro.
 export function rateLimitPlugin(options: RateLimitOptions) {
   const store = new Map<string, Bucket>()
   const { windowMs, max, keyPrefix = 'global', exclude = [] } = options

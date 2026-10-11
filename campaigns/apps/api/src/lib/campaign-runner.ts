@@ -1,7 +1,3 @@
-// Início de um run de campanha — usado pelo dispatch imediato (rota) e pelo
-// tick do scheduler (via /internal/campaigns/:id/start-run). A cada run a
-// audiência é re-resolvida e o saldo de créditos checado; o envio em si é
-// paceado pelo worker (handlers/pacer.ts), que consome as mensagens 'queued'.
 
 import { db, campaigns, campaignMessages, campaignRuns, campaignConnections, campaignVariants, connections, contacts, entitlements as entitlementsTable } from '@naia/db'
 import { eq, and, sql, inArray, asc } from 'drizzle-orm'
@@ -23,11 +19,6 @@ export function parseSchedule(json: string): Schedule {
 
 type Targetable = typeof contacts.$inferSelect
 
-/**
- * Canal de envio por contato. WhatsApp tem prioridade em campanha mista:
- * telefone é o identificador mais forte e o WhatsApp é o canal primário de
- * alcance no Brasil. Null = contato inelegível para os canais disponíveis.
- */
 export function resolveContactChannel(
   contact: Targetable,
   availableChannels: Set<string>,
@@ -59,8 +50,6 @@ export async function startCampaignRun(
   const tz = campaign.timezone || DEFAULT_TIMEZONE
   const runNumber = campaign.occurrenceCount + 1
 
-  // Próxima ocorrência calculada já com este run contado — persistida junto
-  // do início do run para o scheduler nunca perder o fio após restart.
   const nextRunAt = computeNextRunAt(schedule, now, tz, runNumber)
 
   const connRows = await db
@@ -84,7 +73,6 @@ export async function startCampaignRun(
   try {
     filter = JSON.parse(campaign.segmentFilter) as SegmentFilter
   } catch {
-    /* mantém all */
   }
 
   const targets = await resolveCampaignTargets(
@@ -108,12 +96,6 @@ export async function startCampaignRun(
   return launchRun(campaign, eligible, runNumber, scheduledFor, nextRunAt)
 }
 
-/**
- * Run com audiência explícita — usado pelo motor de cadência (passos de
- * mensagem de automation_enrollments). Diferente do startCampaignRun, aceita
- * campanha 'completed' (a campanha de passo é reusada a cada leva) e não mexe
- * no agendamento próprio da campanha.
- */
 export async function startAdhocRun(campaignId: string, contactIds: string[]): Promise<StartRunResult> {
   const now = new Date()
   const [campaign] = await db.select().from(campaigns).where(eq(campaigns.id, campaignId)).limit(1)
@@ -130,7 +112,6 @@ export async function startAdhocRun(campaignId: string, contactIds: string[]): P
     .orderBy(asc(campaignConnections.position))
   const activeConns = connRows.map((r) => r.connection).filter((c) => c.status === 'active')
   if (activeConns.length === 0) {
-    // Sem falhar a campanha: o passo da cadência tenta de novo mais tarde
     return { started: false, reason: 'Nenhuma conexão ativa disponível.' }
   }
 
@@ -152,7 +133,6 @@ export async function startAdhocRun(campaignId: string, contactIds: string[]): P
   return launchRun(campaign, eligible, campaign.occurrenceCount + 1, now, campaign.nextRunAt)
 }
 
-/** Núcleo compartilhado: créditos, tag de audiência, mensagens e pacer. */
 async function launchRun(
   campaign: typeof campaigns.$inferSelect,
   eligible: Array<{ contact: Targetable; channel: ChannelType }>,
@@ -169,9 +149,6 @@ async function launchRun(
     .where(eq(entitlementsTable.workspaceId, campaign.workspaceId))
     .limit(1)
 
-  // Assinatura re-checada a cada run: a rota de dispatch valida no clique,
-  // mas runs agendados/recorrentes e a régua chegam aqui direto — assinatura
-  // que expirou entre ocorrências não pode continuar disparando.
   const subCheck = ent ? hasActiveSubscription(ent) : null
   if (!ent || !subCheck || !subCheck.allowed) {
     const reason = subCheck && !subCheck.allowed ? subCheck.reason : 'Workspace sem entitlement sincronizado.'
@@ -180,7 +157,6 @@ async function launchRun(
     return { started: false, reason, runStatus: 'skipped_quota' }
   }
 
-  // Créditos: saldo disponível determina quantos contatos cabem neste run
   const remaining = Math.max(0, ent.creditsBalance)
 
   if (remaining === 0) {
@@ -199,7 +175,6 @@ async function launchRun(
   const batch = quotaTruncated ? eligible.slice(0, remaining) : eligible
   const excess = quotaTruncated ? eligible.slice(remaining) : []
 
-  // Tag de audiência: aplicada a todos os contatos alcançados neste run
   if (campaign.applyTagOnDispatch) {
     const ids = batch.map((e) => e.contact.id)
     const tagged = await db
@@ -207,7 +182,6 @@ async function launchRun(
       .set({ tags: sql`array_append(${contacts.tags}, ${campaign.applyTagOnDispatch})`, updatedAt: now })
       .where(and(inArray(contacts.id, ids), sql`NOT (${contacts.tags} @> ARRAY[${campaign.applyTagOnDispatch}]::text[])`))
       .returning({ id: contacts.id })
-    // Tag nova pode acionar automações (tag_added) e o freio de mão
     if (tagged.length > 0) {
       await handleTagsAdded(campaign.workspaceId, tagged.map((t) => t.id), [campaign.applyTagOnDispatch])
     }
@@ -287,7 +261,6 @@ async function launchRun(
   return { started: true, runId, totalContacts: eligible.length, quotaTruncated }
 }
 
-/** Run que não vai executar (skip/vazio): registra e avança o agendamento. */
 async function insertSkippedRun(
   campaignId: string,
   runNumber: number,
@@ -309,7 +282,6 @@ async function insertSkippedRun(
     .onConflictDoNothing()
 }
 
-/** Avança occurrenceCount/nextRunAt quando o run não gerou mensagens. */
 async function advanceAfterRun(
   campaignId: string,
   nextRunAt: Date | null,

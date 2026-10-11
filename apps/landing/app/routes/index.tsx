@@ -188,7 +188,6 @@ function Hero() {
   )
 }
 
-/** Assinatura visual: o disparo saindo com status em tempo real. */
 function ChatMock() {
   return (
     <div className="relative mx-auto w-full max-w-sm select-none">

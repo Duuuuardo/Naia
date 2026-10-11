@@ -7,20 +7,12 @@ import { sendTelegramUserMessage, isRetryableSendError } from '@naia/session-hos
 import { enqueueOptOutFollowup, OPTOUT_FOLLOWUP_TELEGRAM } from '../lib/followup'
 import { requeueSendingMessage, refundCredits } from '../lib/requeue'
 
-/**
- * Todo Telegram é conta de usuário (MTProto): o cliente teleproto vive
- * no session-host. O worker nunca abre sessão própria, envia via session-host-client.
- */
-
 export async function handleTelegramSend(job: SendMessageJob): Promise<void> {
   const { campaignId, campaignMessageId, contactId, connectionId, content } = job
 
-  // Follow-up de opt-out: melhor esforço, sem escrita no banco, falha nunca
-  // propaga — um erro aqui não pode reprocessar a mensagem da campanha.
   if (job.kind === 'followup') {
     try {
       const chatId = await resolveTelegramChatId(contactId)
-      // MTProto não interpreta HTML — o follow-up vai como texto puro
       if (chatId) await sendTelegramUserMessage(connectionId, chatId, content.replace(/<[^>]+>/g, ''))
     } catch (err) {
       console.warn(`[worker-telegram] follow-up de opt-out falhou (ignorado): ${sanitizeErrorMessage(err, 'erro')}`)
@@ -28,8 +20,6 @@ export async function handleTelegramSend(job: SendMessageJob): Promise<void> {
     return
   }
 
-  // Cancelamento no meio do run: a rota de cancel já marcou esta mensagem
-  // como 'failed' — o job em trânsito não pode colocá-la na rua mesmo assim.
   const [campaign] = await db
     .select({ status: campaigns.status, workspaceId: campaigns.workspaceId })
     .from(campaigns)
@@ -84,11 +74,8 @@ export async function handleTelegramSend(job: SendMessageJob): Promise<void> {
   }
 
   try {
-    // MTProto não interpreta HTML — remove as tags do template
     const { externalMessageId } = await sendTelegramUserMessage(connectionId, tgChatId, content.replace(/<[^>]+>/g, ''), job.media, { idempotencyKey: campaignMessageId })
 
-    // Só 'sending' vira 'sent' — não ressuscita mensagem marcada 'failed'
-    // por um cancel concorrente, e retry duplicado do BullMQ não conta 2x.
     const updated = await db.update(campaignMessages).set({
       status: 'sent',
       externalMessageId: externalMessageId || null,
@@ -147,7 +134,6 @@ async function resolveTelegramChatId(contactId: string, direct?: string | null):
   return idRow?.identifier ?? null
 }
 
-// Conclusão de run/campanha é responsabilidade do pacer — aqui só contadores.
 export async function markFailed(
   messageId: string,
   campaignId: string,

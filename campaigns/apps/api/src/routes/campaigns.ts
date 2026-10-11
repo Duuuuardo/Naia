@@ -39,7 +39,6 @@ async function getCreditsBalance(workspaceId: string): Promise<number> {
   return ent?.creditsBalance ?? 0
 }
 
-/** Conexões do workspace validadas contra a seleção do usuário. */
 async function loadSelectedConnections(workspaceId: string, connectionIds: string[]) {
   const rows = await db
     .select()
@@ -54,8 +53,6 @@ function campaignChannel(channels: string[]): 'whatsapp' | 'telegram' | 'mixed' 
   return unique.length === 1 ? (unique[0] as 'whatsapp' | 'telegram') : 'mixed'
 }
 
-/** Substitui variantes (e vínculos de mídia) da campanha transacionalmente.
- * Exportada: o evaluate de automações materializa contentJson em variantes. */
 export async function replaceVariants(
   workspaceId: string,
   campaignId: string,
@@ -163,7 +160,6 @@ async function loadCampaignDetail(campaignId: string) {
   }
 }
 
-/** Canais (whatsapp/telegram) presentes nas conexões selecionadas. */
 function speedChannels(conns: Array<{ channel: string }>): SpeedChannel[] {
   return [...new Set(conns.map((c) => c.channel))].filter(
     (c): c is SpeedChannel => c === 'whatsapp' || c === 'telegram',
@@ -173,7 +169,6 @@ function speedChannels(conns: Array<{ channel: string }>): SpeedChannel[] {
 export const campaignRoutes = new Elysia()
   .use(authPlugin)
 
-  // GET /workspaces/:workspaceId/campaigns
   .get(
     '/workspaces/:workspaceId/campaigns',
     async ({ session, params, query, set }) => {
@@ -206,7 +201,6 @@ export const campaignRoutes = new Elysia()
     },
   )
 
-  // POST /workspaces/:workspaceId/campaigns — sempre cria rascunho
   .post(
     '/workspaces/:workspaceId/campaigns',
     async ({ session, params, body, set }) => {
@@ -271,7 +265,6 @@ export const campaignRoutes = new Elysia()
     },
   )
 
-  // GET /workspaces/:workspaceId/campaigns/:campaignId
   .get(
     '/workspaces/:workspaceId/campaigns/:campaignId',
     async ({ session, params, set }) => {
@@ -292,7 +285,6 @@ export const campaignRoutes = new Elysia()
     },
   )
 
-  // PATCH /workspaces/:workspaceId/campaigns/:campaignId
   .patch(
     '/workspaces/:workspaceId/campaigns/:campaignId',
     async ({ session, params, body, set }) => {
@@ -342,9 +334,6 @@ export const campaignRoutes = new Elysia()
         if (!speedCheck.allowed) { set.status = 403; return { message: speedCheck.reason } }
         updates.speedJson = JSON.stringify(body.speed)
       } else if (body.connectionIds !== undefined) {
-        // Trocar conexões muda os canais — a velocidade salva precisa continuar
-        // válida contra o piso de cada canal novo (ex: manual 2s do Telegram
-        // não vale se entrar uma conexão WhatsApp).
         try {
           const stored = JSON.parse(existing.speedJson) as Speed
           const speedCheck = canUseSpeed(ctx.entitlements, stored, speedChannels(conns))
@@ -353,11 +342,9 @@ export const campaignRoutes = new Elysia()
             return { message: `A velocidade salva não é compatível com as novas conexões. ${speedCheck.reason}` }
           }
         } catch {
-          // speedJson ilegível: o pacer coage para 'lento' em tempo de envio
         }
       }
 
-      // Agendamento editado em campanha agendada → recalcula a próxima execução
       if (body.schedule !== undefined && existing.status === 'scheduled') {
         updates.nextRunAt = computeNextRunAt(
           body.schedule,
@@ -408,7 +395,6 @@ export const campaignRoutes = new Elysia()
     },
   )
 
-  // DELETE /workspaces/:workspaceId/campaigns/:campaignId
   .delete(
     '/workspaces/:workspaceId/campaigns/:campaignId',
     async ({ session, params, set }) => {
@@ -433,8 +419,6 @@ export const campaignRoutes = new Elysia()
     },
   )
 
-  // POST /workspaces/:workspaceId/campaigns/:campaignId/dispatch
-  // Consentimento é obrigatório: o corpo só valida com consent === true.
   .post(
     '/workspaces/:workspaceId/campaigns/:campaignId/dispatch',
     async ({ session, params, body, set }) => {
@@ -442,8 +426,6 @@ export const campaignRoutes = new Elysia()
       if (!ctx) { set.status = 401; return { message: 'Não autenticado.' } }
       if (!ctx.permissions.campaigns) { set.status = 403; return { message: 'Seu papel não tem acesso a esta área do workspace.' } }
 
-      // Email não confirmado não bloqueia o login, mas bloqueia disparo —
-      // conta sem email verificado no Vianova não coloca mensagens na rua.
       if (!session?.emailVerified) {
         set.status = 403
         return { message: 'Confirme o email da sua conta Vianova para disparar campanhas. Se já confirmou, saia e entre novamente.' }
@@ -470,7 +452,6 @@ export const campaignRoutes = new Elysia()
 
       await db.update(campaigns).set({ consentAt: now, updatedAt: now }).where(eq(campaigns.id, campaign.id))
 
-      // 'de X em X horas' começa agora: primeiro run imediato, próximo em +X
       const firstRunNow =
         schedule.type === 'immediate' ||
         (schedule.type === 'recurring' && schedule.recurrence?.kind === 'every_x_hours')
@@ -505,7 +486,6 @@ export const campaignRoutes = new Elysia()
     },
   )
 
-  // POST /workspaces/:workspaceId/campaigns/:campaignId/pause
   .post(
     '/workspaces/:workspaceId/campaigns/:campaignId/pause',
     async ({ session, params, set }) => {
@@ -527,7 +507,6 @@ export const campaignRoutes = new Elysia()
 
       const now = new Date()
       await db.update(campaigns).set({ status: 'paused', updatedAt: now }).where(eq(campaigns.id, params.campaignId))
-      // O pacer observa o status no próximo passo e sai sem se reagendar
       await db.update(campaignRuns).set({ status: 'paused', nextPacerAt: null, updatedAt: now })
         .where(and(eq(campaignRuns.campaignId, params.campaignId), eq(campaignRuns.status, 'running')))
 
@@ -535,7 +514,6 @@ export const campaignRoutes = new Elysia()
     },
   )
 
-  // POST /workspaces/:workspaceId/campaigns/:campaignId/resume
   .post(
     '/workspaces/:workspaceId/campaigns/:campaignId/resume',
     async ({ session, params, set }) => {
@@ -583,7 +561,6 @@ export const campaignRoutes = new Elysia()
         return { message: 'Disparo retomado.' }
       }
 
-      // Sem run pendente: fecha o run pausado (se houver) e volta ao agendamento
       if (pausedRun) {
         await db.update(campaignRuns).set({ status: 'completed', completedAt: now, updatedAt: now })
           .where(eq(campaignRuns.id, pausedRun.id))
@@ -601,7 +578,6 @@ export const campaignRoutes = new Elysia()
     },
   )
 
-  // PATCH /workspaces/:workspaceId/campaigns/:campaignId/schedule
   .patch(
     '/workspaces/:workspaceId/campaigns/:campaignId/schedule',
     async ({ session, params, body, set }) => {
@@ -638,7 +614,6 @@ export const campaignRoutes = new Elysia()
         updates.speedJson = JSON.stringify(body.speed)
       }
 
-      // Agendada/em execução → recalcula a próxima ocorrência com o novo plano
       if (['scheduled', 'running'].includes(existing.status)) {
         updates.nextRunAt = computeNextRunAt(
           body.schedule as Schedule,
@@ -661,7 +636,6 @@ export const campaignRoutes = new Elysia()
     },
   )
 
-  // POST /workspaces/:workspaceId/campaigns/:campaignId/cancel
   .post(
     '/workspaces/:workspaceId/campaigns/:campaignId/cancel',
     async ({ session, params, set }) => {
@@ -728,7 +702,6 @@ export const campaignRoutes = new Elysia()
     },
   )
 
-  // GET /workspaces/:workspaceId/campaigns/:campaignId/runs — histórico
   .get(
     '/workspaces/:workspaceId/campaigns/:campaignId/runs',
     async ({ session, params, query, set }) => {
@@ -768,7 +741,6 @@ export const campaignRoutes = new Elysia()
     },
   )
 
-  // GET /workspaces/:workspaceId/campaigns/:campaignId/messages
   .get(
     '/workspaces/:workspaceId/campaigns/:campaignId/messages',
     async ({ session, params, query, set }) => {
@@ -827,7 +799,6 @@ export const campaignRoutes = new Elysia()
     },
   )
 
-  // GET /workspaces/:workspaceId/usage
   .get(
     '/workspaces/:workspaceId/usage',
     async ({ session, params, set }) => {
@@ -846,7 +817,6 @@ export const campaignRoutes = new Elysia()
     },
   )
 
-  // GET /workspaces/:workspaceId/dashboard/timeseries — envios por tempo
   .get(
     '/workspaces/:workspaceId/dashboard/timeseries',
     async ({ session, params, query, set }) => {
@@ -857,8 +827,6 @@ export const campaignRoutes = new Elysia()
       const tz = query.tz || DEFAULT_TIMEZONE
 
       try {
-        // sent_at é timestamp naive em UTC: AT TIME ZONE 'UTC' o transforma em
-        // timestamptz, o segundo AT TIME ZONE projeta no fuso do usuário.
         const perDayRows = await db.execute(sql`
           SELECT
             to_char((cm.sent_at AT TIME ZONE 'UTC') AT TIME ZONE ${tz}, 'YYYY-MM-DD') AS date,
@@ -906,12 +874,11 @@ export const campaignRoutes = new Elysia()
           sent: Number(r.sent),
           failed: Number(failedByDate.get(r.date) ?? 0),
         }))
-        // Dias só com falhas (nenhum envio) também aparecem na série
         for (const [date, failed] of failedByDate) {
           if (!perDay.some((d) => d.date === date)) perDay.push({ date, sent: 0, failed: Number(failed) })
         }
         perDay.sort((a, b) => a.date.localeCompare(b.date))
-        
+
         return {
           perDay,
           perHour: (perHourRows as unknown as Array<{ hour: string; sent: number }>).map((r) => ({
@@ -933,7 +900,6 @@ export const campaignRoutes = new Elysia()
     },
   )
 
-  // GET /workspaces/:workspaceId/dashboard — dados consolidados para a home do tenant
   .get(
     '/workspaces/:workspaceId/dashboard',
     async ({ session, params, set }) => {
@@ -984,9 +950,6 @@ export const campaignRoutes = new Elysia()
           status: campaignMessages.status,
           count: sql<number>`count(*)::int`,
         }).from(campaignMessages).innerJoin(campaigns, eq(campaignMessages.campaignId, campaigns.id)).where(eq(campaigns.workspaceId, params.workspaceId)).groupBy(campaignMessages.status),
-        // Agregado no banco: extrai UF do custom_fields por regex (nunca
-        // lança em JSON inválido, ao contrário do cast ::jsonb) e o DDD do
-        // telefone, sem trazer a base de contatos inteira pra memória.
         db.execute(sql`
           SELECT
             upper(trim(substring(custom_fields from '"(?:estado|uf|state)"\\s*:\\s*"([^"]*)"'))) AS "customUf",
@@ -1014,8 +977,6 @@ export const campaignRoutes = new Elysia()
         messagesByStatus[row.status] = row.count
       }
 
-      // Tabela explícita DDD→UF (plano ANATEL). Faixas sobrepostas do código
-      // anterior mapeavam AL/PB/RN/CE/PI pra PE e RR/AP pra AM.
       const DDD_UF: Record<number, string> = {
         11: 'SP', 12: 'SP', 13: 'SP', 14: 'SP', 15: 'SP', 16: 'SP', 17: 'SP', 18: 'SP', 19: 'SP',
         21: 'RJ', 22: 'RJ', 24: 'RJ',

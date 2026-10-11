@@ -26,8 +26,6 @@ import {
   Zap,
 } from 'lucide-react'
 
-// ─── Botões ──────────────────────────────────────────────────────────────────
-
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
 type ButtonSize = 'sm' | 'md' | 'lg'
 
@@ -77,8 +75,6 @@ export function Button({
     </button>
   )
 }
-
-// ─── Superfícies ─────────────────────────────────────────────────────────────
 
 export function Card({ className = '', children }: { className?: string; children: ReactNode }) {
   return (
@@ -466,22 +462,16 @@ export function ErrorNote({ children }: { children: ReactNode }) {
   )
 }
 
-// ─── Status (cores e ícones de docs/design.md) ───────────────────────────────
-
 const statusConfig: Record<string, { icon: LucideIcon; className: string; label: string }> = {
-  // campanha
   draft: { icon: Pencil, className: 'bg-neutral-100 text-neutral-500', label: 'Rascunho' },
   scheduled: { icon: Clock, className: 'bg-warning-500/10 text-warning-500', label: 'Agendada' },
   running: { icon: Play, className: 'bg-brand-100 text-brand-600', label: 'Enviando' },
   paused: { icon: Pause, className: 'bg-warning-500/10 text-warning-600', label: 'Pausada' },
   completed: { icon: Check, className: 'bg-success-500/10 text-success-500', label: 'Concluída' },
   cancelled: { icon: X, className: 'bg-neutral-100 text-neutral-400', label: 'Cancelada' },
-  // run
   pending: { icon: Clock, className: 'bg-neutral-100 text-neutral-500', label: 'Pendente' },
   skipped_quota: { icon: TriangleAlert, className: 'bg-warning-500/10 text-warning-600', label: 'Pulada (cota)' },
-  // mensagem em trânsito
   sending: { icon: Loader2, className: 'bg-brand-100 text-brand-600', label: 'Enviando' },
-  // conexão
   active: { icon: Check, className: 'bg-success-500/10 text-success-500', label: 'Ativa' },
   disconnected: {
     icon: Plug,
@@ -492,12 +482,10 @@ const statusConfig: Record<string, { icon: LucideIcon; className: string; label:
   open: { icon: MessageSquare, className: 'bg-brand-100 text-brand-600', label: 'Aberta' },
   assigned: { icon: Play, className: 'bg-blue-50 text-blue-700', label: 'Em atendimento' },
   resolved: { icon: CheckCheck, className: 'bg-success-500/10 text-success-500', label: 'Resolvida' },
-  // mensagem
   queued: { icon: CircleDashed, className: 'bg-neutral-100 text-neutral-500', label: 'Na fila' },
   sent: { icon: Check, className: 'bg-neutral-100 text-neutral-500', label: 'Enviada' },
   delivered: { icon: CheckCheck, className: 'bg-neutral-100 text-dark-400', label: 'Entregue' },
   read: { icon: CheckCheck, className: 'bg-brand-100 text-brand-600', label: 'Lida' },
-  // extras/billing
   trialing: { icon: Clock, className: 'bg-brand-100 text-brand-600', label: 'Em teste (trial)' },
   past_due: { icon: TriangleAlert, className: 'bg-warning-500/10 text-warning-600', label: 'Pagamento pendente' },
   unpaid: { icon: XCircle, className: 'bg-error-500/10 text-error-500', label: 'Não pago' },
@@ -520,8 +508,6 @@ export function StatusBadge({ status }: { status: string }) {
     </span>
   )
 }
-
-// ─── Canis (WhatsApp, Telegram, Misto, etc.) ────────────────────────────────
 
 const channelConfig: Record<string, { icon: LucideIcon; className: string; label: string }> = {
   whatsapp: { icon: MessageCircle, className: 'bg-emerald-50 text-emerald-800 border-emerald-200/80', label: 'WhatsApp' },
@@ -552,9 +538,6 @@ export function ChannelBadge({ channel, className = '' }: { channel?: string | n
     </span>
   )
 }
-
-
-// ─── Avatar (foto + moldura da conta Vianova) ────────────────────────────────
 
 const avatarSizes = {
   sm: 'size-6 text-[10px]',
@@ -662,8 +645,6 @@ export const planBadge: Record<string, { label: string; color: string }> = {
   pro: { label: 'Pro', color: 'border-brand-200 bg-brand-50 text-brand-600' },
   scale: { label: 'Scale', color: 'border-amber-200 bg-amber-50 text-amber-700' },
 }
-
-// ─── Switch & Toggle (Naia Design System — #DD5973) ──────────────────────────
 
 export type SwitchSize = 'sm' | 'md'
 

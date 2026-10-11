@@ -59,9 +59,6 @@ function requireInternalSecret(headers: Record<string, string | undefined>, set:
   return true
 }
 
-// Rate limiting em memória por IP + rota. Em produção com múltiplas réplicas
-// deve-se trocar por store compartilhado (Redis), mas este é o mínimo seguro
-// para o session-host single-instance.
 type RateWindow = { count: number; resetAt: number }
 const rateLimitMap = new Map<string, RateWindow>()
 const RATE_LIMIT_WINDOW_MS = 60_000
@@ -109,7 +106,6 @@ function buildCorsOrigin(): string | string[] | RegExp | false {
     return allowed
   }
 
-  // Em dev, se houver configuração explícita, respeita-a; senão permite localhost.
   if (allowed && allowed.length > 0) return allowed
   return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
 }

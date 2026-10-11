@@ -1,9 +1,3 @@
-// Pacer: um job auto-reagendável por run ativo. Cada passo pega a mensagem
-// 'queued' mais antiga do run, escolhe uma conexão saudável (round-robin),
-// enfileira o envio e se reagenda com intervalo aleatório do preset de
-// velocidade. Pause/resume/cancel são observados a cada passo — o estado no
-// Postgres é a única fonte da verdade; o Redis guarda no máximo um job de
-// controle por run.
 
 import { db, campaigns, campaignRuns, campaignMessages, campaignConnections, campaignVariants, campaignVariantMedia, mediaAssets, connections, contacts, entitlements, automationEnrollments } from '@naia/db'
 import { eq, and, gt, sql, asc, desc, inArray } from 'drizzle-orm'
@@ -33,8 +27,6 @@ function getRequiredEnv(name: string): string {
 
 const NAIA_WEB_URL = () => getRequiredEnv('NAIA_WEB_URL')
 
-// Sem conexão saudável o run estaciona e reavalia — só falha de vez após o teto.
-// Cobre queda de conexão no meio do envio (ex: WhatsApp reconectando).
 const NO_CONNECTION_RETRY_MS = 60_000
 const NO_CONNECTION_MAX_WAIT_MS = 6 * 60 * 60 * 1000
 
@@ -76,7 +68,6 @@ export async function handlePacerStep(job: PacerJob): Promise<void> {
   if (!run || !campaign) return
   if ((TERMINAL_RUN as readonly string[]).includes(run.status)) return
 
-  // Pausa/cancelamento: sai sem se reagendar (resume re-enfileira o pacer)
   if (campaign.status === 'paused' || campaign.status === 'cancelled' || run.status === 'paused') {
     if (run.status === 'running' && campaign.status === 'paused') {
       await db.update(campaignRuns).set({ status: 'paused', nextPacerAt: null, updatedAt: now }).where(eq(campaignRuns.id, runId))
@@ -85,12 +76,9 @@ export async function handlePacerStep(job: PacerJob): Promise<void> {
   }
 
   const schedule = parseJson<Schedule>(campaign.scheduleJson, { type: 'immediate' })
-  // Fallback conservador: JSON ilegível nunca pode acelerar além do que
-  // qualquer plano permite.
   const storedSpeed = parseJson<Speed>(campaign.speedJson, { preset: 'lento' })
   const tz = campaign.timezone || DEFAULT_TIMEZONE
 
-  // Janela de funcionamento: estaciona até a próxima abertura
   if (!isWithinWorkingHours(schedule, now, tz)) {
     const windowStart = nextWindowStart(schedule, now, tz)
     const delay = Math.max(windowStart.getTime() - now.getTime(), 30_000) + Math.floor(Math.random() * 30_000)
@@ -99,7 +87,6 @@ export async function handlePacerStep(job: PacerJob): Promise<void> {
     return
   }
 
-  // Teto diário: excedente rola para a próxima janela do dia seguinte
   if (schedule.dailyCap) {
     const rows = (await db.execute(sql`
       SELECT count(*)::int AS c FROM campaign_messages
@@ -118,11 +105,8 @@ export async function handlePacerStep(job: PacerJob): Promise<void> {
     }
   }
 
-  // Créditos esgotados no meio do run: falha o restante e conclui
   const [ent] = await db.select({ creditsBalance: entitlements.creditsBalance, tier: entitlements.tier }).from(entitlements).where(eq(entitlements.workspaceId, campaign.workspaceId)).limit(1)
 
-  // Enforcement de velocidade em tempo de envio: downgrade depois da criação
-  // da campanha não pode manter um pacing que o plano atual não permite.
   const speed = coerceSpeedToPolicy(
     storedSpeed,
     ent?.tier ?? 'free',
@@ -286,7 +270,6 @@ export async function handlePacerStep(job: PacerJob): Promise<void> {
   })
 
   if (outcome.kind === 'idle') {
-    // Sem fila: espera os envios em trânsito antes de concluir
     const [inflight] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(campaignMessages)
@@ -300,14 +283,12 @@ export async function handlePacerStep(job: PacerJob): Promise<void> {
   }
 
   if (outcome.kind === 'no_connection') {
-    // Estaciona o run até a conexão voltar (reconexão do WhatsApp, instabilidade):
     const since = job.noConnSince ?? Date.now()
     if (Date.now() - since < NO_CONNECTION_MAX_WAIT_MS) {
       console.warn(`[pacer] run ${runId} sem conexão ativa — aguardando reconexão (desde ${new Date(since).toISOString()})`)
       await enqueuePacerStep(runId, campaignId, job.sentInBurst, NO_CONNECTION_RETRY_MS, since)
       return
     }
-    // Teto de espera estourado — invariante: erro de conexão reflete no status da campanha
     await db.update(campaignMessages).set({ status: 'failed', failureReason: 'Nenhuma conexão ativa disponível.', updatedAt: now })
       .where(and(eq(campaignMessages.runId, runId), inArray(campaignMessages.status, ['queued', 'sending'])))
     const [counts] = await db
@@ -336,9 +317,6 @@ export async function handlePacerStep(job: PacerJob): Promise<void> {
   }
 
   if (outcome.kind === 'no_channel_conn') {
-    // Canal do contato sem conexão saudável: mesma espera estacionada do caso
-    // geral (campanha mista com um canal fora aguarda junto — raro e mais
-    // seguro do que falhar a mensagem na hora)
     const since = job.noConnSince ?? Date.now()
     if (Date.now() - since < NO_CONNECTION_MAX_WAIT_MS) {
       console.warn(`[pacer] run ${runId} sem conexão ${outcome.channel} ativa — aguardando reconexão`)
@@ -373,7 +351,6 @@ export async function handlePacerStep(job: PacerJob): Promise<void> {
     { ...defaultJobOptions, jobId: `send-${outcome.messageId}`, removeOnComplete: true, removeOnFail: true },
   )
 
-  // Pausa de rajada ou intervalo aleatório do preset
   const sentInBurst = job.sentInBurst + 1
   if (speed.pauseEveryN && sentInBurst >= speed.pauseEveryN) {
     const pause = burstPauseMs(speed)
@@ -393,7 +370,6 @@ async function markMessageFailed(dbx: DbOrTx, messageId: string, runId: string, 
   await dbx.update(campaigns).set({ failedCount: sql`${campaigns.failedCount} + 1`, updatedAt: now }).where(eq(campaigns.id, campaignId))
 }
 
-/** Fecha o run e devolve a campanha ao agendamento (ou conclui de vez). */
 export async function completeRun(runId: string, campaignId: string): Promise<void> {
   const now = new Date()
   const [counts] = await db

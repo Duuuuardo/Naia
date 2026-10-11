@@ -17,7 +17,6 @@ export function sanitizeErrorMessage(
 
   const checkStr = raw.toLowerCase()
 
-  // Verificação rigorosa de vazamentos de banco de dados, SQL e rastros de stack
   const isDbOrInternalLeak =
     checkStr.includes('failed query:') ||
     checkStr.includes('syntax error at or near') ||
@@ -65,7 +64,6 @@ export function sanitizeErrorMessage(
     return fallbackMessage
   }
 
-  // Prevenir mensagens exageradamente longas que possam conter dumps ou pilhas
   if (raw.length > 300) {
     console.error('[SECURITY SANITIZATION] Intercepted overly long error string (>300 chars) of type:', error instanceof Error ? error.name : typeof error)
     return fallbackMessage

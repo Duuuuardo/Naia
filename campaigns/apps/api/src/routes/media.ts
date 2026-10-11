@@ -1,6 +1,3 @@
-// Mídia de campanha: upload direto do browser pro MinIO via URL pré-assinada
-// (presign → PUT → confirm). A API nunca recebe os bytes no upload; o worker
-// puxa do MinIO na hora do envio.
 
 import { Elysia, t } from 'elysia'
 import { db, mediaAssets, campaignVariantMedia } from '@naia/db'
@@ -32,7 +29,6 @@ function safeFilename(name: string): string {
 export const mediaRoutes = new Elysia()
   .use(authPlugin)
 
-  // POST /workspaces/:workspaceId/media/presign
   .post(
     '/workspaces/:workspaceId/media/presign',
     async ({ session, params, body, set }) => {
@@ -78,7 +74,6 @@ export const mediaRoutes = new Elysia()
     },
   )
 
-  // POST /workspaces/:workspaceId/media/:assetId/confirm
   .post(
     '/workspaces/:workspaceId/media/:assetId/confirm',
     async ({ session, params, set }) => {
@@ -112,7 +107,6 @@ export const mediaRoutes = new Elysia()
     },
   )
 
-  // GET /workspaces/:workspaceId/media — biblioteca para reuso no wizard
   .get(
     '/workspaces/:workspaceId/media',
     async ({ session, params, set }) => {
@@ -131,7 +125,6 @@ export const mediaRoutes = new Elysia()
     },
   )
 
-  // GET /workspaces/:workspaceId/media/:assetId/url — preview pré-assinado
   .get(
     '/workspaces/:workspaceId/media/:assetId/url',
     async ({ session, params, set }) => {
@@ -150,7 +143,6 @@ export const mediaRoutes = new Elysia()
     },
   )
 
-  // DELETE /workspaces/:workspaceId/media/:assetId
   .delete(
     '/workspaces/:workspaceId/media/:assetId',
     async ({ session, params, set }) => {

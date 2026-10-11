@@ -37,7 +37,6 @@ async function loadContactsFromDatabase(connectionId: string): Promise<void> {
       }
     }
 
-    // Auto-migrate from disk if database cache has no contacts yet
     if (rows.length === 0) {
       const filePath = getContactsCachePath(connectionId)
       if (fs.existsSync(filePath)) {
@@ -238,9 +237,6 @@ export async function startWhatsAppSession(connectionId: string): Promise<void> 
     .where(eq(connections.id, connectionId))
     .limit(1)
 
-  // Sem credenciais salvas (conexão nova, Reconectar manual ou logout — todos zeram o
-  // config) → limpa restos de sessão. Não usar o status aqui: durante o pareamento o
-  // status ainda é 'disconnected' quando o restart pós-QR (515) chega com creds recém-salvas.
   if (conn && (!conn.config || conn.config === '{}')) {
     await fs.promises.rm(sessionDir, { recursive: true, force: true }).catch(() => {})
     await fs.promises.mkdir(sessionDir, { recursive: true }).catch(() => {})
@@ -421,19 +417,12 @@ export async function startWhatsAppSession(connectionId: string): Promise<void> 
       if (!text) continue
 
       const remoteJid = msg.key.remoteJid ?? ''
-      // Comandos de opt-in/out só valem em conversa individual
       if (remoteJid.endsWith('@g.us')) continue
 
-      // Só o comando exato descadastra/reinscreve — palavras soltas como
-      // "sair" ou "sim" em conversa normal não podem alterar opt-in.
       const isOptOutCmd = text === '#sair'
       const isOptInCmd = text === '#voltar'
 
       if (isOptOutCmd || isOptInCmd) {
-        // Baileys 7 endereça chats individuais por LID: remoteJid vem como
-        // '123...@lid' (ID anônimo, não é o telefone). O número real é
-        // resolvido em cadeia: remoteJidAlt → cache em memória → mapeamento
-        // LID do próprio Baileys → cache persistido no Postgres.
         let phoneSource = ''
         if (!remoteJid.endsWith('@lid')) {
           phoneSource = remoteJid
@@ -467,7 +456,6 @@ export async function startWhatsAppSession(connectionId: string): Promise<void> 
         )
         if (!phoneClean) continue
 
-        // Aquece o cache com o par lid→telefone recém-resolvido
         if (remoteJid.endsWith('@lid')) {
           upsertContactToCache(connectionId, remoteJid, msg.pushName, phoneClean)
         }
@@ -578,8 +566,6 @@ export async function startWhatsAppSession(connectionId: string): Promise<void> 
       qrMap.delete(connectionId)
 
       if (shouldReconnect) {
-        // Queda transitória (stream restart, rede): as credenciais continuam válidas,
-        // então o status persistido não muda — a vivacidade do socket é o socketStatus.
         await db
           .update(connections)
           .set({
@@ -710,7 +696,6 @@ export async function sendWhatsAppMessage(
     throw new Error('Conexão WhatsApp não está conectada no momento.')
   }
   const socket = entry.socket as { sendMessage: (jid: string, msg: Record<string, unknown>) => Promise<{ key?: { id?: string } }> }
-  // JIDs completos (grupos '@g.us', '@lid') passam intactos
   const jid = phone.includes('@') ? phone : phone.replace(/\D/g, '') + '@s.whatsapp.net'
 
   const sendOne = async (msg: Record<string, unknown>): Promise<{ key?: { id?: string } }> => {
@@ -734,8 +719,6 @@ export async function sendWhatsAppMessage(
     return { externalMessageId: result?.key?.id ?? '' }
   }
 
-  // Primeira mídia carrega o texto como caption (áudio não suporta caption —
-  // nesse caso o texto vai como mensagem separada depois)
   const { getObjectBytes } = await import('@naia/storage')
   let firstId = ''
   let captionUsed = false
@@ -812,7 +795,6 @@ export async function getGroupParticipants(connectionId: string, groupJid: strin
 
     if (rawParticipants.length === 0) return []
 
-    // Populate cache with any names we already have from metadata
     for (const p of rawParticipants) {
       if (p.id && p.id.endsWith('@s.whatsapp.net') && p.name) {
         const phone = p.id.replace(/@.*$/, '').replace(/\D/g, '')
@@ -822,7 +804,6 @@ export async function getGroupParticipants(connectionId: string, groupJid: strin
       }
     }
 
-    // For participants still without a name, try onWhatsApp in batches of 5
     if (socket.onWhatsApp) {
       const missing = rawParticipants.filter(p =>
         p.id && (p.id.endsWith('@s.whatsapp.net') || (p.id.endsWith('@lid') && p.phoneNumber)) && !p.name
@@ -850,9 +831,7 @@ export async function getGroupParticipants(connectionId: string, groupJid: strin
             }
           }
         } catch {
-          // Ignore timeout / rate-limit — best effort
         }
-        // Small delay between batches to avoid rate-limiting
         if (i + batchSize < missing.length) {
           await new Promise(r => setTimeout(r, 300))
         }
@@ -1020,8 +999,6 @@ export async function enrichWhatsAppContactInfo(
     }
   }
 
-  // 1. Buscar no whatsappContactsCache (contatos do celular sincronizados pelo Baileys)
-  //    Este é o lugar certo: guarda nome e avatar de quem está na agenda do celular.
   if ((isGeneric(resolvedName) || !avatarUrl) && connectionId) {
     try {
       const cacheRows = await db
@@ -1059,7 +1036,6 @@ export async function enrichWhatsAppContactInfo(
         fetchStatus?: (jid: string) => Promise<any>
       }
 
-      // 2. Verificar nome no WhatsApp pelo onWhatsApp / usync (Pushname / Notify / VerifiedName)
       if (isGeneric(resolvedName) && !isGroup && socket.onWhatsApp) {
         try {
           const waRes = await Promise.race([
@@ -1075,7 +1051,6 @@ export async function enrichWhatsAppContactInfo(
         } catch {}
       }
 
-      // 3. Buscar foto do perfil — sempre tenta URL fresca (URLs do Baileys expiram em horas)
       if (socket.profilePictureUrl) {
         const targetJids = Array.from(new Set([
           !jid.endsWith('@lid') ? jid : null,
@@ -1083,8 +1058,7 @@ export async function enrichWhatsAppContactInfo(
           cleanPhone && cleanPhone.length >= 8 ? `${cleanPhone}@s.whatsapp.net` : null,
           jid
         ].filter(Boolean) as string[]))
-        
-        // Primeiro tentamos 'preview' para todos (muito mais rápido e menos propenso a timeout/rate-limit)
+
         for (const targetJid of targetJids) {
           if (avatarUrl) break
           try {
@@ -1096,7 +1070,6 @@ export async function enrichWhatsAppContactInfo(
           } catch {}
         }
 
-        // Se preview não retornou nada, tenta 'image' como fallback para cada JID
         if (!avatarUrl) {
           for (const targetJid of targetJids) {
             if (avatarUrl) break
@@ -1111,7 +1084,6 @@ export async function enrichWhatsAppContactInfo(
         }
       }
 
-      // 4. Se ainda genérico e for Business, verificar perfil de negócio
       if (isGeneric(resolvedName) && !isGroup && socket.getBusinessProfile) {
         try {
           const biz = await Promise.race([
@@ -1127,7 +1099,6 @@ export async function enrichWhatsAppContactInfo(
         } catch {}
       }
 
-      // 5. Se ainda genérico, tentar fetchStatus para checar nome/recado no status do WhatsApp
       if (isGeneric(resolvedName) && !isGroup && socket.fetchStatus) {
         try {
           const st = await Promise.race([
@@ -1171,5 +1142,4 @@ export async function batchEnrichWhatsAppContacts(
   }
   return result
 }
-
 

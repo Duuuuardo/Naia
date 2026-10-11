@@ -1,9 +1,3 @@
-// Automações (triggers) — aniversário (fluxo diário), webhook externo
-// (carrinho abandonado etc.), tag adicionada e contato novo. A automação em
-// si não envia nada: quando dispara, spawna uma campanha real
-// (kind='automation') que herda runs, cota, pacing e histórico do modelo de
-// campanhas — via evaluate diário (aniversário) ou via régua de inscrições
-// (automation_enrollments, ver lib/automation-engine.ts).
 
 import { Elysia, t } from 'elysia'
 import { db, automations, automationConnections, automationEnrollments, connections, campaigns } from '@naia/db'
@@ -47,7 +41,6 @@ const AutomationTypeInput = t.Union([
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/
 
-/** Valida a combinação tipo × conteúdo × passos. Retorna mensagem de erro ou null. */
 function validateAutomationShape(input: {
   type: AutomationType
   content?: Array<{ body: string }>
@@ -84,7 +77,6 @@ function validateAutomationShape(input: {
   return null
 }
 
-/** Monta o triggerJson do tipo, preservando o secret do webhook em edições. */
 function buildTriggerJson(type: AutomationType, triggerTag: string | undefined, existingJson?: string): string {
   if (type === 'webhook') {
     const existing = existingJson ? parseTriggerConfig(existingJson) : {}
@@ -104,7 +96,6 @@ function getPublicApiUrl(): string {
 
 const PUBLIC_API_URL = getPublicApiUrl()
 
-/** Campos derivados que a UI consome (URL do webhook, tag do gatilho). */
 function presentAutomation<T extends { id: string; type: string; triggerJson: string }>(automation: T) {
   const config = parseTriggerConfig(automation.triggerJson)
   return {
@@ -157,7 +148,6 @@ async function automationWithConnections(automationId: string) {
 export const automationRoutes = new Elysia()
   .use(authPlugin)
 
-  // GET /workspaces/:workspaceId/automations
   .get(
     '/workspaces/:workspaceId/automations',
     async ({ session, params, set }) => {
@@ -171,7 +161,6 @@ export const automationRoutes = new Elysia()
         .where(eq(automations.workspaceId, params.workspaceId))
         .orderBy(desc(automations.createdAt))
 
-      // Inscrições ativas na régua, por automação (badge "N na cadência")
       const enrollmentCounts = await db
         .select({ automationId: automationEnrollments.automationId, count: sql<number>`count(*)::int` })
         .from(automationEnrollments)
@@ -192,7 +181,6 @@ export const automationRoutes = new Elysia()
     },
   )
 
-  // POST /workspaces/:workspaceId/automations
   .post(
     '/workspaces/:workspaceId/automations',
     async ({ session, params, body, set }) => {
@@ -222,8 +210,6 @@ export const automationRoutes = new Elysia()
       const automationCheck = canCreateAutomation(ctx.entitlements, activeCount)
       if (!automationCheck.allowed) { set.status = 403; return { message: automationCheck.reason } }
 
-      // Automação ativa envia mensagens sozinha — exige email confirmado no
-      // Vianova, igual ao disparo de campanhas.
       if ((body.active ?? true) && !session?.emailVerified) {
         set.status = 403
         return { message: 'Confirme o email da sua conta Vianova para ativar automações. Se já confirmou, saia e entre novamente.' }
@@ -268,7 +254,6 @@ export const automationRoutes = new Elysia()
     },
   )
 
-  // PATCH /workspaces/:workspaceId/automations/:automationId
   .patch(
     '/workspaces/:workspaceId/automations/:automationId',
     async ({ session, params, body, set }) => {
@@ -283,7 +268,6 @@ export const automationRoutes = new Elysia()
         .limit(1)
       if (!existing) { set.status = 404; return { message: 'Automação não encontrada.' } }
 
-      // Valida a forma final (campos do body sobrepostos ao que já existe)
       const mergedSteps = body.steps ?? parseJsonArray<AutomationStep>(existing.stepsJson)
       const mergedContent = body.content ?? parseJsonArray<{ body: string }>(existing.contentJson)
       const existingTriggerTag = parseTriggerConfig(existing.triggerJson).tag
@@ -368,7 +352,6 @@ export const automationRoutes = new Elysia()
     },
   )
 
-  // POST /workspaces/:workspaceId/automations/:automationId/toggle
   .post(
     '/workspaces/:workspaceId/automations/:automationId/toggle',
     async ({ session, params, set }) => {
@@ -398,7 +381,6 @@ export const automationRoutes = new Elysia()
     },
   )
 
-  // DELETE /workspaces/:workspaceId/automations/:automationId
   .delete(
     '/workspaces/:workspaceId/automations/:automationId',
     async ({ session, params, set }) => {
@@ -413,7 +395,6 @@ export const automationRoutes = new Elysia()
         .limit(1)
       if (!existing) { set.status = 404; return { message: 'Automação não encontrada.' } }
 
-      // automationId em campaigns é referência fraca (sem FK) — limpa em código
       await db.update(campaigns).set({ automationId: null }).where(eq(campaigns.automationId, existing.id))
       await db.delete(automations).where(eq(automations.id, existing.id))
       return { message: 'Automação excluída.' }

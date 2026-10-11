@@ -3,8 +3,6 @@ name: naia-prod
 networks:
   novaplatform:
     external: true
-  # Rede interna isolada: banco, Redis e MinIO só são alcançáveis pelos
-  # serviços do Naia que se conectam explicitamente a ela.
   naia-internal:
     driver: bridge
     internal: true
@@ -84,8 +82,6 @@ services:
       naia-internal:
     env_file:
       - ./.env
-    # Sobrescreve os valores localhost do .env: em prod os session-hosts são
-    # containers próprios, alcançáveis pelo nome de serviço na rede docker.
     environment:
       - SESSION_HOST_BASE_URL=http://session-host-base:4010
       - SESSION_HOST_SCALE_URL=http://session-host-scale:4011
@@ -108,8 +104,6 @@ services:
           - naia-campaigns-web
     environment:
       - PORT=3001
-      # Troca de token/introspection são server-to-server; evita sair da VPS e
-      # mantém o single sign-out funcional mesmo sem acesso ao domínio público.
       - VIANOVA_API_INTERNAL_URL=http://vianova-api:5000
     env_file:
       - ./.env
@@ -121,14 +115,10 @@ services:
     restart: unless-stopped
     env_file:
       - ./.env
-    # Aponta para os session-hosts pelo nome de serviço (o .env usa localhost,
-    # que dentro do container é o próprio worker).
     environment:
       - SESSION_HOST_BASE_URL=http://session-host-base:4010
       - SESSION_HOST_SCALE_URL=http://session-host-scale:4011
     networks:
-      # Precisa da rede compartilhada (novaplatform) para alcançar o
-      # vianova-config-server no boot; naia-internal dá acesso a banco/redis.
       novaplatform:
       naia-internal:
     depends_on:
@@ -137,11 +127,6 @@ services:
       redis:
         condition: service_healthy
 
-  # Hosts de sessão WhatsApp/Telegram (Baileys/MTProto). São donos das conexões
-  # e mantêm o auth-state em disco — por isso o volume persistente (senão cada
-  # restart derruba a sessão e exige novo QR). Ficam na naia-internal (banco/
-  # redis/minio) e na novaplatform (egress para VIANOVA_API_URL público e para
-  # a API/worker os alcançarem pelo nome de serviço).
   session-host-base:
     image: ${REGISTRY}/naia-campaigns-session-host:${IMAGE_TAG:-latest}
     restart: unless-stopped

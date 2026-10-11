@@ -21,7 +21,6 @@ async function bumpCounters(
   }
 }
 
-// Conclusão de run/campanha é responsabilidade do pacer/recovery — aqui só
 export async function handleStatusWebhook(job: StatusWebhookJob): Promise<void> {
   const { externalMessageId, status, timestamp, reason } = job
 
@@ -51,7 +50,6 @@ export async function handleStatusWebhook(job: StatusWebhookJob): Promise<void> 
       await bumpCounters(msg.campaignId, msg.runId, 'deliveredCount')
     }
   } else if (status === 'read') {
-    // Se ainda não tinha sido marcada como entregue (pulou direto pra lida), garantimos a entrega
     const delivered = await db.update(campaignMessages).set({
       deliveredAt: ts,
       updatedAt: new Date(),

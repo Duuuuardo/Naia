@@ -1,6 +1,3 @@
-// Reconciliação periódica (startup + a cada 60s). O Postgres é a fonte da
-// verdade; o Redis guarda só jobs de controle — então recuperar de crash é
-// ressuscitar pacers perdidos e recontar contadores, nunca reprocessar Redis.
 
 import { db, campaigns, campaignRuns, campaignMessages } from '@naia/db'
 import { eq, and, inArray, like, or, sql, lt, isNull } from 'drizzle-orm'
@@ -8,7 +5,6 @@ import { getQueue, QUEUES, defaultJobOptions } from '@naia/queue'
 import type { PacerJob } from '@naia/schemas'
 import { completeRun } from './handlers/pacer'
 
-/** Contadores da campanha = agregado real de campaign_messages. */
 async function reconcileCampaignCounts(): Promise<void> {
   const activeOrRecent = await db
     .select({ id: campaigns.id })
@@ -41,7 +37,6 @@ async function reconcileCampaignCounts(): Promise<void> {
   }
 }
 
-/** Contadores dos runs não-terminais = agregado real das mensagens do run. */
 async function reconcileRunCounts(): Promise<void> {
   const activeRuns = await db
     .select({ id: campaignRuns.id })
@@ -76,14 +71,7 @@ async function reconcileRunCounts(): Promise<void> {
 
 const LIVE_RUN_STATUSES = ['running', 'paused', 'pending'] as const
 
-/** 'sending' órfão (>10min sem update = job de envio sumiu) é resolvido por
- * status do run: run vivo → volta pra 'queued' (o pacer a reivindica); run
- * terminal ou sem run → 'failed' (nunca vai ser reivindicada). O crédito
- * debitado no claim é estornado nos dois casos — invariante 'sending' ⇒
- * débito feito (claim+débito atômicos no pacer). */
 export async function resetStaleSending(): Promise<void> {
-  // postgres-js não serializa Date quando ele é interpolado numa query SQL
-  // crua do Drizzle; passe ISO explicitamente (o Postgres faz o cast para timestamp).
   const cutoff = new Date(Date.now() - 10 * 60_000).toISOString()
   const resolved = (await db.execute(sql`
     WITH stale AS (
@@ -149,14 +137,6 @@ export async function resetStaleSending(): Promise<void> {
   console.log(`[recovery] ${resolved.length} mensagens presas em 'sending' resolvidas (créditos estornados)`)
 }
 
-/**
- * Pacers perdidos: run 'running' cujo próximo passo (next_pacer_at) venceu há
- * mais de 3 minutos — o job do Redis morreu com o worker — OU sem token há
- * mais de 3 minutos (next_pacer_at NULL com updated_at parado = um pacer
- * consumiu o token e morreu antes de se reagendar). Parks longos (janela de
- * horário, pausa de rajada) têm next_pacer_at no futuro e não disparam este
- * caminho; runs pausados/terminais também ficam de fora pelo status.
- */
 export async function resurrectLostPacers(): Promise<void> {
   const cutoff = new Date(Date.now() - 3 * 60_000)
   const stuckRuns = await db
@@ -191,11 +171,6 @@ export async function resurrectLostPacers(): Promise<void> {
   }
 }
 
-/**
- * Campanhas 'running' sem nenhum run ativo e sem mensagens pendentes —
- * inclui o legado pré-runs (mensagens com run_id null). Devolve ao
- * agendamento ou conclui.
- */
 async function closeOrphanRunningCampaigns(): Promise<void> {
   const runningCampaigns = await db.select().from(campaigns).where(eq(campaigns.status, 'running'))
 
@@ -224,7 +199,6 @@ async function closeOrphanRunningCampaigns(): Promise<void> {
   }
 }
 
-/** Mensagens de erro internas vazadas pra failure_reason viram texto neutro. */
 async function sanitizeFailureReasons(): Promise<void> {
   await db.update(campaignMessages).set({
     failureReason: 'Falha ao processar envio ou iniciar disparo da mensagem na campanha.',

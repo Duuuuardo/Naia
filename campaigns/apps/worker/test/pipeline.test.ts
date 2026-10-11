@@ -249,7 +249,7 @@ describe('handler de envio (WhatsApp, provider mockado)', () => {
       runId: fx.runId,
     }
     await wa.handleWhatsAppSend(job)
-    await wa.handleWhatsAppSend(job) // entrega duplicada do mesmo job
+    await wa.handleWhatsAppSend(job)
 
     expect(sendLog.length).toBe(1)
     expect((await getCampaign(fx.campaignId))?.sentCount).toBe(1)
@@ -277,7 +277,7 @@ describe('handler de envio (WhatsApp, provider mockado)', () => {
     ).rejects.toThrow()
 
     const msg = await getMessage(fx.messageId)
-    expect(msg?.status).toBe('sending') // volta ao BullMQ pra retry, não vira failed
+    expect(msg?.status).toBe('sending')
     expect((await getRun(fx.runId))?.failedCount).toBe(0)
   })
 
@@ -681,7 +681,7 @@ describe('scheduler', () => {
     }
 
     const camp = await getCampaign(fx.campaignId)
-    expect(camp?.nextRunAt).toBeTruthy() // restaurado — retenta no tick seguinte
+    expect(camp?.nextRunAt).toBeTruthy()
     expect(camp?.status).toBe('scheduled')
   })
 })
@@ -715,7 +715,7 @@ describe('worker BullMQ end-to-end', () => {
 
       await waitFor(async () => (await getRun(fx.runId))?.failedCount === 1)
       expect((await getMessage(fx.messageId))?.status).toBe('failed')
-      expect(sendLog.length).toBe(3) // tentou 3x antes de desistir
+      expect(sendLog.length).toBe(3)
     } finally {
       await worker.close()
     }
@@ -751,7 +751,7 @@ describe('worker BullMQ end-to-end', () => {
       { concurrency: 4 },
     )
     try {
-      await Bun.sleep(150) // job ativo no provider
+      await Bun.sleep(150)
       const readdDuringProcessing = await queue.add('send', payload, { jobId: `send-${fx.messageId}`, attempts: 1, removeOnComplete: true })
       resolveSend({ externalMessageId: 'ext-dedup' })
       await waitFor(async () => (await getMessage(fx.messageId))?.status === 'sent')

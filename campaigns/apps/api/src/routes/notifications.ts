@@ -19,9 +19,6 @@ async function vianovaFetch(path: string, rawToken: string, init?: RequestInit) 
 export const notificationRoutes = new Elysia()
   .use(authPlugin)
 
-  // Proxy para a central de notificações do Vianova. O Naia web consome essas
-  // rotas via Eden Treaty; a API repassa a requisição usando o JWT do usuário
-  // como cookie de sessão do Vianova.
   .get(
     '/notifications',
     async ({ session, rawToken, query, set }) => {
