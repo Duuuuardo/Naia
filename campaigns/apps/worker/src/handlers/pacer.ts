@@ -5,7 +5,7 @@
 // Postgres é a única fonte da verdade; o Redis guarda no máximo um job de
 // controle por run.
 
-import { db, campaigns, campaignRuns, campaignMessages, campaignConnections, campaignVariants, campaignVariantMedia, mediaAssets, connections, contacts, entitlements, automationEnrollments, workspaces } from '@naia/db'
+import { db, campaigns, campaignRuns, campaignMessages, campaignConnections, campaignVariants, campaignVariantMedia, mediaAssets, connections, contacts, entitlements, automationEnrollments } from '@naia/db'
 import { eq, and, gt, sql, asc, desc, inArray } from 'drizzle-orm'
 import { getQueue, QUEUES, defaultJobOptions, getOutboundQueueName } from '@naia/queue'
 import { coerceSpeedToPolicy } from '@naia/entitlements'
@@ -61,6 +61,15 @@ export async function enqueuePacerStep(runId: string, campaignId: string, sentIn
 export async function handlePacerStep(job: PacerJob): Promise<void> {
   const { runId, campaignId } = job
   const now = new Date()
+
+  const token = (await db.execute(sql`
+    UPDATE campaign_runs SET next_pacer_at = NULL, updated_at = now()
+    WHERE id = ${runId}
+      AND next_pacer_at IS NOT NULL
+      AND next_pacer_at <= now() + interval '5 seconds'
+    RETURNING id
+  `)) as unknown as Array<{ id: string }>
+  if (token.length === 0) return
 
   const [run] = await db.select().from(campaignRuns).where(eq(campaignRuns.id, runId)).limit(1)
   const [campaign] = await db.select().from(campaigns).where(eq(campaigns.id, campaignId)).limit(1)
@@ -141,21 +150,142 @@ export async function handlePacerStep(job: PacerJob): Promise<void> {
     return
   }
 
-  // Claim atômico da próxima mensagem (skip locked protege contra pacer duplicado)
-  const claimedRows = (await db.execute(sql`
-    UPDATE campaign_messages SET status = 'sending', updated_at = now()
-    WHERE id = (
-      SELECT id FROM campaign_messages
+  type ClaimOutcome =
+    | { kind: 'idle' }
+    | { kind: 'no_connection'; channel: 'whatsapp' | 'telegram' }
+    | { kind: 'no_channel_conn'; messageId: string; channel: 'whatsapp' | 'telegram' }
+    | { kind: 'step'; channel?: 'whatsapp' | 'telegram' }
+    | {
+        kind: 'claimed'
+        messageId: string
+        variantId: string | null
+        channel: 'whatsapp' | 'telegram'
+        contactId: string
+        connectionId: string
+        content: string
+        media: MediaRef[]
+      }
+
+  const outcome = await db.transaction(async (tx): Promise<ClaimOutcome> => {
+    const claimedRows = (await tx.execute(sql`
+      SELECT id, contact_id AS "contactId", variant_id AS "variantId", channel
+      FROM campaign_messages
       WHERE run_id = ${runId} AND status = 'queued'
       ORDER BY created_at ASC
       LIMIT 1
       FOR UPDATE SKIP LOCKED
-    )
-    RETURNING id, contact_id AS "contactId", variant_id AS "variantId", channel
-  `)) as unknown as Array<{ id: string; contactId: string; variantId: string | null; channel: 'whatsapp' | 'telegram' | null }>
+    `)) as unknown as Array<{ id: string; contactId: string; variantId: string | null; channel: 'whatsapp' | 'telegram' | null }>
 
-  const claimed = claimedRows[0]
-  if (!claimed) {
+    const claimed = claimedRows[0]
+    if (!claimed) return { kind: 'idle' }
+
+    const channel = claimed.channel ?? (campaign.channel === 'telegram' ? 'telegram' : 'whatsapp')
+
+    const connRows = await tx
+      .select({ connection: connections })
+      .from(campaignConnections)
+      .innerJoin(connections, eq(campaignConnections.connectionId, connections.id))
+      .where(eq(campaignConnections.campaignId, campaignId))
+      .orderBy(asc(campaignConnections.position))
+    const healthyAll = connRows.map((r) => r.connection).filter((c) => c.status === 'active')
+    const healthyForChannel = healthyAll.filter((c) => c.channel === channel)
+
+    if (healthyAll.length === 0) return { kind: 'no_connection', channel }
+    if (healthyForChannel.length === 0) return { kind: 'no_channel_conn', messageId: claimed.id, channel }
+
+    const [freshRun] = await tx
+      .select({ sent: campaignRuns.sentCount, failed: campaignRuns.failedCount })
+      .from(campaignRuns)
+      .where(eq(campaignRuns.id, runId))
+      .limit(1)
+    const rotation = (freshRun?.sent ?? 0) + (freshRun?.failed ?? 0)
+    const connection = healthyForChannel[rotation % healthyForChannel.length]!
+
+    const [contact] = await tx.select().from(contacts).where(eq(contacts.id, claimed.contactId)).limit(1)
+    if (!contact) {
+      await markMessageFailed(tx, claimed.id, runId, campaignId, 'Contato não encontrado.')
+      return { kind: 'step', channel }
+    }
+
+    let body = ''
+    let media: MediaRef[] = []
+    if (claimed.variantId) {
+      const [variant] = await tx.select().from(campaignVariants).where(eq(campaignVariants.id, claimed.variantId)).limit(1)
+      if (variant) {
+        body = variant.body
+        const mediaRows = await tx
+          .select({ asset: mediaAssets, position: campaignVariantMedia.position })
+          .from(campaignVariantMedia)
+          .innerJoin(mediaAssets, eq(campaignVariantMedia.mediaAssetId, mediaAssets.id))
+          .where(eq(campaignVariantMedia.variantId, variant.id))
+        media = mediaRows
+          .sort((a, b) => a.position - b.position)
+          .map((m) => ({ storageKey: m.asset.storageKey, mimeType: m.asset.mimeType, kind: m.asset.kind, filename: m.asset.filename }))
+      }
+    }
+    if (!body) {
+      const [firstVariant] = await tx
+        .select()
+        .from(campaignVariants)
+        .where(eq(campaignVariants.campaignId, campaignId))
+        .orderBy(asc(campaignVariants.position))
+        .limit(1)
+      body = firstVariant?.body ?? ''
+    }
+    if (!body && media.length === 0) {
+      await markMessageFailed(tx, claimed.id, runId, campaignId, 'Campanha sem conteúdo de mensagem.')
+      return { kind: 'step', channel }
+    }
+
+    let templateContact = contact
+    if (campaign.automationId) {
+      const [enrollment] = await tx
+        .select({ contextJson: automationEnrollments.contextJson })
+        .from(automationEnrollments)
+        .where(and(eq(automationEnrollments.automationId, campaign.automationId), eq(automationEnrollments.contactId, contact.id)))
+        .orderBy(desc(automationEnrollments.createdAt))
+        .limit(1)
+      if (enrollment) {
+        const context = parseJson<Record<string, unknown>>(enrollment.contextJson, {})
+        const custom = parseJson<Record<string, string>>(contact.customFields, {})
+        for (const [key, value] of Object.entries(context)) {
+          if (value !== null && value !== undefined) custom[key] = String(value)
+        }
+        templateContact = { ...contact, customFields: JSON.stringify(custom) }
+      }
+    }
+
+    const content = renderTemplate(body, templateContact)
+
+    const debited = await tx
+      .update(entitlements)
+      .set({ creditsBalance: sql`${entitlements.creditsBalance} - 1`, updatedAt: now })
+      .where(and(eq(entitlements.workspaceId, campaign.workspaceId), gt(entitlements.creditsBalance, 0)))
+      .returning({ creditsBalance: entitlements.creditsBalance })
+
+    if (debited.length === 0) {
+      await markMessageFailed(tx, claimed.id, runId, campaignId, 'Créditos de disparo esgotados.')
+      return { kind: 'step', channel }
+    }
+
+    await tx
+      .update(campaignMessages)
+      .set({ status: 'sending', connectionId: connection.id, updatedAt: now })
+      .where(eq(campaignMessages.id, claimed.id))
+
+    return {
+      kind: 'claimed',
+      messageId: claimed.id,
+      variantId: claimed.variantId,
+      channel,
+      contactId: contact.id,
+      connectionId: connection.id,
+      content,
+      media,
+    }
+  })
+
+  if (outcome.kind === 'idle') {
     // Sem fila: espera os envios em trânsito antes de concluir
     const [inflight] = await db
       .select({ count: sql<number>`count(*)::int` })
@@ -169,24 +299,10 @@ export async function handlePacerStep(job: PacerJob): Promise<void> {
     return
   }
 
-  const channel = claimed.channel ?? (campaign.channel === 'telegram' ? 'telegram' : 'whatsapp')
-
-  // Conexões saudáveis da campanha, round-robin por canal
-  const connRows = await db
-    .select({ connection: connections })
-    .from(campaignConnections)
-    .innerJoin(connections, eq(campaignConnections.connectionId, connections.id))
-    .where(eq(campaignConnections.campaignId, campaignId))
-    .orderBy(asc(campaignConnections.position))
-  const healthyAll = connRows.map((r) => r.connection).filter((c) => c.status === 'active')
-  const healthyForChannel = healthyAll.filter((c) => c.channel === channel)
-
-  if (healthyAll.length === 0) {
+  if (outcome.kind === 'no_connection') {
     // Estaciona o run até a conexão voltar (reconexão do WhatsApp, instabilidade):
-    // devolve a mensagem reivindicada à fila e reavalia a cada minuto, até o teto.
     const since = job.noConnSince ?? Date.now()
     if (Date.now() - since < NO_CONNECTION_MAX_WAIT_MS) {
-      await db.update(campaignMessages).set({ status: 'queued', updatedAt: now }).where(eq(campaignMessages.id, claimed.id))
       console.warn(`[pacer] run ${runId} sem conexão ativa — aguardando reconexão (desde ${new Date(since).toISOString()})`)
       await enqueuePacerStep(runId, campaignId, job.sentInBurst, NO_CONNECTION_RETRY_MS, since)
       return
@@ -219,128 +335,42 @@ export async function handlePacerStep(job: PacerJob): Promise<void> {
     return
   }
 
-  if (healthyForChannel.length === 0) {
+  if (outcome.kind === 'no_channel_conn') {
     // Canal do contato sem conexão saudável: mesma espera estacionada do caso
     // geral (campanha mista com um canal fora aguarda junto — raro e mais
     // seguro do que falhar a mensagem na hora)
     const since = job.noConnSince ?? Date.now()
     if (Date.now() - since < NO_CONNECTION_MAX_WAIT_MS) {
-      await db.update(campaignMessages).set({ status: 'queued', updatedAt: now }).where(eq(campaignMessages.id, claimed.id))
-      console.warn(`[pacer] run ${runId} sem conexão ${channel} ativa — aguardando reconexão`)
+      console.warn(`[pacer] run ${runId} sem conexão ${outcome.channel} ativa — aguardando reconexão`)
       await enqueuePacerStep(runId, campaignId, job.sentInBurst, NO_CONNECTION_RETRY_MS, since)
       return
     }
-    await markMessageFailed(claimed.id, runId, campaignId, `Nenhuma conexão ${channel === 'whatsapp' ? 'WhatsApp' : 'Telegram'} ativa disponível.`)
+    await markMessageFailed(db, outcome.messageId, runId, campaignId, `Nenhuma conexão ${outcome.channel === 'whatsapp' ? 'WhatsApp' : 'Telegram'} ativa disponível.`)
     await enqueuePacerStep(runId, campaignId, job.sentInBurst, 1_000)
     return
   }
 
-  const [freshRun] = await db
-    .select({ sent: campaignRuns.sentCount, failed: campaignRuns.failedCount })
-    .from(campaignRuns)
-    .where(eq(campaignRuns.id, runId))
-    .limit(1)
-  const rotation = (freshRun?.sent ?? 0) + (freshRun?.failed ?? 0)
-  const connection = healthyForChannel[rotation % healthyForChannel.length]!
-
-  const [contact] = await db.select().from(contacts).where(eq(contacts.id, claimed.contactId)).limit(1)
-  if (!contact) {
-    await markMessageFailed(claimed.id, runId, campaignId, 'Contato não encontrado.')
+  if (outcome.kind === 'step') {
     await enqueuePacerStep(runId, campaignId, job.sentInBurst, 1_000)
     return
   }
 
-  // Variante + mídia (rotação foi atribuída na criação das mensagens)
-  let body = ''
-  let media: MediaRef[] = []
-  if (claimed.variantId) {
-    const [variant] = await db.select().from(campaignVariants).where(eq(campaignVariants.id, claimed.variantId)).limit(1)
-    if (variant) {
-      body = variant.body
-      const mediaRows = await db
-        .select({ asset: mediaAssets, position: campaignVariantMedia.position })
-        .from(campaignVariantMedia)
-        .innerJoin(mediaAssets, eq(campaignVariantMedia.mediaAssetId, mediaAssets.id))
-        .where(eq(campaignVariantMedia.variantId, variant.id))
-      media = mediaRows
-        .sort((a, b) => a.position - b.position)
-        .map((m) => ({ storageKey: m.asset.storageKey, mimeType: m.asset.mimeType, kind: m.asset.kind, filename: m.asset.filename }))
-    }
-  }
-  if (!body) {
-    const [firstVariant] = await db
-      .select()
-      .from(campaignVariants)
-      .where(eq(campaignVariants.campaignId, campaignId))
-      .orderBy(asc(campaignVariants.position))
-      .limit(1)
-    body = firstVariant?.body ?? ''
-  }
-  if (!body && media.length === 0) {
-    await markMessageFailed(claimed.id, runId, campaignId, 'Campanha sem conteúdo de mensagem.')
-    await enqueuePacerStep(runId, campaignId, job.sentInBurst, 1_000)
-    return
-  }
-
-  await db.update(campaignMessages).set({ connectionId: connection.id, updatedAt: now }).where(eq(campaignMessages.id, claimed.id))
-
-  // Débito atômico e condicional — o crédito é a autoridade final de cota no
-  // momento do envio. O UPDATE só decrementa se ainda houver saldo (> 0);
-  // se nada foi debitado (saldo já zerado, inclusive por corrida entre runs
-  // ou pacers paralelos do mesmo workspace), a mensagem NÃO sai. Isso impede
-  // que lotes super-enfileirados na largada do run estourem o saldo contratado
-  // — a fatia de cota em launchRun é só um pré-filtro best-effort; este gate é
-  // quem realmente segura o limite.
-  const debited = await db
-    .update(entitlements)
-    .set({ creditsBalance: sql`${entitlements.creditsBalance} - 1`, updatedAt: now })
-    .where(and(eq(entitlements.workspaceId, campaign.workspaceId), gt(entitlements.creditsBalance, 0)))
-    .returning({ creditsBalance: entitlements.creditsBalance })
-
-  if (debited.length === 0) {
-    await markMessageFailed(claimed.id, runId, campaignId, 'Créditos de disparo esgotados.')
-    await enqueuePacerStep(runId, campaignId, job.sentInBurst, 1_000)
-    return
-  }
-
-  // Campanha de automação: variáveis do evento que inscreveu o contato na
-  // régua (ex: {{cart_url}} do webhook) entram como custom fields na renderização
-  let templateContact = contact
-  if (campaign.automationId) {
-    const [enrollment] = await db
-      .select({ contextJson: automationEnrollments.contextJson })
-      .from(automationEnrollments)
-      .where(and(eq(automationEnrollments.automationId, campaign.automationId), eq(automationEnrollments.contactId, contact.id)))
-      .orderBy(desc(automationEnrollments.createdAt))
-      .limit(1)
-    if (enrollment) {
-      const context = parseJson<Record<string, unknown>>(enrollment.contextJson, {})
-      const custom = parseJson<Record<string, string>>(contact.customFields, {})
-      for (const [key, value] of Object.entries(context)) {
-        if (value !== null && value !== undefined) custom[key] = String(value)
-      }
-      templateContact = { ...contact, customFields: JSON.stringify(custom) }
-    }
-  }
-
-  const content = renderTemplate(body, templateContact)
-  const queue = getQueue<SendMessageJob>(getOutboundQueueName(channel as 'whatsapp' | 'telegram', campaign.workspaceId, ent?.tier))
+  const queue = getQueue<SendMessageJob>(getOutboundQueueName(outcome.channel, campaign.workspaceId, ent?.tier))
   await queue.add(
-    `send:${claimed.id}`,
+    `send:${outcome.messageId}`,
     {
       campaignId,
-      campaignMessageId: claimed.id,
-      contactId: contact.id,
-      channel,
-      connectionId: connection.id,
-      content,
+      campaignMessageId: outcome.messageId,
+      contactId: outcome.contactId,
+      channel: outcome.channel,
+      connectionId: outcome.connectionId,
+      content: outcome.content,
       kind: 'campaign',
       runId,
-      variantId: claimed.variantId ?? undefined,
-      media: media.length > 0 ? media : undefined,
+      variantId: outcome.variantId ?? undefined,
+      media: outcome.media.length > 0 ? outcome.media : undefined,
     },
-    // BullMQ 5 não aceita ':' em jobId customizado
-    { ...defaultJobOptions, jobId: `send-${claimed.id}` },
+    { ...defaultJobOptions, jobId: `send-${outcome.messageId}`, removeOnComplete: true, removeOnFail: true },
   )
 
   // Pausa de rajada ou intervalo aleatório do preset
@@ -350,15 +380,17 @@ export async function handlePacerStep(job: PacerJob): Promise<void> {
     console.log(`[pacer] run ${runId} — pausa de rajada de ${Math.round(pause / 60000)}min após ${sentInBurst} envios`)
     await enqueuePacerStep(runId, campaignId, 0, pause)
   } else {
-    await enqueuePacerStep(runId, campaignId, sentInBurst, randomIntervalMs(speed, channel as SpeedChannel))
+    await enqueuePacerStep(runId, campaignId, sentInBurst, randomIntervalMs(speed, outcome.channel as SpeedChannel))
   }
 }
 
-async function markMessageFailed(messageId: string, runId: string, campaignId: string, reason: string): Promise<void> {
+type DbOrTx = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+async function markMessageFailed(dbx: DbOrTx, messageId: string, runId: string, campaignId: string, reason: string): Promise<void> {
   const now = new Date()
-  await db.update(campaignMessages).set({ status: 'failed', failureReason: reason, updatedAt: now }).where(eq(campaignMessages.id, messageId))
-  await db.update(campaignRuns).set({ failedCount: sql`${campaignRuns.failedCount} + 1`, updatedAt: now }).where(eq(campaignRuns.id, runId))
-  await db.update(campaigns).set({ failedCount: sql`${campaigns.failedCount} + 1`, updatedAt: now }).where(eq(campaigns.id, campaignId))
+  await dbx.update(campaignMessages).set({ status: 'failed', failureReason: reason, updatedAt: now }).where(eq(campaignMessages.id, messageId))
+  await dbx.update(campaignRuns).set({ failedCount: sql`${campaignRuns.failedCount} + 1`, updatedAt: now }).where(eq(campaignRuns.id, runId))
+  await dbx.update(campaigns).set({ failedCount: sql`${campaigns.failedCount} + 1`, updatedAt: now }).where(eq(campaigns.id, campaignId))
 }
 
 /** Fecha o run e devolve a campanha ao agendamento (ou conclui de vez). */

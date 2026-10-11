@@ -67,10 +67,22 @@ export const defaultJobOptions: JobsOptions = {
   removeOnFail: { count: 5000 },
 }
 
-export async function getActiveScaleOutboundQueues(): Promise<string[]> {
+/** SCAN em vez de KEYS — roda a cada 30s e KEYS bloqueia o Redis inteiro. */
+async function scanQueueMeta(pattern: string): Promise<string[]> {
   const redis = getRedis()
-  const keys = await redis.keys('bull:whatsapp-outbound-*:meta')
-  const tgKeys = await redis.keys('bull:telegram-outbound-*:meta')
+  const found: string[] = []
+  let cursor = '0'
+  do {
+    const [next, keys] = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', 200)
+    cursor = next
+    found.push(...keys)
+  } while (cursor !== '0')
+  return found
+}
+
+export async function getActiveScaleOutboundQueues(): Promise<string[]> {
+  const keys = await scanQueueMeta('bull:whatsapp-outbound-*:meta')
+  const tgKeys = await scanQueueMeta('bull:telegram-outbound-*:meta')
   const all = [...keys, ...tgKeys]
   return all
     .filter((k) => k.endsWith(':meta'))

@@ -1,9 +1,10 @@
 import { createWorker, QUEUES, getActiveScaleOutboundQueues, type Worker } from '@naia/queue'
 import type { PacerJob, SendMessageJob, StatusWebhookJob } from '@naia/schemas'
 import { sanitizeErrorMessage } from '@naia/schemas'
-import { handleTelegramSend, markFailed as markTelegramFailed } from './handlers/telegram'
-import { handleWhatsAppSend, markFailed as markWhatsAppFailed } from './handlers/whatsapp'
+import { handleTelegramSend } from './handlers/telegram'
+import { handleWhatsAppSend } from './handlers/whatsapp'
 import { handleStatusWebhook } from './handlers/status-webhook'
+import { createOutboundFailedHandler } from './lib/outbound-failed'
 import { handlePacerStep } from './handlers/pacer'
 import { reconcileRunningCampaigns } from './recovery'
 import { schedulerTick } from './scheduler'
@@ -18,17 +19,7 @@ function createTelegramWorker(name: string): Worker<SendMessageJob> {
     },
     { concurrency: 5 },
   )
-  worker.on('failed', async (job, err) => {
-    const cleanMsg = sanitizeErrorMessage(err, 'Job falhou ou excedeu limite de tempo ao processar mensagem do Telegram')
-    console.error(`[telegram:${name}] job ${job?.id} falhou definitivamente:`, cleanMsg)
-    if (job?.data && job.data.kind !== 'followup') {
-      try {
-        await markTelegramFailed(job.data.campaignMessageId, job.data.campaignId, cleanMsg, job.data.runId)
-      } catch (e) {
-        console.error(`[telegram:${name}] erro ao atualizar banco no failed state:`, e)
-      }
-    }
-  })
+  worker.on('failed', createOutboundFailedHandler(name, 'telegram'))
   return worker
 }
 
@@ -41,17 +32,7 @@ function createWhatsAppWorker(name: string): Worker<SendMessageJob> {
     },
     { concurrency: 1 },
   )
-  worker.on('failed', async (job, err) => {
-    const cleanMsg = sanitizeErrorMessage(err, 'Job falhou ou excedeu limite de tempo ao processar mensagem do WhatsApp')
-    console.error(`[whatsapp:${name}] job ${job?.id} falhou definitivamente:`, cleanMsg)
-    if (job?.data && job.data.kind !== 'followup') {
-      try {
-        await markWhatsAppFailed(job.data.campaignMessageId, job.data.campaignId, cleanMsg, job.data.runId)
-      } catch (e) {
-        console.error(`[whatsapp:${name}] erro ao atualizar banco no failed state:`, e)
-      }
-    }
-  })
+  worker.on('failed', createOutboundFailedHandler(name, 'whatsapp'))
   return worker
 }
 
@@ -69,6 +50,9 @@ async function bootstrap() {
     },
     { concurrency: 20 },
   )
+  statusWebhookWorker.on('failed', (job, err) => {
+    console.error(`[status-webhook] job ${job?.id} falhou (tentativa ${job?.attemptsMade}/${job?.opts?.attempts ?? '?'}):`, sanitizeErrorMessage(err, 'erro no webhook de status'))
+  })
 
   const pacerWorker = createWorker<PacerJob>(
     QUEUES.CAMPAIGN_PACER,

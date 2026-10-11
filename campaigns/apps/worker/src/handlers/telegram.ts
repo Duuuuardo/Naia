@@ -3,8 +3,9 @@ import { eq, and, sql } from 'drizzle-orm'
 import type { SendMessageJob } from '@naia/schemas'
 import { sanitizeErrorMessage } from '@naia/schemas'
 import { getQueue, getOutboundQueueName } from '@naia/queue'
-import { sendTelegramUserMessage } from '@naia/session-host-client'
+import { sendTelegramUserMessage, isRetryableSendError } from '@naia/session-host-client'
 import { enqueueOptOutFollowup, OPTOUT_FOLLOWUP_TELEGRAM } from '../lib/followup'
+import { requeueSendingMessage, refundCredits } from '../lib/requeue'
 
 /**
  * Todo Telegram é conta de usuário (MTProto): o cliente teleproto vive
@@ -30,11 +31,23 @@ export async function handleTelegramSend(job: SendMessageJob): Promise<void> {
   // Cancelamento no meio do run: a rota de cancel já marcou esta mensagem
   // como 'failed' — o job em trânsito não pode colocá-la na rua mesmo assim.
   const [campaign] = await db
-    .select({ status: campaigns.status })
+    .select({ status: campaigns.status, workspaceId: campaigns.workspaceId })
     .from(campaigns)
     .where(eq(campaigns.id, campaignId))
     .limit(1)
   if (!campaign || campaign.status === 'cancelled') return
+
+  if (campaign.status === 'paused') {
+    await requeueSendingMessage(campaignMessageId, campaign.workspaceId)
+    return
+  }
+
+  const [msg] = await db
+    .select({ status: campaignMessages.status })
+    .from(campaignMessages)
+    .where(eq(campaignMessages.id, campaignMessageId))
+    .limit(1)
+  if (!msg || msg.status !== 'sending') return
 
   const [conn] = await db
     .select({ id: connections.id, status: connections.status })
@@ -43,7 +56,7 @@ export async function handleTelegramSend(job: SendMessageJob): Promise<void> {
     .limit(1)
 
   if (!conn || conn.status !== 'active') {
-    await markFailed(campaignMessageId, campaignId, 'Conexão Telegram inativa ou não encontrada.', job.runId)
+    await requeueSendingMessage(campaignMessageId, campaign.workspaceId)
     return
   }
 
@@ -54,31 +67,31 @@ export async function handleTelegramSend(job: SendMessageJob): Promise<void> {
     .limit(1)
 
   if (!contact) {
-    await markFailed(campaignMessageId, campaignId, 'Contato não encontrado.', job.runId)
+    await markFailed(campaignMessageId, campaignId, 'Contato não encontrado.', job.runId, { refundWorkspaceId: campaign.workspaceId })
     return
   }
 
   const tgChatId = await resolveTelegramChatId(contactId, contact.telegramChatId)
 
   if (!tgChatId) {
-    await markFailed(campaignMessageId, campaignId, 'Contato sem Telegram chat ID ou identidade vinculada.', job.runId)
+    await markFailed(campaignMessageId, campaignId, 'Contato sem Telegram chat ID ou identidade vinculada.', job.runId, { refundWorkspaceId: campaign.workspaceId })
     return
   }
 
   if (!contact.optInStatus) {
-    await markFailed(campaignMessageId, campaignId, 'Contato optou por não receber campanhas (Opt-out).', job.runId)
+    await markFailed(campaignMessageId, campaignId, 'Contato optou por não receber campanhas (Opt-out).', job.runId, { refundWorkspaceId: campaign.workspaceId })
     return
   }
 
   try {
     // MTProto não interpreta HTML — remove as tags do template
-    const { externalMessageId } = await sendTelegramUserMessage(connectionId, tgChatId, content.replace(/<[^>]+>/g, ''), job.media)
+    const { externalMessageId } = await sendTelegramUserMessage(connectionId, tgChatId, content.replace(/<[^>]+>/g, ''), job.media, { idempotencyKey: campaignMessageId })
 
     // Só 'sending' vira 'sent' — não ressuscita mensagem marcada 'failed'
     // por um cancel concorrente, e retry duplicado do BullMQ não conta 2x.
     const updated = await db.update(campaignMessages).set({
       status: 'sent',
-      externalMessageId,
+      externalMessageId: externalMessageId || null,
       sentAt: new Date(),
       updatedAt: new Date(),
     }).where(and(eq(campaignMessages.id, campaignMessageId), eq(campaignMessages.status, 'sending')))
@@ -97,15 +110,24 @@ export async function handleTelegramSend(job: SendMessageJob): Promise<void> {
         }).where(eq(campaignRuns.id, job.runId))
       }
     }
+  } catch (err) {
+    const clean = sanitizeErrorMessage(err, 'Falha ao processar envio da mensagem pelo Telegram.')
+    if (!isRetryableSendError(err)) {
+      await markFailed(campaignMessageId, campaignId, clean, job.runId)
+      return
+    }
+    console.warn(`[worker-telegram] falha transitória na mensagem ${campaignMessageId} — BullMQ retenta: ${clean}`)
+    throw err
+  }
 
-    // Aviso de opt-out: só para contatos individuais — grupos não têm opt-out.
-    if (!contact.isGroup) {
+  if (!contact.isGroup) {
+    try {
       const [ent] = await db.select({ tier: entitlements.tier }).from(entitlements).where(eq(entitlements.workspaceId, contact.workspaceId)).limit(1)
       const queueName = getOutboundQueueName('telegram', contact.workspaceId, ent?.tier)
       await enqueueOptOutFollowup(getQueue<SendMessageJob>(queueName), job, OPTOUT_FOLLOWUP_TELEGRAM)
+    } catch (err) {
+      console.warn(`[worker-telegram] follow-up de opt-out não enfileirado (ignorado): ${sanitizeErrorMessage(err, 'erro')}`)
     }
-  } catch (err) {
-    await markFailed(campaignMessageId, campaignId, sanitizeErrorMessage(err, 'Falha ao processar envio da mensagem pelo Telegram.'), job.runId)
   }
 }
 
@@ -126,13 +148,27 @@ async function resolveTelegramChatId(contactId: string, direct?: string | null):
 }
 
 // Conclusão de run/campanha é responsabilidade do pacer — aqui só contadores.
-export async function markFailed(messageId: string, campaignId: string, reason: string, runId?: string): Promise<void> {
+export async function markFailed(
+  messageId: string,
+  campaignId: string,
+  reason: string,
+  runId?: string,
+  opts?: { refundWorkspaceId?: string },
+): Promise<void> {
   const cleanReason = sanitizeErrorMessage(reason, 'Falha no envio da mensagem.')
-  await db.update(campaignMessages).set({
+
+  const updated = await db.update(campaignMessages).set({
     status: 'failed',
     failureReason: cleanReason,
     updatedAt: new Date(),
-  }).where(eq(campaignMessages.id, messageId))
+  }).where(and(eq(campaignMessages.id, messageId), eq(campaignMessages.status, 'sending')))
+    .returning({ id: campaignMessages.id })
+
+  if (updated.length === 0) return
+
+  if (opts?.refundWorkspaceId) {
+    await refundCredits(opts.refundWorkspaceId, 1)
+  }
 
   await db.update(campaigns).set({
     failedCount: sql`${campaigns.failedCount} + 1`,

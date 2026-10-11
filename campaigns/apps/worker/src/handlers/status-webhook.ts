@@ -1,5 +1,5 @@
 import { db, campaigns, campaignRuns, campaignMessages } from '@naia/db'
-import { eq, sql } from 'drizzle-orm'
+import { eq, and, isNull, inArray, sql } from 'drizzle-orm'
 import type { StatusWebhookJob } from '@naia/schemas'
 import { sanitizeErrorMessage } from '@naia/schemas'
 
@@ -22,7 +22,6 @@ async function bumpCounters(
 }
 
 // Conclusão de run/campanha é responsabilidade do pacer/recovery — aqui só
-// transição de status da mensagem + contadores.
 export async function handleStatusWebhook(job: StatusWebhookJob): Promise<void> {
   const { externalMessageId, status, timestamp, reason } = job
 
@@ -38,45 +37,48 @@ export async function handleStatusWebhook(job: StatusWebhookJob): Promise<void> 
 
   const ts = new Date(timestamp)
 
-  if (status === 'delivered') {
-    if (!msg.deliveredAt) {
-      const updates: Partial<typeof campaignMessages.$inferInsert> = {
-        deliveredAt: ts,
-        updatedAt: new Date(),
-      }
-      if (msg.status !== 'read') {
-        updates.status = 'delivered'
-      }
+  if (msg.status === 'failed') return
 
-      await db.update(campaignMessages).set(updates).where(eq(campaignMessages.id, msg.id))
+  if (status === 'delivered') {
+    const updated = await db.update(campaignMessages).set({
+      deliveredAt: ts,
+      updatedAt: new Date(),
+      ...(msg.status !== 'read' ? { status: 'delivered' as const } : {}),
+    }).where(and(eq(campaignMessages.id, msg.id), isNull(campaignMessages.deliveredAt)))
+      .returning({ id: campaignMessages.id })
+
+    if (updated.length > 0) {
       await bumpCounters(msg.campaignId, msg.runId, 'deliveredCount')
     }
   } else if (status === 'read') {
     // Se ainda não tinha sido marcada como entregue (pulou direto pra lida), garantimos a entrega
-    if (!msg.deliveredAt) {
-      await db.update(campaignMessages).set({
-        deliveredAt: ts,
-        updatedAt: new Date(),
-      }).where(eq(campaignMessages.id, msg.id))
+    const delivered = await db.update(campaignMessages).set({
+      deliveredAt: ts,
+      updatedAt: new Date(),
+    }).where(and(eq(campaignMessages.id, msg.id), isNull(campaignMessages.deliveredAt)))
+      .returning({ id: campaignMessages.id })
+    if (delivered.length > 0) {
       await bumpCounters(msg.campaignId, msg.runId, 'deliveredCount')
     }
 
-    if (!msg.readAt) {
-      await db.update(campaignMessages).set({
-        status: 'read',
-        readAt: ts,
-        updatedAt: new Date(),
-      }).where(eq(campaignMessages.id, msg.id))
+    const read = await db.update(campaignMessages).set({
+      status: 'read',
+      readAt: ts,
+      updatedAt: new Date(),
+    }).where(and(eq(campaignMessages.id, msg.id), isNull(campaignMessages.readAt)))
+      .returning({ id: campaignMessages.id })
+    if (read.length > 0) {
       await bumpCounters(msg.campaignId, msg.runId, 'readCount')
     }
   } else if (status === 'failed') {
-    if (msg.status !== 'failed') {
-      const cleanReason = reason ? sanitizeErrorMessage(reason, 'Falha reportada pelo gateway') : 'Falha reportada pelo gateway'
-      await db.update(campaignMessages).set({
-        status: 'failed',
-        failureReason: cleanReason,
-        updatedAt: new Date(),
-      }).where(eq(campaignMessages.id, msg.id))
+    const cleanReason = reason ? sanitizeErrorMessage(reason, 'Falha reportada pelo gateway') : 'Falha reportada pelo gateway'
+    const updated = await db.update(campaignMessages).set({
+      status: 'failed',
+      failureReason: cleanReason,
+      updatedAt: new Date(),
+    }).where(and(eq(campaignMessages.id, msg.id), inArray(campaignMessages.status, ['sending', 'sent'])))
+      .returning({ id: campaignMessages.id })
+    if (updated.length > 0) {
       await bumpCounters(msg.campaignId, msg.runId, 'failedCount')
     }
   }

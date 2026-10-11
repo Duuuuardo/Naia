@@ -74,50 +74,101 @@ async function reconcileRunCounts(): Promise<void> {
   }
 }
 
-/** 'sending' órfão (>10min sem update = job de envio sumiu) volta pra fila.
- * O crédito debitado no claim do pacer é estornado: a mensagem re-enfileirada
- * será debitada de novo quando reivindicada — sem estorno, cada crash no meio
- * do envio cobraria a mensagem duas vezes. */
-async function resetStaleSending(): Promise<void> {
+const LIVE_RUN_STATUSES = ['running', 'paused', 'pending'] as const
+
+/** 'sending' órfão (>10min sem update = job de envio sumiu) é resolvido por
+ * status do run: run vivo → volta pra 'queued' (o pacer a reivindica); run
+ * terminal ou sem run → 'failed' (nunca vai ser reivindicada). O crédito
+ * debitado no claim é estornado nos dois casos — invariante 'sending' ⇒
+ * débito feito (claim+débito atômicos no pacer). */
+export async function resetStaleSending(): Promise<void> {
   // postgres-js não serializa Date quando ele é interpolado numa query SQL
   // crua do Drizzle; passe ISO explicitamente (o Postgres faz o cast para timestamp).
   const cutoff = new Date(Date.now() - 10 * 60_000).toISOString()
-  const refunds = (await db.execute(sql`
-    WITH reset AS (
-      UPDATE campaign_messages cm SET status = 'queued', updated_at = now()
-      FROM campaigns c
-      WHERE cm.campaign_id = c.id
-        AND cm.status = 'sending'
-        AND cm.updated_at < ${cutoff}
-      RETURNING cm.id, c.workspace_id
+  const resolved = (await db.execute(sql`
+    WITH stale AS (
+      SELECT cm.id, c.workspace_id, cm.run_id, r.status AS run_status
+      FROM campaign_messages cm
+      JOIN campaigns c ON cm.campaign_id = c.id
+      LEFT JOIN campaign_runs r ON cm.run_id = r.id
+      WHERE cm.status = 'sending' AND cm.updated_at < ${cutoff}
+    ),
+    requeued AS (
+      UPDATE campaign_messages SET status = 'queued', updated_at = now()
+      WHERE id IN (SELECT id FROM stale WHERE run_status IN ('running', 'paused', 'pending'))
+      RETURNING id
+    ),
+    failed AS (
+      UPDATE campaign_messages SET status = 'failed', failure_reason = 'Envio interrompido — o run já estava encerrado.', updated_at = now()
+      WHERE id IN (SELECT id FROM stale WHERE run_status IS NULL OR run_status NOT IN ('running', 'paused', 'pending'))
+      RETURNING id
     )
-    SELECT workspace_id AS "workspaceId", count(*)::int AS c FROM reset GROUP BY 1
-  `)) as unknown as Array<{ workspaceId: string; c: number }>
+    SELECT s.workspace_id AS "workspaceId", s.run_id AS "runId", s.run_status AS "runStatus"
+    FROM stale s
+    WHERE s.id IN (SELECT id FROM requeued UNION ALL SELECT id FROM failed)
+  `)) as unknown as Array<{ workspaceId: string; runId: string | null; runStatus: string | null }>
 
-  for (const refund of refunds) {
+  if (resolved.length === 0) return
+
+  const refunds = new Map<string, number>()
+  for (const row of resolved) {
+    refunds.set(row.workspaceId, (refunds.get(row.workspaceId) ?? 0) + 1)
+  }
+  for (const [workspaceId, amount] of refunds) {
     await db.execute(sql`
-      UPDATE entitlements SET credits_balance = credits_balance + ${refund.c}, updated_at = now()
-      WHERE workspace_id = ${refund.workspaceId}
+      UPDATE entitlements SET credits_balance = credits_balance + ${amount}, updated_at = now()
+      WHERE workspace_id = ${workspaceId}
     `)
   }
-  const total = refunds.reduce((acc, r) => acc + r.c, 0)
-  if (total > 0) {
-    console.log(`[recovery] ${total} mensagens presas em 'sending' devolvidas pra fila (créditos estornados)`)
+
+  const terminalRunIds = [...new Set(
+    resolved
+      .filter((r) => r.runId && r.runStatus && !(LIVE_RUN_STATUSES as readonly string[]).includes(r.runStatus))
+      .map((r) => r.runId!),
+  )]
+  for (const runId of terminalRunIds) {
+    const [counts] = await db
+      .select({
+        sent: sql<number>`count(*) filter (where status in ('sent', 'delivered', 'read'))::int`,
+        delivered: sql<number>`count(*) filter (where delivered_at is not null or status in ('delivered', 'read'))::int`,
+        read: sql<number>`count(*) filter (where read_at is not null or status = 'read')::int`,
+        failed: sql<number>`count(*) filter (where status = 'failed')::int`,
+      })
+      .from(campaignMessages)
+      .where(eq(campaignMessages.runId, runId))
+    if (!counts) continue
+    await db.update(campaignRuns).set({
+      sentCount: counts.sent,
+      deliveredCount: counts.delivered,
+      readCount: counts.read,
+      failedCount: counts.failed,
+      updatedAt: new Date(),
+    }).where(eq(campaignRuns.id, runId))
   }
+
+  console.log(`[recovery] ${resolved.length} mensagens presas em 'sending' resolvidas (créditos estornados)`)
 }
 
 /**
  * Pacers perdidos: run 'running' cujo próximo passo (next_pacer_at) venceu há
- * mais de 3 minutos — o job do Redis morreu com o worker. Parks longos
- * (janela de horário, pausa de rajada) têm next_pacer_at no futuro e não
- * disparam este caminho.
+ * mais de 3 minutos — o job do Redis morreu com o worker — OU sem token há
+ * mais de 3 minutos (next_pacer_at NULL com updated_at parado = um pacer
+ * consumiu o token e morreu antes de se reagendar). Parks longos (janela de
+ * horário, pausa de rajada) têm next_pacer_at no futuro e não disparam este
+ * caminho; runs pausados/terminais também ficam de fora pelo status.
  */
-async function resurrectLostPacers(): Promise<void> {
+export async function resurrectLostPacers(): Promise<void> {
   const cutoff = new Date(Date.now() - 3 * 60_000)
   const stuckRuns = await db
     .select()
     .from(campaignRuns)
-    .where(and(eq(campaignRuns.status, 'running'), lt(campaignRuns.nextPacerAt, cutoff)))
+    .where(and(
+      eq(campaignRuns.status, 'running'),
+      or(
+        lt(campaignRuns.nextPacerAt, cutoff),
+        and(isNull(campaignRuns.nextPacerAt), lt(campaignRuns.updatedAt, cutoff)),
+      ),
+    ))
 
   for (const run of stuckRuns) {
     const [pending] = await db

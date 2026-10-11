@@ -47,7 +47,7 @@ export function sanitizeErrorMessage(
   }
 
   if (isDbOrInternalLeak) {
-    console.error('[SECURITY SANITIZATION] Intercepted and sanitized sensitive/database error:', error)
+    console.error('[SECURITY SANITIZATION] Intercepted and sanitized sensitive/database error of type:', error instanceof Error ? error.name : typeof error)
 
     if (checkStr.includes('duplicate key value violates unique constraint')) {
       return 'Este registro já existe no sistema ou entra em conflito com outro existente.'
@@ -67,7 +67,7 @@ export function sanitizeErrorMessage(
 
   // Prevenir mensagens exageradamente longas que possam conter dumps ou pilhas
   if (raw.length > 300) {
-    console.error('[SECURITY SANITIZATION] Intercepted overly long error string (>300 chars):', raw.substring(0, 500))
+    console.error('[SECURITY SANITIZATION] Intercepted overly long error string (>300 chars) of type:', error instanceof Error ? error.name : typeof error)
     return fallbackMessage
   }
 
