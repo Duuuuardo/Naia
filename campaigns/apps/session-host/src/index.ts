@@ -33,6 +33,9 @@ import {
   sendTelegramUserMessage,
   isTelegramUserConfig,
 } from './lib/telegram-user-manager'
+import { isRetryableProviderError } from './lib/send-errors'
+import { claimSend, recordSendResult, recordPermanentFailure, releaseSendClaim } from './lib/send-idempotency'
+import { timingSafeEqual } from 'node:crypto'
 
 function requireEnv(name: string): string {
   const value = process.env[name]
@@ -47,7 +50,9 @@ const hostId = getHostId()
 
 function requireInternalSecret(headers: Record<string, string | undefined>, set: { status?: number | string | undefined }): boolean {
   const header = headers['x-internal-secret']
-  if (!header || header !== INTERNAL_SECRET) {
+  const provided = Buffer.from(header ?? '')
+  const expected = Buffer.from(INTERNAL_SECRET)
+  if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
     set.status = 401
     return false
   }
@@ -131,8 +136,14 @@ process.on('uncaughtException', (err: any) => {
 })
 
 const app = new Elysia()
+  .onAfterHandle(({ set }) => {
+    set.headers['x-content-type-options'] = 'nosniff'
+    set.headers['x-frame-options'] = 'DENY'
+    set.headers['referrer-policy'] = 'no-referrer'
+  })
   .onBeforeHandle(({ request, set }) => {
-    const ip = request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip') ?? 'unknown'
+    const xff = request.headers.get('x-forwarded-for')
+    const ip = xff?.split(',').pop()?.trim() ?? request.headers.get('x-real-ip') ?? 'unknown'
     if (isRateLimited(ip, new URL(request.url).pathname)) {
       set.status = 429
       return { message: 'Muitas requisições. Tente novamente mais tarde.' }
@@ -150,14 +161,14 @@ const app = new Elysia()
         service: 'naia-session-host',
         showStartupMessage: true,
         startupMessageFormat: 'banner',
-        showContextTree: true,
-        contextDepth: 2,
+        showContextTree: process.env.NODE_ENV !== 'production',
+        contextDepth: process.env.NODE_ENV === 'production' ? 0 : 2,
         slowThreshold: 500,
         verySlowThreshold: 1000,
         timestamp: {
           translateTime: 'yyyy-mm-dd HH:MM:ss.SSS',
         },
-        ip: true,
+        ip: process.env.NODE_ENV !== 'production',
       },
     }),
   )
@@ -170,11 +181,24 @@ const app = new Elysia()
         '/whatsapp-send',
         async ({ body, headers, set }) => {
           if (!requireInternalSecret(headers, set)) return { success: false, error: 'Não autorizado.' }
+
+          const claim = body.idempotencyKey ? await claimSend(body.idempotencyKey) : null
+          if (claim?.kind === 'hit') return { success: true, externalMessageId: claim.externalMessageId }
+          if (claim?.kind === 'inflight') return { success: false, error: 'Envio idêntico em andamento.', retryable: true }
+          if (claim?.kind === 'failed') return { success: false, error: claim.error, retryable: false }
+
           try {
             const result = await sendWhatsAppMessage(body.connectionId, body.phone, body.content, body.media)
+            if (claim) await recordSendResult(body.idempotencyKey!, result.externalMessageId)
             return { success: true, externalMessageId: result.externalMessageId }
           } catch (err) {
-            return { success: false, error: sanitizeErrorMessage(err, 'Falha interna ao processar envio de mensagem via WhatsApp.') }
+            const retryable = isRetryableProviderError(err)
+            const clean = sanitizeErrorMessage(err, 'Falha interna ao processar envio de mensagem via WhatsApp.')
+            if (claim) {
+              if (retryable) await releaseSendClaim(body.idempotencyKey!)
+              else await recordPermanentFailure(body.idempotencyKey!, clean)
+            }
+            return { success: false, error: clean, retryable }
           }
         },
         {
@@ -183,6 +207,7 @@ const app = new Elysia()
             phone: t.String(),
             content: t.String(),
             media: t.Optional(t.Array(MediaRefSchema)),
+            idempotencyKey: t.Optional(t.String()),
           }),
         },
       )
@@ -190,11 +215,24 @@ const app = new Elysia()
         '/telegram-user-send',
         async ({ body, headers, set }) => {
           if (!requireInternalSecret(headers, set)) return { success: false, error: 'Não autorizado.' }
+
+          const claim = body.idempotencyKey ? await claimSend(body.idempotencyKey) : null
+          if (claim?.kind === 'hit') return { success: true, externalMessageId: claim.externalMessageId }
+          if (claim?.kind === 'inflight') return { success: false, error: 'Envio idêntico em andamento.', retryable: true }
+          if (claim?.kind === 'failed') return { success: false, error: claim.error, retryable: false }
+
           try {
             const result = await sendTelegramUserMessage(body.connectionId, body.target, body.content, body.media)
+            if (claim) await recordSendResult(body.idempotencyKey!, result.externalMessageId)
             return { success: true, externalMessageId: result.externalMessageId }
           } catch (err) {
-            return { success: false, error: sanitizeErrorMessage(err, 'Falha interna ao processar envio de mensagem via Telegram.') }
+            const retryable = isRetryableProviderError(err)
+            const clean = sanitizeErrorMessage(err, 'Falha interna ao processar envio de mensagem via Telegram.')
+            if (claim) {
+              if (retryable) await releaseSendClaim(body.idempotencyKey!)
+              else await recordPermanentFailure(body.idempotencyKey!, clean)
+            }
+            return { success: false, error: clean, retryable }
           }
         },
         {
@@ -203,6 +241,7 @@ const app = new Elysia()
             target: t.String(),
             content: t.String(),
             media: t.Optional(t.Array(MediaRefSchema)),
+            idempotencyKey: t.Optional(t.String()),
           }),
         },
       ),

@@ -22,6 +22,7 @@
     "drizzle-orm": "^0.45.2",
     "elysia": "^1",
     "logixlysia": "^6.6.0",
+    "sharp": "0.35.5",
     "teleproto": "^1.228.2"
   },
   "devDependencies": {

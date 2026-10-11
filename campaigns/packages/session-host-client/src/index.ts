@@ -36,37 +36,70 @@ function getSecret(): string {
   return requireEnv('NAIA_INTERNAL_SECRET')
 }
 
+/**
+ * Erro de envio com classificação de retentativa. `retryable: false` = falha
+ * permanente (destino inexistente, bloqueio) — o worker marca a mensagem como
+ * falha sem gastar tentativas do BullMQ. `retryable: true` = transitório
+ * (rede, socket caído, flood wait, 5xx) — o worker relança pro BullMQ retentar.
+ */
+export class SendError extends Error {
+  readonly retryable: boolean
+  constructor(message: string, retryable: boolean) {
+    super(message)
+    this.name = 'SendError'
+    this.retryable = retryable
+  }
+}
+
+/** Erro desconhecido é tratado como transitório: falha silenciosa é pior que retry. */
+export function isRetryableSendError(err: unknown): boolean {
+  if (err instanceof SendError) return err.retryable
+  return true
+}
+
 async function post<T>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-internal-secret': getSecret(),
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(60000),
-  })
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-internal-secret': getSecret(),
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(60000),
+    })
+  } catch (err) {
+    throw new SendError(`Session host inalcançável: ${err instanceof Error ? err.message : err}`, true)
+  }
 
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    throw new Error(`Session host retornou ${res.status}: ${text}`)
+    const retryable = res.status >= 500 || res.status === 429
+    throw new SendError(`Session host retornou ${res.status}: ${text}`, retryable)
   }
 
   return res.json() as Promise<T>
 }
 
 async function get<T>(url: string): Promise<T> {
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'x-internal-secret': getSecret(),
-    },
-    signal: AbortSignal.timeout(30000),
-  })
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'x-internal-secret': getSecret(),
+      },
+      signal: AbortSignal.timeout(30000),
+    })
+  } catch (err) {
+    throw new SendError(`Session host inalcançável: ${err instanceof Error ? err.message : err}`, true)
+  }
 
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    throw new Error(`Session host retornou ${res.status}: ${text}`)
+    const retryable = res.status >= 500 || res.status === 429
+    throw new SendError(`Session host retornou ${res.status}: ${text}`, retryable)
   }
 
   return res.json() as Promise<T>
@@ -229,13 +262,14 @@ export async function sendWhatsAppMessage(
   phone: string,
   content: string,
   media?: MediaRef[],
+  opts?: { idempotencyKey?: string },
 ): Promise<{ externalMessageId: string }> {
   const url = await resolveSessionHostUrl(connectionId)
-  const res = await post<{ success: boolean; externalMessageId?: string; error?: string }>(
+  const res = await post<{ success: boolean; externalMessageId?: string; error?: string; retryable?: boolean }>(
     `${url}/internal/whatsapp-send`,
-    { connectionId, phone, content, media },
+    { connectionId, phone, content, media, idempotencyKey: opts?.idempotencyKey },
   )
-  if (!res.success) throw new Error(res.error ?? 'Falha ao enviar mensagem via WhatsApp.')
+  if (!res.success) throw new SendError(res.error ?? 'Falha ao enviar mensagem via WhatsApp.', res.retryable !== false)
   return { externalMessageId: res.externalMessageId ?? '' }
 }
 
@@ -244,12 +278,13 @@ export async function sendTelegramUserMessage(
   target: string,
   content: string,
   media?: MediaRef[],
+  opts?: { idempotencyKey?: string },
 ): Promise<{ externalMessageId: string }> {
   const url = await resolveSessionHostUrl(connectionId)
-  const res = await post<{ success: boolean; externalMessageId?: string; error?: string }>(
+  const res = await post<{ success: boolean; externalMessageId?: string; error?: string; retryable?: boolean }>(
     `${url}/internal/telegram-user-send`,
-    { connectionId, target, content, media },
+    { connectionId, target, content, media, idempotencyKey: opts?.idempotencyKey },
   )
-  if (!res.success) throw new Error(res.error ?? 'Falha ao enviar mensagem via Telegram.')
+  if (!res.success) throw new SendError(res.error ?? 'Falha ao enviar mensagem via Telegram.', res.retryable !== false)
   return { externalMessageId: res.externalMessageId ?? '' }
 }

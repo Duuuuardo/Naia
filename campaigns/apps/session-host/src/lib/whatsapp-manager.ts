@@ -306,7 +306,7 @@ export async function startWhatsAppSession(connectionId: string): Promise<void> 
 
   socket.ev.on('contacts.upsert', (contactsList: any[]) => {
     if (!Array.isArray(contactsList)) return
-    console.log(`[whatsapp-manager] [${connectionId}] contacts.upsert emitted with ${contactsList.length} items:`, JSON.stringify(contactsList.slice(0, 5)))
+    console.log(`[whatsapp-manager] [${connectionId}] contacts.upsert emitted with ${contactsList.length} items`)
     for (const c of contactsList) {
       upsertContactToCache(connectionId, c?.id, c?.name || c?.notify || c?.pushName || c?.verifiedName, undefined, c?.imgUrl || c?.profilePictureUrl, c?.lid)
     }
@@ -314,7 +314,7 @@ export async function startWhatsAppSession(connectionId: string): Promise<void> 
 
   socket.ev.on('contacts.update', (contactsList: any[]) => {
     if (!Array.isArray(contactsList)) return
-    console.log(`[whatsapp-manager] [${connectionId}] contacts.update emitted with ${contactsList.length} items:`, JSON.stringify(contactsList.slice(0, 5)))
+    console.log(`[whatsapp-manager] [${connectionId}] contacts.update emitted with ${contactsList.length} items`)
     for (const c of contactsList) {
       upsertContactToCache(connectionId, c?.id, c?.name || c?.notify || c?.pushName || c?.verifiedName, undefined, c?.imgUrl || c?.profilePictureUrl, c?.lid)
     }
