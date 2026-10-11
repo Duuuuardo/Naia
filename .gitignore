@@ -5,5 +5,14 @@ dist
 .output
 .tanstack
 .turbo
-.env
 *.log
+coverage/
+*.tsbuildinfo
+
+# Environment files — never commit real or backup env files.
+# (.env.example stays tracked on purpose.)
+.env
+.env.bak*
+.env.local
+.env.*.local
+*.env.bak*
