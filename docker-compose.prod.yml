@@ -27,27 +27,10 @@ services:
     networks:
       - naia-internal
 
-  crm-postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: crm
-      POSTGRES_USER: crm
-      POSTGRES_PASSWORD: ${NAIA_CRM_POSTGRES_PASSWORD}
-    volumes:
-      - naia_crm_postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U crm -d crm"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - naia-internal
-
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--requirepass", "${NAIA_REDIS_PASSWORD}"]
+    command: ["redis-server", "--requirepass", "${NAIA_REDIS_PASSWORD}", "--appendonly", "yes", "--appendfsync", "everysec"]
     volumes:
       - naia_redis_data:/data
     healthcheck:
@@ -168,7 +151,7 @@ services:
       - HOST_ID=base
       - PORT=4010
       - NAIA_SESSIONS_DIR=/data/sessions
-      - NAIA_ALLOWED_ORIGINS=https://campaigns.naia.website,https://crm.naia.website
+      - NAIA_ALLOWED_ORIGINS=https://campaigns.naia.website
       - SESSION_HOST_BASE_URL=http://session-host-base:4010
       - SESSION_HOST_SCALE_URL=http://session-host-scale:4011
     volumes:
@@ -193,7 +176,7 @@ services:
       - HOST_ID=scale
       - PORT=4011
       - NAIA_SESSIONS_DIR=/data/sessions
-      - NAIA_ALLOWED_ORIGINS=https://campaigns.naia.website,https://crm.naia.website
+      - NAIA_ALLOWED_ORIGINS=https://campaigns.naia.website
       - SESSION_HOST_BASE_URL=http://session-host-base:4010
       - SESSION_HOST_SCALE_URL=http://session-host-scale:4011
     volumes:
@@ -209,85 +192,8 @@ services:
       minio:
         condition: service_healthy
 
-  crm-api:
-    image: ${REGISTRY}/naia-crm-api:${CRM_IMAGE_TAG:-latest}
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:4002:4002"
-    networks:
-      novaplatform:
-        aliases:
-          - naia-crm-api
-      naia-internal:
-    env_file:
-      - ./.env
-    environment:
-      - CRM_REDIS_URL=redis://:${NAIA_REDIS_PASSWORD}@redis:6379
-      - CRM_SESSION_HOST_URL=http://crm-session-host:4020
-    depends_on:
-      crm-postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  crm-worker:
-    image: ${REGISTRY}/naia-crm-worker:${CRM_IMAGE_TAG:-latest}
-    restart: unless-stopped
-    env_file:
-      - ./.env
-    environment:
-      - CRM_REDIS_URL=redis://:${NAIA_REDIS_PASSWORD}@redis:6379
-      - CRM_SESSION_HOST_URL=http://crm-session-host:4020
-    networks:
-      novaplatform:
-      naia-internal:
-    depends_on:
-      crm-postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      crm-session-host:
-        condition: service_started
-
-  crm-session-host:
-    image: ${REGISTRY}/naia-crm-session-host:${CRM_IMAGE_TAG:-latest}
-    restart: unless-stopped
-    env_file:
-      - ./.env
-    environment:
-      - CRM_SESSION_HOST_ID=base
-      - CRM_SESSION_HOST_PORT=4020
-      - CRM_REDIS_URL=redis://:${NAIA_REDIS_PASSWORD}@redis:6379
-    ports:
-      - "127.0.0.1:4020:4020"
-    networks:
-      novaplatform:
-      naia-internal:
-    depends_on:
-      crm-postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  crm-web:
-    image: ${REGISTRY}/naia-crm-web:${CRM_IMAGE_TAG:-latest}
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:3302:3302"
-    networks:
-      novaplatform:
-        aliases:
-          - naia-crm-web
-    environment:
-      - PORT=3302
-    env_file:
-      - ./.env
-    depends_on:
-      - crm-api
-
 volumes:
   naia_postgres_data:
-  naia_crm_postgres_data:
   naia_redis_data:
   naia_minio_data:
   naia_session_base_data:

@@ -17,12 +17,10 @@ ARG VITE_NAIA_API_URL=https://api.campaigns.naia.website
 ARG VITE_NAIA_WEB_URL=https://campaigns.naia.website
 ARG VITE_VIANOVA_API_URL=https://api.vianova.software
 ARG VITE_VIANOVA_WEB_URL=https://app.vianova.software
-ARG VITE_CRM_WEB_URL=https://crm.naia.website
 ENV VITE_NAIA_API_URL=$VITE_NAIA_API_URL
 ENV VITE_NAIA_WEB_URL=$VITE_NAIA_WEB_URL
 ENV VITE_VIANOVA_API_URL=$VITE_VIANOVA_API_URL
 ENV VITE_VIANOVA_WEB_URL=$VITE_VIANOVA_WEB_URL
-ENV VITE_CRM_WEB_URL=$VITE_CRM_WEB_URL
 RUN bun run --cwd ${APP} build
 # Bundle web app server into a single self-contained file so the runtime stage
 # needs no node_modules. API apps already produce a standalone dist/index.js.
@@ -43,14 +41,12 @@ ARG VITE_NAIA_API_URL=https://api.campaigns.naia.website
 ARG VITE_NAIA_WEB_URL=https://campaigns.naia.website
 ARG VITE_VIANOVA_API_URL=https://api.vianova.software
 ARG VITE_VIANOVA_WEB_URL=https://app.vianova.software
-ARG VITE_CRM_WEB_URL=https://crm.naia.website
 ENV NODE_ENV=production
 ENV APP=${APP}
 ENV VITE_NAIA_API_URL=$VITE_NAIA_API_URL
 ENV VITE_NAIA_WEB_URL=$VITE_NAIA_WEB_URL
 ENV VITE_VIANOVA_API_URL=$VITE_VIANOVA_API_URL
 ENV VITE_VIANOVA_WEB_URL=$VITE_VIANOVA_WEB_URL
-ENV VITE_CRM_WEB_URL=$VITE_CRM_WEB_URL
 
 COPY --from=base /app/${APP}/dist ./dist
 # Migration SQL files — needed at runtime by migrate.js.

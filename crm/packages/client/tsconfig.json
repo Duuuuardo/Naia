@@ -1,7 +1,0 @@
-{
-  "extends": "@naia/config/tsconfig/bun.json",
-  "compilerOptions": {
-    "rootDir": "src"
-  },
-  "include": ["src"]
-}

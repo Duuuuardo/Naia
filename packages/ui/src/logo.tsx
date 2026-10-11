@@ -40,7 +40,7 @@ export function ProductBrand({
   size = 24,
   className = '',
 }: {
-  product: 'Campaigns' | 'CRM'
+  product: string
   size?: number
   className?: string
 }) {

@@ -1,4 +1,4 @@
-export type EmailBrand = 'vianova' | 'naia' | 'crm'
+export type EmailBrand = 'vianova' | 'naia'
 
 export interface EnqueueEmailOptions {
   to: string

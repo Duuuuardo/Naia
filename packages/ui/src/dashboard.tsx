@@ -489,7 +489,6 @@ const statusConfig: Record<string, { icon: LucideIcon; className: string; label:
     label: 'Desconectada',
   },
   error: { icon: XCircle, className: 'bg-error-500/10 text-error-500', label: 'Erro' },
-  // conversa do CRM
   open: { icon: MessageSquare, className: 'bg-brand-100 text-brand-600', label: 'Aberta' },
   assigned: { icon: Play, className: 'bg-blue-50 text-blue-700', label: 'Em atendimento' },
   resolved: { icon: CheckCheck, className: 'bg-success-500/10 text-success-500', label: 'Resolvida' },

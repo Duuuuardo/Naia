@@ -10,7 +10,7 @@ import {
 import { Avatar, WorkspaceAvatar } from './dashboard'
 import { ProductBrand } from './logo'
 
-type ProductId = 'campaigns' | 'crm'
+type ProductId = string
 
 type ProductDefinition = {
   id: ProductId
@@ -31,7 +31,7 @@ export function ProductTopbar({
   products,
   onLogout,
 }: {
-  product: { id: ProductId; label: 'Campaigns' | 'CRM' }
+  product: { id: ProductId; label: string }
   user: { name: string; picture?: string | null; pictureFrame?: string | null }
   workspaceName?: string
   workspaceAvatarUrl?: string | null

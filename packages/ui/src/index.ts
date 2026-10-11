@@ -1,4 +1,3 @@
-// Componentes de marca compartilhados entre os apps Naia (landing, campaigns, crm).
 export { NaiaIcon, NaiaLogo, ProductBrand } from './logo'
 export * from './dashboard'
 export * from './modal'

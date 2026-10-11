@@ -7,7 +7,6 @@ import { requireEnv } from '../lib/env'
 
 const VIANOVA_WEB_URL = requireEnv('VITE_VIANOVA_WEB_URL')
 const CAMPAIGNS_WEB_URL = requireEnv('VITE_NAIA_WEB_URL')
-const CRM_WEB_URL = requireEnv('VITE_CRM_WEB_URL')
 
 export function Topbar({
   user,
@@ -58,12 +57,6 @@ export function Topbar({
           name: 'Naia Campanhas',
           description: 'Disparo em massa',
           href: CAMPAIGNS_WEB_URL,
-        },
-        {
-          id: 'crm',
-          name: 'Naia CRM',
-          description: 'Atendimento multicanal',
-          href: CRM_WEB_URL,
         },
       ]}
       onLogout={async () => {

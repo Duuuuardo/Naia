@@ -250,10 +250,10 @@ function GroupsPane({
       ...selectedWhatsapp.map((conn) =>
         fetchConnectionGroupsSync({ data: { workspaceId, connectionId: conn.id } }).catch(() => ({ groups: [] })),
       ),
-    ]).then(([crmRes, ...connResults]) => {
+    ]).then(([savedGroupsRes, ...connResults]) => {
       if (cancelled) return
       const map = new Map<string, { id: string; subject: string; size: number; fromSaved: boolean }>()
-      for (const c of (crmRes as { contacts: any[] }).contacts ?? []) {
+      for (const c of (savedGroupsRes as { contacts: any[] }).contacts ?? []) {
         const id = c.whatsappPhone || c.id
         map.set(id, {
           id,

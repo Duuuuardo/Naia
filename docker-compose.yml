@@ -16,29 +16,12 @@ services:
       timeout: 5s
       retries: 5
 
-  crm_postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:5436:5432"
-    environment:
-      POSTGRES_DB: crm
-      POSTGRES_USER: crm
-      POSTGRES_PASSWORD: ${NAIA_CRM_POSTGRES_PASSWORD}
-    volumes:
-      - crm_postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U crm -d crm"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   redis:
     image: redis:7-alpine
     restart: unless-stopped
     ports:
       - "127.0.0.1:6381:6379"
-    command: ["redis-server", "--requirepass", "${NAIA_REDIS_PASSWORD}"]
+    command: ["redis-server", "--requirepass", "${NAIA_REDIS_PASSWORD}", "--appendonly", "yes", "--appendfsync", "everysec"]
     volumes:
       - naia_redis_data:/data
     healthcheck:
@@ -103,41 +86,6 @@ services:
       - redis
       - minio
 
-  crm-session-host:
-    image: oven/bun:1.3.14
-    restart: unless-stopped
-    command: ["bun", "run", "--cwd", "crm/apps/session-host", "dev"]
-    working_dir: /app
-    volumes:
-      - .:/app
-      - ./.env:/app/.env:ro
-    ports:
-      - "127.0.0.1:4020:4020"
-    environment:
-      - CRM_SESSION_HOST_ID=base
-      - CRM_SESSION_HOST_PORT=4020
-      - CRM_REDIS_URL=redis://:${NAIA_REDIS_PASSWORD}@redis:6379
-    depends_on:
-      - crm_postgres
-      - redis
-
-  crm-worker:
-    image: oven/bun:1.3.14
-    restart: unless-stopped
-    command: ["bun", "run", "--cwd", "crm/apps/worker", "dev"]
-    working_dir: /app
-    volumes:
-      - .:/app
-      - ./.env:/app/.env:ro
-    environment:
-      - CRM_DATABASE_URL=postgres://crm:${NAIA_CRM_POSTGRES_PASSWORD}@crm_postgres:5432/crm
-      - CRM_REDIS_URL=redis://:${NAIA_REDIS_PASSWORD}@redis:6379
-      - CRM_SESSION_HOST_URL=http://crm-session-host:4020
-    depends_on:
-      - crm_postgres
-      - redis
-      - crm-session-host
-
   # Armazenamento de mídia das campanhas (imagens/vídeos/áudios/documentos).
   # Instância própria do Campaigns — o MinIO do Vianova é exclusivo de avatares.
   minio:
@@ -174,6 +122,5 @@ services:
 
 volumes:
   naia_postgres_data:
-  crm_postgres_data:
   naia_redis_data:
   naia_minio_data:

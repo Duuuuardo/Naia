@@ -1,1 +1,0 @@
-ALTER TABLE "contacts" ADD COLUMN "avatar_storage_key" text;

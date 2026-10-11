@@ -1,2 +1,0 @@
-ALTER TABLE "workspace_settings" ADD COLUMN "identify_agent" boolean DEFAULT false NOT NULL;--> statement-breakpoint
-ALTER TABLE "quick_replies" ADD COLUMN "attachment_file_ids" jsonb DEFAULT '[]'::jsonb NOT NULL;

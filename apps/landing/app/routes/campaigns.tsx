@@ -509,14 +509,11 @@ function Footer() {
               Comunicação que vende, no WhatsApp e no Telegram.
             </p>
           </div>
-          <nav className="grid grid-cols-2 gap-x-16 gap-y-2 text-sm" aria-label="Rodapé">
-            <p className="col-span-2 mb-1 font-semibold text-dark-800">Produtos</p>
+          <nav className="grid gap-y-2 text-sm" aria-label="Rodapé">
+            <p className="mb-1 font-semibold text-dark-800">Produtos</p>
             <a href={CAMPAIGNS_URL} className="text-neutral-500 transition-colors hover:text-brand-500">
               Naia Campanhas
             </a>
-            <Link to="/crm" className="text-neutral-500 transition-colors hover:text-brand-500">
-              Naia CRM
-            </Link>
           </nav>
         </div>
         <p className="mt-10 border-t border-neutral-200 pt-6 text-xs text-neutral-400">
