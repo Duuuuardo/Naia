@@ -4,8 +4,13 @@ Monorepo for the **Naia** communication brand: the `naia.website` landing
 site and **Naia Campaigns** (`campaigns.naia.website`), a multi-tenant
 bulk-messaging product for WhatsApp and Telegram.
 
-**Status**: active product development on the `develop` branch. The pipeline
-is at-least-once by design. See [Queue guarantees](#queue-guarantees) for the
+> **Status: open-sourced after shutdown.** Naia ran in production at
+> `naia.website` and `campaigns.naia.website` as part of the NovaPlatform
+> ecosystem. The services are no longer deployed — this repository is
+> published as-is for reference and portfolio, and is not actively
+> maintained.
+
+The pipeline is at-least-once by design. See [Queue guarantees](#queue-guarantees) for the
 honest delivery semantics.
 
 ## What it does
