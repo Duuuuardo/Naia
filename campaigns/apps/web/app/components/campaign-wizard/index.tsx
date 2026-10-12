@@ -35,9 +35,7 @@ export function CampaignWizard({
   availableTags: string[]
   tier: string
   initialDraft: WizardDraft
-  /** Presente no modo edição — o submit vira PATCH em vez de POST. */
   campaignId?: string
-  /** false quando o status atual não permite disparar (ex: pausada) — só salva. */
   canDispatch?: boolean
   userId: string
   permissions: RolePermissionMap
@@ -98,7 +96,6 @@ export function CampaignWizard({
     setFurthest((f) => Math.max(f, next))
   }
 
-  /** Resolve o público em um segmentFilter — modos manual/arquivo materializam contatos antes. */
   async function resolveSegmentFilter(): Promise<{ filter: unknown } | { error: string }> {
     if (draft.audienceMode === 'all') return { filter: { type: 'all' } }
     if (draft.audienceMode === 'tags') return { filter: { type: 'tags', tags: draft.tags } }
@@ -125,7 +122,6 @@ export function CampaignWizard({
       }
       return { filter: { type: 'tags', tags: [tag] } }
     }
-    // arquivo
     if (!file) {
       if (draft.resolvedAudienceTag) return { filter: { type: 'tags', tags: [draft.resolvedAudienceTag] } }
       return { error: 'Carregue um arquivo com seus leads.' }

@@ -49,7 +49,6 @@ import {
 
 type ContactFieldErrors = { name?: string; identifier?: string; email?: string }
 
-
 export const Route = createFileRoute('/_app/$workspaceId/contacts')({ head: () => createHeadConfig('Contatos — Naia Campanhas'),
   loader: ({ params }) => fetchContacts({ data: { workspaceId: params.workspaceId } }),
   component: ContactsPage,
@@ -75,15 +74,12 @@ type ContactRow = {
   updatedAt: string
 }
 
-
-
 function ContactsPage() {
   const { contacts: rawContacts, total } = Route.useLoaderData()
   const contacts = rawContacts as ContactRow[]
   const { workspaceId } = Route.useParams()
   const router = useRouter()
 
-  // Modals & UI State
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const [editContact, setEditContact] = useState<ContactRow | null>(null)
@@ -136,14 +132,11 @@ function ContactsPage() {
     }
   }, [openActionsMenuId, closeActionsMenu])
 
-  // Filters
   const [search, setSearch] = useState('')
   const [platformFilter, setPlatformFilter] = useState<'all' | 'whatsapp' | 'telegram'>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'optout'>('all')
   const [typeFilter, setTypeFilter] = useState<'all' | 'contacts' | 'groups'>('all')
 
-
-  // Create Form State (One contact = One platform)
   const [createPlatform, setCreatePlatform] = useState<'whatsapp' | 'telegram'>('whatsapp')
   const [createName, setCreateName] = useState('')
   const [createIdentifier, setCreateIdentifier] = useState('')
@@ -155,7 +148,6 @@ function ContactsPage() {
   const [createOptIn, setCreateOptIn] = useState(true)
   const [createErrors, setCreateErrors] = useState<ContactFieldErrors>({})
 
-  // Edit Form State
   const [editPlatform, setEditPlatform] = useState<'whatsapp' | 'telegram'>('whatsapp')
   const [editName, setEditName] = useState('')
   const [editIdentifier, setEditIdentifier] = useState('')
@@ -167,10 +159,8 @@ function ContactsPage() {
   const [editOptIn, setEditOptIn] = useState(true)
   const [editErrors, setEditErrors] = useState<ContactFieldErrors>({})
 
-  // Import State
   const [csv, setCsv] = useState('')
 
-  // Tag Management System State
   const [showTagsModal, setShowTagsModal] = useState(false)
   const [workspaceTagsList, setWorkspaceTagsList] = useState<Array<{ id: string; name: string; color: string; description: string | null; isCustom: boolean }>>([])
   const [loadingTags, setLoadingTags] = useState(false)
@@ -211,7 +201,6 @@ function ContactsPage() {
     }
     return map
   }, [workspaceTagsList])
-
 
   async function refresh() {
     await router.invalidate()
@@ -274,7 +263,6 @@ function ContactsPage() {
     await refresh()
   }
 
-
   function openEdit(c: ContactRow) {
     setEditErrors({})
     setEditContact(c)
@@ -293,7 +281,6 @@ function ContactsPage() {
     setEditTags((c.tags || []).join(', '))
     setEditOptIn(c.optInStatus)
   }
-
 
   async function handleUpdateSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -328,7 +315,6 @@ function ContactsPage() {
         optInStatus: editOptIn,
       },
     })
-
 
     setSaving(false)
     if (result && 'error' in result) {
@@ -397,7 +383,6 @@ function ContactsPage() {
     await refresh()
   }
 
-  // Pre-calculate clean stats
   const stats = useMemo(() => {
     let whatsappCount = 0
     let telegramCount = 0
@@ -413,7 +398,6 @@ function ContactsPage() {
     return { whatsappCount, telegramCount, activeCount, groupsCount }
   }, [contacts])
 
-  // Filtered contacts list
   const filtered = useMemo(() => {
     return contacts.filter((c) => {
       const matchesSearch =
@@ -435,7 +419,6 @@ function ContactsPage() {
       return true
     })
   }, [contacts, search, platformFilter, statusFilter, typeFilter])
-
 
   return (
     <>
@@ -461,7 +444,6 @@ function ContactsPage() {
           </Button>
         </div>
       </div>
-
 
       <div className="flex flex-wrap items-center gap-3 px-4 py-3 rounded-xl border border-neutral-200 bg-neutral-50/60 text-xs font-semibold text-neutral-600">
         <div className="flex items-center gap-1.5 pr-3 border-r border-neutral-200">
@@ -489,7 +471,6 @@ function ContactsPage() {
           <span className="font-mono text-dark-800 font-bold">{stats.activeCount}</span>
         </div>
       </div>
-
 
       {/* Feedback Banner */}
       {message && (
@@ -520,7 +501,6 @@ function ContactsPage() {
           <StatusDropdown value={statusFilter} onChange={setStatusFilter} />
         </div>
       </div>
-
 
       <div className="rounded-2xl border border-neutral-200 bg-white shadow-2xs overflow-hidden">
         {filtered.length === 0 ? (
@@ -606,7 +586,6 @@ function ContactsPage() {
                               </div>
                             )}
                           </div>
-
 
                         </div>
                       </td>
@@ -890,7 +869,6 @@ function ContactsPage() {
                 )}
               </div>
 
-
               <div className="pt-1">
                 <label className="flex items-start gap-3 text-xs text-neutral-600 bg-neutral-50 p-3 rounded-xl border border-neutral-200/60 cursor-pointer">
                   <input
@@ -1131,7 +1109,6 @@ function ContactsPage() {
                   </div>
                 )}
               </div>
-
 
               <div className="pt-1">
                 <label className="flex items-start gap-3 text-xs text-neutral-600 bg-neutral-50 p-3 rounded-xl border border-neutral-200/60 cursor-pointer">
@@ -1556,7 +1533,6 @@ function ContactsPage() {
     </>
   )
 }
-
 
 function PlatformDropdown({
   value,

@@ -4,7 +4,6 @@ const brandColor = '#DD5973'
 const darkColor = '#3D4355'
 const whiteColor = '#ffffff'
 
-/** Logotipo completo (ícone + wordmark) — mesma marca de docs/design.md, portado de packages/ui do legado. */
 export function NaiaLogo({
   color = 'brand',
   ...props
@@ -36,5 +35,4 @@ export function NaiaLogo({
     </svg>
   )
 }
-
 

@@ -2,16 +2,6 @@ import { Link, useMatch, useRouter, type ErrorComponentProps } from '@tanstack/r
 import { House, RefreshCw } from 'lucide-react'
 import type { ReactNode } from 'react'
 
-/*
- * Telas de erro da marca Naia. O elemento-assinatura deriva do logo (ondas =
- * mensagens em movimento): no 404 a onda se dissolve em pontos — a rota some;
- * no 500 a onda perde o ritmo e vira linha reta — algo parou de pulsar.
- *
- * Duas variantes: a página inteira (rotas sem shell) e a embutida, usada como
- * notFoundComponent/errorComponent de layouts logados — sem logo (a topbar já
- * tem a marca) e sem fundo próprio, para herdar o fundo do conteúdo.
- */
-
 const BRAND = '#DD5973'
 
 function WaveLost() {
@@ -192,9 +182,6 @@ export function NotFoundEmbedded() {
 }
 
 export function ErrorPage(props: ErrorComponentProps) {
-  // Erros em rotas filhas do shell do workspace renderizam dentro do Outlet do
-  // layout — nesse caso usa a variante embutida para herdar o fundo do
-  // conteúdo e não repetir a marca que a topbar já mostra.
   const match = useMatch({ strict: false })
   const insideShell = String(match.routeId).startsWith('/_app/$workspaceId/')
   return <ErrorContent embedded={insideShell} {...props} />

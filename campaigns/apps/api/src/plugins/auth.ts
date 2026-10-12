@@ -3,19 +3,13 @@ import { db, revokedSessions, directoryUsers } from '@naia/db'
 import { eq } from 'drizzle-orm'
 import { verifyUserToken, type VianovaUser } from '@naia/vianova-auth'
 
-// Autenticação de usuário: JWT do Vianova, validado 100% local via JWKS
-// (packages/vianova-auth) — sem round-trip ao Vianova no caminho quente.
-// O único lookup local é a checagem de revogação (single sign-out imediato
-// via POST /internal/session-revoked, ver routes/internal.ts).
 export const authPlugin = new Elysia().derive({ as: 'global' }, async ({ headers, cookie }) => {
-  // Tenta obter o token do header Authorization (preferido)
   let token: string | undefined
   const authHeader = headers.authorization
   if (authHeader?.startsWith('Bearer ')) {
     token = authHeader.slice(7)
   }
 
-  // Fallback: obtém do cookie naia_session (requisições internas do frontend)
   if (!token && cookie.naia_session) {
     token = cookie.naia_session.value as string
   }
@@ -33,7 +27,6 @@ export const authPlugin = new Elysia().derive({ as: 'global' }, async ({ headers
 
   if (revoked) return { session: null as VianovaUser | null, rawToken: null as string | null }
 
-  // Cache de exibição (best-effort) — não bloqueia a request em caso de erro.
   db.insert(directoryUsers)
     .values({
       id: user.userId,

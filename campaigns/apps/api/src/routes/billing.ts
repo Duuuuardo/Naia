@@ -7,14 +7,9 @@ import { getRequiredEnv } from '../lib/env'
 
 const VIANOVA_INTERNAL_SECRET = getRequiredEnv('VIANOVA_INTERNAL_SECRET')
 
-// Naia nunca integra Stripe. Estas rotas tipadas apenas encaminham catálogo,
-// checkout e compra de add-ons ao Vianova usando a identidade do usuário.
-// Gestão de assinatura ativa (cancelamento, cartão e faturas) continua no
-// portal do Vianova.
 export const billingRoutes = new Elysia()
   .use(authPlugin)
 
-  // GET /billing/plans — catálogo público de planos do Naia, espelhado do Vianova.
   .get('/billing/plans', async ({ set }) => {
     const res = await fetch(`${VIANOVA_API_URL}/products/naia/plans`)
     if (!res.ok) {
@@ -62,10 +57,8 @@ export const billingRoutes = new Elysia()
     return data
   })
 
-  // GET /billing/manage-url — "gerenciar assinatura" sempre redireciona ao Vianova.
   .get('/billing/manage-url', () => ({ url: manageBillingUrl() }))
 
-  // GET /billing/subscription — proxy autenticado para a subscription atual do workspace.
   .get('/billing/subscription', async ({ query, set, session, rawToken }) => {
     if (!session) {
       set.status = 401
@@ -91,8 +84,6 @@ export const billingRoutes = new Elysia()
     }
   })
 
-  // POST /billing/checkout — proxy do checkout para o Vianova usando o JWT do usuário.
-  // Evita a necessidade de SameSite=None no vianova_session cross-site.
   .post('/billing/checkout', async ({ body, set, session, rawToken }) => {
     if (!session) {
       set.status = 401
@@ -118,9 +109,6 @@ export const billingRoutes = new Elysia()
         return { message: 'Workspace não encontrado ou sem acesso para assinatura.' }
       }
 
-      // Repara workspaces criados antes de todos os tenants passarem a ser
-      // registrados no Vianova. A elegibilidade vem do entitlement local já
-      // concedido na criação; nunca é inferida do plano solicitado agora.
       const registration = await fetch(`${VIANOVA_API_URL}/internal/billing/ensure-free-subscription`, {
         method: 'POST',
         headers: {
@@ -171,7 +159,6 @@ export const billingRoutes = new Elysia()
     }),
   })
 
-  // Add-ons novos e mudanças de quantidade acontecem dentro do produto.
   .post('/billing/subscriptions/:id/addons', async ({ params, body, set, session, rawToken }) => {
     if (!session) { set.status = 401; return { message: 'Não autenticado.' } }
     const res = await fetch(`${VIANOVA_API_URL}/billing/subscriptions/${encodeURIComponent(params.id)}/addons`, {

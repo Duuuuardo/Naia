@@ -37,7 +37,6 @@ export function createVianovaConfigClient({ baseUrl, serviceToken, internalSecre
         try {
           response = await fetch(url, { headers })
         } catch (err) {
-          // Network error: config-server ainda não está no ar — retry
           lastError = err
           if (attempt === maxAttempts) break
           console.log(`[config] waiting for config-server... (${attempt}/${maxAttempts})`)

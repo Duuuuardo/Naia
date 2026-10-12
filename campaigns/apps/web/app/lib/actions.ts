@@ -2,12 +2,9 @@ import { createServerFn } from '@tanstack/react-start'
 import { requireApi } from './session.server'
 import { parseApiError } from './api-error'
 
-/** Extrai mensagem segura do erro Eden Treaty sem expor JSON bruto. */
 function err(value: unknown, fallback: string): string {
   return parseApiError(value, fallback)
 }
-
-// ─── Workspaces ──────────────────────────────────────────────────────────────
 
 export const fetchWorkspaces = createServerFn().handler(async () => {
   const api = await requireApi()
@@ -79,8 +76,6 @@ export const updatePermissions = createServerFn()
     return res
   })
 
-// ─── Members / Invites ───────────────────────────────────────────────────────
-
 export const fetchMembers = createServerFn()
   .validator((workspaceId: string) => workspaceId)
   .handler(async ({ data: workspaceId }) => {
@@ -149,8 +144,6 @@ export const acceptInvite = createServerFn()
     return { workspace: data?.workspace }
   })
 
-// ─── Contacts ────────────────────────────────────────────────────────────────
-
 export const fetchContacts = createServerFn()
   .validator((data: { workspaceId: string; search?: string; tag?: string; channel?: string; isGroup?: string }) => data)
   .handler(async ({ data }) => {
@@ -161,7 +154,6 @@ export const fetchContacts = createServerFn()
     if (error) throw new Error(err(error.value, 'Erro ao carregar contatos.'))
     return { contacts: (res?.contacts ?? []) as Array<any>, total: res?.total ?? 0 }
   })
-
 
 export const createContact = createServerFn()
   .validator((data: {
@@ -228,7 +220,6 @@ export const updateContact = createServerFn()
     return res
   })
 
-
 export const deleteContact = createServerFn()
   .validator((data: { workspaceId: string; contactId: string }) => data)
   .handler(async ({ data }) => {
@@ -293,7 +284,6 @@ export const deleteContactTag = createServerFn()
     return { ok: true }
   })
 
-
 export const mergeContacts = createServerFn()
   .validator((data: { workspaceId: string; targetContactId: string; sourceContactIds: string[] }) => data)
   .handler(async ({ data }) => {
@@ -327,8 +317,6 @@ export const deleteContactIdentity = createServerFn()
     if (error) return { error: err(error.value, 'Erro ao remover identidade.') }
     return { ok: true }
   })
-
-// ─── Connections ─────────────────────────────────────────────────────────────
 
 export const fetchConnections = createServerFn()
   .validator((workspaceId: string) => workspaceId)
@@ -478,9 +466,6 @@ export const syncContactGroupMembers = createServerFn()
     return res
   })
 
-
-// ─── Campaigns & Dashboard ───────────────────────────────────────────────────
-
 export const fetchDashboardStats = createServerFn()
   .validator((workspaceId: string) => workspaceId)
   .handler(async ({ data: workspaceId }) => {
@@ -545,8 +530,6 @@ export type CampaignSpeedInput = {
   pauseMaxMinutes?: number
 }
 
-// Shape mínimo serializável devolvido pelas mutações — o suficiente pro
-// redirect pós-criação; telas de leitura usam fetchCampaign/fetchAutomations.
 export type CampaignRef = { id: string; status: string }
 export type AutomationRef = { id: string; active: boolean }
 
@@ -666,7 +649,7 @@ export const fetchSendsTimeseries = createServerFn()
     const { data: res, error } = await api.workspaces({ workspaceId: data.workspaceId }).dashboard.timeseries.get({
       query: { tz: data.tz },
     })
-    
+
     if (error) {
       console.error('[fetchSendsTimeseries] erro na API:', error?.status, JSON.stringify(error?.value))
     }
@@ -676,8 +659,6 @@ export const fetchSendsTimeseries = createServerFn()
       timezone: string
     }
   })
-
-// ─── Mídia ───────────────────────────────────────────────────────────────────
 
 export const presignMediaUpload = createServerFn()
   .validator((data: { workspaceId: string; filename: string; mimeType: string; sizeBytes: number }) => data)
@@ -709,8 +690,6 @@ export const fetchMediaUrl = createServerFn()
     return (res ?? null) as { url: string; mimeType: string; kind: string } | null
   })
 
-// ─── Audiência (manual + arquivo) ────────────────────────────────────────────
-
 export const bulkUpsertContacts = createServerFn()
   .validator((data: { workspaceId: string; rows: Array<{ name: string; phone: string }>; tags?: string[] }) => data)
   .handler(async ({ data }) => {
@@ -734,8 +713,6 @@ export const importContactsFile = createServerFn()
     if (error) return { error: err(error.value, 'Erro ao importar arquivo.') }
     return res as { imported: number; skipped: number; failed: number; errors: string[]; tag: string }
   })
-
-// ─── Automações ──────────────────────────────────────────────────────────────
 
 export type AutomationStepInput = {
   id: string
@@ -806,8 +783,6 @@ export const deleteAutomation = createServerFn()
     if (error) return { error: err(error.value, 'Erro ao excluir automação.') }
     return { ok: true as const }
   })
-
-// ─── Billing ─────────────────────────────────────────────────────────────────
 
 export const fetchPlans = createServerFn()
   .handler(async () => {
@@ -906,8 +881,6 @@ export const updateBillingAddon = createServerFn()
     return result as { chargedNowCents?: number }
   })
 
-// ─── Vianova Storage (arquivos do workspace) ─────────────────────────────────
-
 export const fetchWorkspaceFiles = createServerFn()
   .validator((data: { workspaceId: string; status?: 'active' | 'trashed'; cursor?: string; ownerUserId?: string }) => data)
   .handler(async ({ data }) => {
@@ -992,8 +965,6 @@ export const restoreWorkspaceFile = createServerFn()
     if (error) return { error: err(error.value, 'Erro ao restaurar arquivo.') }
     return { ok: true as const }
   })
-
-// ─── Notificações (proxy para central do Vianova) ────────────────────────────
 
 export type NotificationItem = {
   id: string

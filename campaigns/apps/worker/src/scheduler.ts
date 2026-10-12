@@ -1,9 +1,3 @@
-// Tick do agendador (30s): varre o Postgres por campanhas com next_run_at
-// vencido e automações devidas, e pede à API para iniciar o run — a resolução
-// de audiência vive lá porque expandir grupos exige o socket Baileys (mesmo
-// motivo do /internal/whatsapp-send). BullMQ repeatables foram descartados de
-// propósito: o estado de agendamento mora só no banco, então pause/edit/cancel
-// nunca dessincroniza e um tick perdido se recupera sozinho no seguinte.
 
 import { db, campaigns, automations } from '@naia/db'
 import { sql, eq, and } from 'drizzle-orm'
@@ -34,8 +28,6 @@ async function callInternal(path: string, body: unknown): Promise<{ ok: boolean;
 }
 
 async function tickDueCampaigns(): Promise<void> {
-  // Claim atômico: zera next_run_at ao reivindicar, devolvendo o valor antigo.
-  // Se a chamada à API falhar, restauramos o horário pro próximo tick tentar.
   const due = (await db.execute(sql`
     WITH due AS (
       SELECT id, next_run_at FROM campaigns
@@ -66,8 +58,6 @@ async function tickDueCampaigns(): Promise<void> {
 }
 
 async function tickDueAutomations(): Promise<void> {
-  // Só aniversário passa pelo fluxo diário de evaluate — os outros gatilhos
-  // (webhook, tag_added, contact_created) entram pela régua (tickDueEnrollments)
   const now = new Date()
   const active = await db
     .select()
@@ -76,7 +66,6 @@ async function tickDueAutomations(): Promise<void> {
 
   for (const automation of active) {
     const today = dayKeyInTz(now, automation.timezone)
-    // Guarda de idempotência: uma avaliação por dia (no fuso da automação)
     if (automation.lastEvaluatedDate === today) continue
     if (!isPastTimeOfDay(now, automation.timezone, automation.sendTime)) continue
 
@@ -85,18 +74,12 @@ async function tickDueAutomations(): Promise<void> {
       const res = await callInternal(`/internal/automations/${automation.id}/evaluate`, {})
       if (!res.ok) throw new Error(`API retornou ${res.status}`)
     } catch (err) {
-      // lastEvaluatedDate só é escrito pelo evaluate na API — falha aqui
-      // significa retry no próximo tick, o que é o comportamento desejado.
       console.error(`[scheduler] falha ao avaliar automação ${automation.id}:`, err)
     }
   }
 }
 
 async function tickDueEnrollments(): Promise<void> {
-  // Claim com lease: empurra next_step_at +5min ao reivindicar — se a chamada
-  // à API falhar (ou o worker morrer no meio), o lease expira e o próximo
-  // tick tenta de novo sozinho. Automação inativa não é reivindicada: a régua
-  // fica pausada e retoma quando reativarem.
   const due = (await db.execute(sql`
     WITH due AS (
       SELECT e.id, e.automation_id FROM automation_enrollments e
@@ -125,7 +108,6 @@ async function tickDueEnrollments(): Promise<void> {
       const res = await callInternal(`/internal/automations/${automationId}/execute-steps`, { enrollmentIds })
       if (!res.ok) throw new Error(`API retornou ${res.status}`)
     } catch (err) {
-      // lease de 5min reagenda sozinho — só logar
       console.error(`[scheduler] falha ao executar passos da automação ${automationId}:`, err)
     }
   }

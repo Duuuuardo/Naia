@@ -1,9 +1,3 @@
--- Auditoria administrativa (painel Vianova) ganhou tabela no schema (via
--- db:push em dev) sem migration — produção roda `drizzle-kit migrate` e
--- qualquer escrita em audit_logs quebraria lá. Aproveita para remover o
--- resíduo messages_per_month (renomeado para credits_per_cycle na 0012) e
--- alinhar defaults que divergiram. Idempotente (IF NOT EXISTS / IF EXISTS)
--- para ser seguro em bancos onde db:push já rodou.
 
 CREATE TABLE IF NOT EXISTS "audit_logs" (
 	"id" text PRIMARY KEY NOT NULL,

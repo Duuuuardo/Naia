@@ -1,11 +1,6 @@
 import { type ReactNode, useEffect } from 'react'
 import { X } from 'lucide-react'
 
-// Modal padrão do design system Naia: overlay escuro neutro, painel central
-// rounded-xl com entrada sutil (fade + scale). A animação usa a variante
-// `starting:` do Tailwind v4 (@starting-style) — sem CSS customizado — e é
-// desligada em prefers-reduced-motion (motion-reduce:transition-none), além
-// do reset global de motion dos apps.
 export function Modal({
   open,
   onClose,

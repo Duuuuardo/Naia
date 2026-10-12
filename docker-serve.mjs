@@ -1,5 +1,3 @@
-// Bun server entry for TanStack Start web apps in Docker.
-// Serves dist/client/ assets directly and falls back to the SSR handler.
 import { join, extname } from 'path'
 
 const port = parseInt(process.env.PORT || '3000')

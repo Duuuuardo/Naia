@@ -1,18 +1,11 @@
 import { Type, type Static } from '@sinclair/typebox'
 
-// ─── Domain enums ────────────────────────────────────────────────────────────
-
 export const WorkspaceRole = Type.Union([
   Type.Literal('owner'),
   Type.Literal('admin'),
   Type.Literal('member'),
 ])
 export type WorkspaceRole = Static<typeof WorkspaceRole>
-
-// ─── Permissões por papel ────────────────────────────────────────────────────
-// Cada área do workspace pode ser liberada ou ocultada por papel. O Owner
-// sempre tem tudo; admin/member seguem a matriz do workspace (editável pelo
-// Owner) ou os defaults abaixo.
 
 export const PERMISSION_KEYS = [
   'contacts',
@@ -98,8 +91,6 @@ export type ConnectionStatus = Static<typeof ConnectionStatus>
 
 export const MessageStatus = Type.Union([
   Type.Literal('queued'),
-  // 'sending' = claim atômico do pacer, evita envio duplicado entre o enqueue
-  // e a confirmação do handler; recovery devolve 'sending' órfão pra 'queued'
   Type.Literal('sending'),
   Type.Literal('sent'),
   Type.Literal('delivered'),
@@ -151,7 +142,6 @@ export type AutomationStepAction = Static<typeof AutomationStepAction>
 export const AutomationStepSchema = Type.Object({
   id: Type.String(),
   action: AutomationStepAction,
-  // Ação de mensagem
   content: Type.Optional(
     Type.Array(
       Type.Object({
@@ -160,9 +150,7 @@ export const AutomationStepSchema = Type.Object({
       }),
     ),
   ),
-  // Ação de delay (espera)
   delayHours: Type.Optional(Type.Integer({ minimum: 1 })),
-  // Ação de adicionar tag
   tag: Type.Optional(Type.String({ minLength: 1 })),
 })
 export type AutomationStep = Static<typeof AutomationStepSchema>
@@ -174,20 +162,11 @@ export const AutomationEnrollmentStatus = Type.Union([
 ])
 export type AutomationEnrollmentStatus = Static<typeof AutomationEnrollmentStatus>
 
-// Config do gatilho, por tipo: webhook → { secret } (credencial da URL pública),
-// tag_added → { tag } (qual tag dispara a automação)
 export const AutomationTriggerConfigSchema = Type.Object({
   secret: Type.Optional(Type.String()),
   tag: Type.Optional(Type.String()),
 })
 export type AutomationTriggerConfig = Static<typeof AutomationTriggerConfigSchema>
-
-
-// ─── Agendamento ─────────────────────────────────────────────────────────────
-// Persistido como JSON em campaigns.schedule_json. `immediate` dispara na hora
-// do dispatch; `once` agenda uma execução; `recurring` gera runs até esgotar
-// endDate/maxOccurrences. workingHours e dailyCap valem para qualquer tipo:
-// mensagens fora da janela (ou acima do teto diário) rolam pra próxima janela.
 
 export const RecurrenceSchema = Type.Object({
   kind: Type.Union([
@@ -196,37 +175,31 @@ export const RecurrenceSchema = Type.Object({
     Type.Literal('every_x_hours'), // de `everyHours` em `everyHours` horas
     Type.Literal('times_per_day'), // `timesPerDay` execuções distribuídas na janela
   ]),
-  time: Type.Optional(Type.String()), // 'HH:mm' (daily/weekly)
-  weekdays: Type.Optional(Type.Array(Type.Integer({ minimum: 0, maximum: 6 }))), // 0=domingo
+  time: Type.Optional(Type.String()),
+  weekdays: Type.Optional(Type.Array(Type.Integer({ minimum: 0, maximum: 6 }))),
   everyHours: Type.Optional(Type.Integer({ minimum: 1, maximum: 168 })),
   timesPerDay: Type.Optional(Type.Integer({ minimum: 1, maximum: 24 })),
-  startDate: Type.Optional(Type.String()), // 'YYYY-MM-DD' no fuso da campanha
-  endDate: Type.Optional(Type.String()), // 'YYYY-MM-DD' inclusivo
+  startDate: Type.Optional(Type.String()),
+  endDate: Type.Optional(Type.String()),
   maxOccurrences: Type.Optional(Type.Integer({ minimum: 1 })),
 })
 export type Recurrence = Static<typeof RecurrenceSchema>
 
 export const WorkingHoursSchema = Type.Object({
-  start: Type.String(), // 'HH:mm'
-  end: Type.String(), // 'HH:mm'
+  start: Type.String(),
+  end: Type.String(),
   weekdays: Type.Array(Type.Integer({ minimum: 0, maximum: 6 })),
 })
 export type WorkingHours = Static<typeof WorkingHoursSchema>
 
 export const ScheduleSchema = Type.Object({
   type: Type.Union([Type.Literal('immediate'), Type.Literal('once'), Type.Literal('recurring')]),
-  onceAt: Type.Optional(Type.String()), // ISO (type 'once')
+  onceAt: Type.Optional(Type.String()),
   recurrence: Type.Optional(RecurrenceSchema),
   workingHours: Type.Optional(WorkingHoursSchema),
   dailyCap: Type.Optional(Type.Integer({ minimum: 1 })),
 })
 export type Schedule = Static<typeof ScheduleSchema>
-
-// ─── Velocidade de envio ─────────────────────────────────────────────────────
-// Persistido como JSON em campaigns.speed_json. Presets viram intervalos
-// randomizados entre mensagens consecutivas (anti-ban); `manual` usa
-// min/maxSeconds do usuário, com piso validado por plano (entitlements).
-// pauseEveryN: a cada N envios, pausa aleatória de pauseMin–pauseMaxMinutes.
 
 export const SpeedPreset = Type.Union([
   Type.Literal('lento'),
@@ -248,8 +221,6 @@ export type Speed = Static<typeof SpeedSchema>
 
 export type SpeedChannel = 'whatsapp' | 'telegram'
 
-// Intervalos (segundos) entre mensagens consecutivas por preset e canal.
-// Fonte única para o pacer (worker) e para o texto/gate de planos (entitlements).
 export const SPEED_PRESET_RANGES: Record<
   Exclude<SpeedPreset, 'manual'>,
   Record<SpeedChannel, { min: number; max: number }>
@@ -258,8 +229,6 @@ export const SPEED_PRESET_RANGES: Record<
   medio: { whatsapp: { min: 30, max: 60 }, telegram: { min: 3, max: 10 } },
   rapido: { whatsapp: { min: 20, max: 40 }, telegram: { min: 1, max: 3 } },
 }
-
-// ─── Mídia ───────────────────────────────────────────────────────────────────
 
 export const MediaKind = Type.Union([
   Type.Literal('image'),
@@ -277,22 +246,15 @@ export const MediaRefSchema = Type.Object({
 })
 export type MediaRef = Static<typeof MediaRefSchema>
 
-// ─── Entitlements ────────────────────────────────────────────────────────────
-// Espelha exatamente o payload sincronizado pelo Vianova em
-// POST /internal/entitlements (ver vianova/apps/api/src/lib/product-sync.ts):
-// { workspace_id, product_slug, tier, status, limits: { seats, connections,
-// creditsPerCycle, campaignsPerMonth } } — chaves batem com os planos
-// seedados no catálogo do Vianova para o produto "naia".
-
 export const EntitlementsSchema = Type.Object({
   tier: Type.String(),
-  status: Type.String(), // 'active' | 'none' | 'canceled' | 'past_due' ...
+  status: Type.String(),
   seats: Type.Number(),
   connections: Type.Number(),
   creditsPerCycle: Type.Number(),
   creditsBalance: Type.Number(),
   campaignsPerMonth: Type.Number(),
-  automations: Type.Number(), // -1 = ilimitado
+  automations: Type.Number(),
   storageBytes: Type.Number(),
   maxFileSizeBytes: Type.Number(),
 })
@@ -313,8 +275,6 @@ export const SessionRevokedBodySchema = Type.Object({
 })
 export type SessionRevokedBody = Static<typeof SessionRevokedBodySchema>
 
-// ─── Queue job payloads ───────────────────────────────────────────────────────
-
 export const SendMessageJobSchema = Type.Object({
   campaignId: Type.String(),
   campaignMessageId: Type.String(),
@@ -322,8 +282,6 @@ export const SendMessageJobSchema = Type.Object({
   channel: ChannelType,
   connectionId: Type.String(),
   content: Type.String(),
-  // 'campaign' = mensagem da campanha; 'followup' = aviso de opt-out enviado
-  // logo depois (sem linha em campaign_messages, fora da cota, falha engolida)
   kind: Type.Optional(Type.Union([Type.Literal('campaign'), Type.Literal('followup')])),
   runId: Type.Optional(Type.String()),
   variantId: Type.Optional(Type.String()),
@@ -332,8 +290,6 @@ export const SendMessageJobSchema = Type.Object({
 export type SendMessageJob = Static<typeof SendMessageJobSchema>
 
 export const PacerJobSchema = Type.Object({
-  // Desde quando o run está estacionado sem conexão saudável (epoch ms) —
-  // o pacer espera a conexão voltar até um teto antes de falhar as mensagens
   noConnSince: Type.Optional(Type.Number()),
   runId: Type.String(),
   campaignId: Type.String(),
@@ -350,8 +306,6 @@ export const StatusWebhookJobSchema = Type.Object({
   timestamp: Type.String(),
 })
 export type StatusWebhookJob = Static<typeof StatusWebhookJobSchema>
-
-// ─── Contact Identities & Merging ─────────────────────────────────────────────
 
 export const ContactIdentitySchema = Type.Object({
   id: Type.String(),

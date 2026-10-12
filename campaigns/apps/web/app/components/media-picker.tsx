@@ -6,7 +6,6 @@ import { fetchWorkspaceFiles, uploadCampaignMedia } from '../lib/actions'
 import { FileThumbnail, fileIcon, type WorkspaceFile } from './file-preview'
 import type { WizardMedia } from './campaign-wizard/types'
 
-// Allowlist espelhada do backend (validateWorkspaceFile) para defesa em profundidade.
 const ALLOWED_UPLOAD_MIME_TYPES = new Set([
   'image/png',
   'image/jpeg',

@@ -175,8 +175,6 @@ function BillingPage() {
     loadSubscription()
   }, [loadSubscription])
 
-  // Voltando do Stripe: aguarda a confirmação real do backend. A URL de
-  // sucesso sozinha não prova que webhook e entitlement foram processados.
   useEffect(() => {
     if (!checkoutSuccess) return
     let cancelled = false
@@ -214,13 +212,9 @@ function BillingPage() {
   const currentPlanTier = subscription?.plan?.tier ?? entitlements.tier
   const currentPlan = plans?.plans?.find((p) => p.tier === currentPlanTier) ?? null
 
-  // Scale é posicionado como tier enterprise separado — não entra no grid de 3.
   const regularPlans = plans?.plans?.filter((p) => p.tier !== 'scale') ?? []
   const scalePlan = plans?.plans?.find((p) => p.tier === 'scale') ?? null
 
-  // Plano pago sem subscription no Stripe: ativação antiga direto no banco.
-  // A cobrança precisa ser regularizada pelo checkout pra habilitar
-  // renovação, cancelamento e add-ons.
   const legacyPaidPlan =
     subLoaded &&
     !paidActive &&
@@ -402,8 +396,6 @@ function BillingPage() {
             entitlements.status === 'active' &&
             entitlements.tier === plan.tier &&
             !subscription?.cancelAtPeriodEnd &&
-            // Plano pago só conta como "atual" com cobrança real ativa —
-            // senão o botão vira "Assinar" pra regularizar via checkout.
             (plan.priceCents === 0 || paidActive)
           const isPopular = plan.tier === 'pro'
           const planTitle = tierLabels[plan.tier] ?? plan.name

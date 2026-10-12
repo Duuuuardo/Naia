@@ -3,11 +3,6 @@ import { useRouter } from '@tanstack/react-router'
 import { MailWarning } from 'lucide-react'
 import { tryRefreshSession, VIANOVA_WEB_URL } from '../lib/vianova'
 
-// Aviso persistente enquanto o email da conta Vianova não for confirmado.
-// O login não é bloqueado, mas disparo de campanhas e ativação de automações
-// ficam travados na API até a confirmação. O botão "Já confirmei" renova o
-// token via refresh (o claim email_verified só muda em token novo) e
-// revalida as rotas — se o email foi confirmado, o banner some sozinho.
 export function VerifyEmailBanner({ email }: { email: string }) {
   const router = useRouter()
   const [checking, setChecking] = useState(false)

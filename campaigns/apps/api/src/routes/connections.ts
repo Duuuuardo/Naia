@@ -26,27 +26,16 @@ import {
   resolveWhatsAppContactName,
 } from '@naia/session-host-client'
 
-
-/**
- * Resolve a usable WhatsApp phone number from a group participant object.
- * Modern Baileys returns participants in @lid (Linked Identity) format instead
- * of @s.whatsapp.net. When the id ends with @lid, the actual phone number lives
- * in the separate `phoneNumber` field (format: "5511999999999@s.whatsapp.net").
- */
 function resolveParticipantPhone(p: { id: string; phoneNumber?: string | null; name?: string | null }): string | null {
-  // If participant has a phoneNumber field (provided by Baileys for @lid participants), use it
   if (p.phoneNumber) {
     const pn = p.phoneNumber.replace(/@.*$/, '').replace(/\D/g, '')
     if (pn && pn.length >= 8 && pn.length <= 15) return pn
   }
-  // If participant id is @s.whatsapp.net, extract the phone directly
   if (p.id && p.id.endsWith('@s.whatsapp.net')) {
     const phone = p.id.replace(/@.*$/, '').replace(/\D/g, '')
     if (phone && phone.length >= 8 && phone.length <= 15) return phone
   }
-  // @lid without phoneNumber — cannot resolve to a real phone number
   if (p.id && p.id.endsWith('@lid')) return null
-  // Fallback: try to use id as-is if it looks like a valid E.164 phone number
   if (p.id && !p.id.includes('@')) {
     const phone = p.id.replace(/\D/g, '')
     if (phone && phone.length >= 8 && phone.length <= 15) return phone
@@ -62,7 +51,6 @@ async function hostIdForWorkspace(workspaceId: string): Promise<'base' | 'scale'
 export const connectionRoutes = new Elysia()
   .use(authPlugin)
 
-  // GET /workspaces/:workspaceId/connections
   .get(
     '/workspaces/:workspaceId/connections',
     async ({ session, params, set }) => {
@@ -103,7 +91,6 @@ export const connectionRoutes = new Elysia()
     },
   )
 
-  // POST /workspaces/:workspaceId/connections/telegram-user — conta pessoal (MTProto)
   .post(
     '/workspaces/:workspaceId/connections/telegram-user',
     async ({ session, params, body, set }) => {
@@ -140,7 +127,6 @@ export const connectionRoutes = new Elysia()
         config: JSON.stringify({ kind: 'user', phone }),
       })
 
-      // Login MTProto em background — o frontend acompanha via telegramAuth
       const hostId = await hostIdForWorkspace(params.workspaceId)
       startTelegramUserLogin(connectionId, hostId).catch(console.error)
 
@@ -155,7 +141,6 @@ export const connectionRoutes = new Elysia()
     },
   )
 
-  // POST /workspaces/:workspaceId/connections/:connectionId/telegram-code
   .post(
     '/workspaces/:workspaceId/connections/:connectionId/telegram-code',
     async ({ session, params, body, set }) => {
@@ -182,7 +167,6 @@ export const connectionRoutes = new Elysia()
     { body: t.Object({ code: t.String({ minLength: 1 }) }) },
   )
 
-  // POST /workspaces/:workspaceId/connections/:connectionId/telegram-password
   .post(
     '/workspaces/:workspaceId/connections/:connectionId/telegram-password',
     async ({ session, params, body, set }) => {
@@ -209,7 +193,6 @@ export const connectionRoutes = new Elysia()
     { body: t.Object({ password: t.String({ minLength: 1 }) }) },
   )
 
-  // POST /workspaces/:workspaceId/connections/whatsapp
   .post(
     '/workspaces/:workspaceId/connections/whatsapp',
     async ({ session, params, body, set }) => {
@@ -245,7 +228,6 @@ export const connectionRoutes = new Elysia()
         termsVersion: 'whatsapp-baileys-v1',
       })
 
-      // Sessão Baileys em background (gera o QR code).
       const hostId = await hostIdForWorkspace(params.workspaceId)
       startWhatsAppSession(connectionId, hostId).catch(console.error)
 
@@ -261,7 +243,6 @@ export const connectionRoutes = new Elysia()
     },
   )
 
-  // GET /workspaces/:workspaceId/connections/:connectionId
   .get(
     '/workspaces/:workspaceId/connections/:connectionId',
     async ({ session, params, set }) => {
@@ -292,7 +273,6 @@ export const connectionRoutes = new Elysia()
     },
   )
 
-  // PATCH /workspaces/:workspaceId/connections/:connectionId
   .patch(
     '/workspaces/:workspaceId/connections/:connectionId',
     async ({ session, params, body, set }) => {
@@ -320,7 +300,6 @@ export const connectionRoutes = new Elysia()
     { body: t.Object({ name: t.String({ minLength: 1 }) }) },
   )
 
-  // POST /workspaces/:workspaceId/connections/:connectionId/reconnect (WhatsApp only)
   .post(
     '/workspaces/:workspaceId/connections/:connectionId/reconnect',
     async ({ session, params, set }) => {
@@ -362,7 +341,6 @@ export const connectionRoutes = new Elysia()
     },
   )
 
-  // DELETE /workspaces/:workspaceId/connections/:connectionId
   .delete(
     '/workspaces/:workspaceId/connections/:connectionId',
     async ({ session, params, set }) => {
@@ -392,7 +370,6 @@ export const connectionRoutes = new Elysia()
     },
   )
 
-  // GET /workspaces/:workspaceId/connections/:connectionId/contacts-sync
   .get(
     '/workspaces/:workspaceId/connections/:connectionId/contacts-sync',
     async ({ session, params, set }) => {
@@ -440,7 +417,6 @@ export const connectionRoutes = new Elysia()
     },
   )
 
-  // GET /workspaces/:workspaceId/connections/:connectionId/groups-sync
   .get(
     '/workspaces/:workspaceId/connections/:connectionId/groups-sync',
     async ({ session, params, set }) => {
@@ -480,7 +456,6 @@ export const connectionRoutes = new Elysia()
     },
   )
 
-  // POST /workspaces/:workspaceId/connections/:connectionId/import-contacts
   .post(
     '/workspaces/:workspaceId/connections/:connectionId/import-contacts',
     async ({ session, params, body, set }) => {
@@ -586,7 +561,6 @@ export const connectionRoutes = new Elysia()
     },
   )
 
-  // POST /workspaces/:workspaceId/connections/:connectionId/import-groups
   .post(
     '/workspaces/:workspaceId/connections/:connectionId/import-groups',
     async ({ session, params, body, set }) => {
@@ -712,7 +686,6 @@ export const connectionRoutes = new Elysia()
     },
   )
 
-  // POST /workspaces/:workspaceId/connections/:connectionId/import-group-members
   .post(
     '/workspaces/:workspaceId/connections/:connectionId/import-group-members',
     async ({ session, params, body, set }) => {

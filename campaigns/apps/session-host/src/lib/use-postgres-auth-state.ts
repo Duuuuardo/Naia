@@ -54,7 +54,6 @@ export async function usePostgresAuthState(connectionId: string): Promise<{
     } catch { /* ignore */ }
   }
 
-  // Auto-migration from legacy disk session if postgres session table has no creds yet
   const existingCredsRow = await readData('creds')
   if (!existingCredsRow) {
     const sessionDir = path.join(process.env.NAIA_SESSIONS_DIR ?? '/tmp/naia-sessions', connectionId)
@@ -99,7 +98,6 @@ export async function usePostgresAuthState(connectionId: string): Promise<{
 
           const keyIds = ids.map((id) => `${type}-${id}`)
 
-          // Batch select from Postgres
           const rows = await db
             .select({ keyId: whatsappSessions.keyId, value: whatsappSessions.value })
             .from(whatsappSessions)

@@ -34,8 +34,6 @@ async function ensureVianovaWorkspaceSubscription(workspace: { id: string; name:
   }
 }
 
-// Avatar do workspace entra como data URL já redimensionada no cliente —
-// limite defensivo pra não inflar a linha no banco.
 const MAX_AVATAR_LENGTH = 400_000
 
 function isValidAvatar(value: string): boolean {
@@ -61,7 +59,6 @@ function slugify(name: string): string {
 export const workspaceRoutes = new Elysia()
   .use(authPlugin)
 
-  // GET /workspaces — workspaces do usuário autenticado, pra tela de seletor.
   .get('/workspaces', async ({ session, set }) => {
     if (!session) { set.status = 401; return { message: 'Não autenticado.' } }
 
@@ -76,16 +73,11 @@ export const workspaceRoutes = new Elysia()
     return { workspaces: rows.map((r) => ({ ...r.workspace, role: r.role, entitlements: r.entitlements ?? null })) }
   })
 
-  // POST /workspaces — quem cria vira Owner automaticamente.
   .post(
     '/workspaces',
     async ({ session, body, set }) => {
       if (!session) { set.status = 401; return { message: 'Não autenticado.' } }
 
-      // Primeiro workspace free recebe o plano gratuito real.
-      // Workspaces adicionais nascem zerados (0 créditos, 0 conexões, 0 campanhas)
-      // e ficam bloqueados até upgrade — o contador nunca decrementa, logo
-      // excluir e recriar não restaura o free plan.
       const [userRecord] = await db
         .select({ freeWorkspacesCreated: directoryUsers.freeWorkspacesCreated })
         .from(directoryUsers)
@@ -147,8 +139,6 @@ export const workspaceRoutes = new Elysia()
             },
       )
 
-      // Todo workspace precisa existir no billing para poder assinar um plano
-      // pago. Só o primeiro, porém, recebe elegibilidade para o plano grátis.
       await ensureVianovaWorkspaceSubscription({
         id,
         name: body.name,
@@ -157,7 +147,6 @@ export const workspaceRoutes = new Elysia()
         freeEligible: isFirstFreeWorkspace,
       })
 
-      // Incrementa o contador vitalício — sobe sempre, nunca desce.
       await db
         .update(directoryUsers)
         .set({ freeWorkspacesCreated: sql`${directoryUsers.freeWorkspacesCreated} + 1` })
@@ -177,8 +166,6 @@ export const workspaceRoutes = new Elysia()
     },
   )
 
-  // GET /workspaces/:workspaceId — detalhe + role + entitlement + permissões
-  // efetivas do papel (pra gate de UI).
   .get('/workspaces/:workspaceId', async ({ session, params, set }) => {
     const ctx = await resolveWorkspaceAccess(session, params.workspaceId)
     if (!ctx) { set.status = 401; return { message: 'Não autenticado ou sem acesso a este workspace.' } }
@@ -189,8 +176,6 @@ export const workspaceRoutes = new Elysia()
     return { workspace, role: ctx.role, entitlements: ctx.entitlements, permissions: ctx.permissions }
   })
 
-  // PATCH /workspaces/:workspaceId — configurações do workspace (requer a
-  // permissão "settings"; membros só se a matriz do workspace liberar).
   .patch(
     '/workspaces/:workspaceId',
     async ({ session, params, body, set }) => {
@@ -223,14 +208,11 @@ export const workspaceRoutes = new Elysia()
         description: t.Optional(t.String()),
         location: t.Optional(t.String()),
         industry: t.Optional(t.String()),
-        // Data URL pequena ou string vazia pra remover.
         avatarUrl: t.Optional(t.String()),
       }),
     },
   )
 
-  // GET /workspaces/:workspaceId/permissions — matriz por papel (admin/member)
-  // com os defaults aplicados; visível pra quem gerencia membros.
   .get('/workspaces/:workspaceId/permissions', async ({ session, params, set }) => {
     const ctx = await resolveWorkspaceAccess(session, params.workspaceId)
     if (!ctx) { set.status = 401; return { message: 'Não autenticado.' } }
@@ -252,7 +234,6 @@ export const workspaceRoutes = new Elysia()
     }
   })
 
-  // PATCH /workspaces/:workspaceId/permissions — só o Owner redesenha a matriz.
   .patch(
     '/workspaces/:workspaceId/permissions',
     async ({ session, params, body, set }) => {
@@ -281,7 +262,6 @@ export const workspaceRoutes = new Elysia()
     },
   )
 
-  // GET /workspaces/:workspaceId/notification-preferences — só Owner vê/editou.
   .get('/workspaces/:workspaceId/notification-preferences', async ({ session, params, set }) => {
     const ctx = await resolveWorkspaceAccess(session, params.workspaceId)
     if (!ctx) { set.status = 401; return { message: 'Não autenticado.' } }
@@ -302,7 +282,6 @@ export const workspaceRoutes = new Elysia()
     return { preferences: { ...defaults, ...(workspace?.notificationPreferences ?? {}) } }
   })
 
-  // PATCH /workspaces/:workspaceId/notification-preferences — só Owner altera.
   .patch(
     '/workspaces/:workspaceId/notification-preferences',
     async ({ session, params, body, set }) => {

@@ -39,7 +39,6 @@ export type WizardDraft = {
   groupTargetMode: 'group' | 'members'
   groupTagOnCreate: string
   manualRows: { name: string; phone: string }[]
-  /** Tag já resolvida de um público manual/arquivo salvo antes (modo edição). */
   resolvedAudienceTag: string | null
   applyTag: string
 
@@ -150,7 +149,6 @@ export function draftToVariants(d: WizardDraft): CampaignVariantInput[] {
     }))
 }
 
-/** Reconstrói o draft a partir de uma campanha existente (modo edição). */
 export function draftFromCampaign(input: {
   campaign: {
     name: string
@@ -188,7 +186,6 @@ export function draftFromCampaign(input: {
       d.groupTagOnCreate = Array.isArray(filter.tagOnCreate) ? filter.tagOnCreate.join(', ') : ''
     }
   } catch {
-    // filtro ilegível → mantém 'all'
   }
 
   try {
@@ -216,18 +213,14 @@ export function draftFromCampaign(input: {
       d.dailyCap = String(s.dailyCap)
     }
   } catch {
-    // agendamento ilegível → mantém imediato
   }
 
   try {
     const speed = JSON.parse(campaign.speedJson ?? 'null')
     if (speed?.preset) d.speed = speed
   } catch {
-    // velocidade ilegível → mantém preset padrão
   }
 
-  // Plano pode ter mudado desde o salvamento — velocidade fora do plano volta
-  // ao padrão permitido em vez de estourar 403 na hora de salvar.
   const policy = getSpeedPolicy(input.tier)
   if (!policy.allowedPresets.includes(d.speed.preset)) {
     d.speed = { preset: defaultSpeedPreset(input.tier) }

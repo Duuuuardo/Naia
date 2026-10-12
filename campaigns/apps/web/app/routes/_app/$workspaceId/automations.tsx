@@ -79,7 +79,7 @@ type FormState = {
   name: string
   type: AutomationType
   connectionIds: string[]
-  bodies: string[] // variantes do aniversário (fluxo diário, intocado)
+  bodies: string[]
   steps: StepForm[]
   stopOnTags: string[]
   triggerTag: string
@@ -117,8 +117,6 @@ function emptyForm(type: AutomationType = 'birthday'): FormState {
     speedPreset: 'medio',
   }
   if (type === 'webhook') {
-    // Template completo de recuperação de carrinho: o usuário vê a cadência
-    // pronta funcionando antes de escrever qualquer coisa
     return {
       ...base,
       name: 'Carrinho abandonado',
@@ -161,7 +159,6 @@ function formFromAutomation(a: AutomationRow): FormState {
     delayHours: s.delayHours ?? 24,
     tag: s.tag ?? '',
   }))
-  // Automação antiga de passo único (contentJson) aparece como um passo de mensagem
   if (a.type !== 'birthday' && steps.length === 0 && content.length > 0) {
     steps = [{ id: stepId(), action: 'message', content: content.map((c) => ({ body: c.body ?? '' })), delayHours: 24, tag: '' }]
   }
@@ -171,7 +168,6 @@ function formFromAutomation(a: AutomationRow): FormState {
     const s = JSON.parse(a.speedJson)
     if (s?.preset) speedPreset = s.preset
   } catch {
-    // velocidade ilegível → padrão
   }
   return {
     name: a.name,
@@ -216,7 +212,6 @@ function speedLabel(speedJson: string): string {
   }
 }
 
-/** Input de tags como chips: Enter ou vírgula adiciona, X remove. */
 function TagChipsInput({
   value,
   onChange,
@@ -273,7 +268,6 @@ function TagChipsInput({
   )
 }
 
-/** Botões inline "+ Mensagem · + Espera · + Tag" entre os nós da timeline. */
 function AddStepRow({ onAdd }: { onAdd: (action: StepForm['action']) => void }) {
   const options: Array<{ action: StepForm['action']; icon: LucideIcon; label: string }> = [
     { action: 'message', icon: MessageSquareText, label: 'Mensagem' },
@@ -297,7 +291,6 @@ function AddStepRow({ onAdd }: { onAdd: (action: StepForm['action']) => void }) 
   )
 }
 
-/** Copiar com feedback: ícone vira check por 2s. */
 function CopyButton({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false)
   return (
@@ -451,8 +444,6 @@ function AutomationsPage() {
       setError(result.error)
       return
     }
-    // Webhook recém-criado: mantém o form aberto já em modo edição para o
-    // usuário ver e copiar a URL gerada — é o passo que ativa a automação
     const createdId =
       editing === 'new' && result && 'automation' in result ? (result.automation as { id?: string } | undefined)?.id : undefined
     if (form.type === 'webhook' && createdId) {

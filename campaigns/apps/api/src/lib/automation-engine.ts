@@ -1,9 +1,3 @@
-// Motor da régua de comunicação (Automações 2.0). Executa os passos das
-// inscrições (automation_enrollments) vencidas: delays viram reagendamento,
-// add_tag aplica a tag (e pode acionar outras automações / freio de mão), e
-// passos de mensagem viram um run numa campanha persistente por
-// (automação, passo) — reusando créditos, opt-in, pacer e histórico da infra
-// de campanhas sem criar uma campanha por contato.
 
 import { db, automations, automationEnrollments, automationConnections, connections, campaigns, campaignConnections, contacts, entitlements as entitlementsTable } from '@naia/db'
 import { eq, and, sql, gte, asc, inArray } from 'drizzle-orm'
@@ -17,15 +11,10 @@ import { generateId } from './crypto'
 type Enrollment = typeof automationEnrollments.$inferSelect
 type AutomationRow = typeof automations.$inferSelect
 
-// Falha de conexão oscila em segundos — retry curto; cota/assinatura só muda
-// na virada do ciclo — retry longo.
 const RETRY_CONNECTION_MS = 5 * 60 * 1000
 const RETRY_QUOTA_MS = 60 * 60 * 1000
 const HOUR_MS = 60 * 60 * 1000
 
-/** Chave determinística que identifica a campanha persistente de um passo.
- * Serializada sempre por este helper — a busca depende da igualdade exata
- * da string em campaigns.segment_filter. */
 function stepFilterKey(stepIndex: number): string {
   return JSON.stringify({ type: 'enrollment_step', stepIndex })
 }
@@ -47,19 +36,14 @@ export async function executeDueEnrollments(automationId: string, enrollmentIds:
 
   const steps = automation ? parseSteps(automation) : []
   if (!automation || steps.length === 0) {
-    // Automação apagada ou sem passos: as inscrições não têm o que executar
     await db
       .update(automationEnrollments)
       .set({ status: 'cancelled', updatedAt: now })
       .where(inArray(automationEnrollments.id, enrollments.map((e) => e.id)))
     return { processed: 0 }
   }
-  // Automação desativada pausa a régua (o claim do scheduler já pula
-  // inativas; este guard cobre corrida entre claim e toggle) — reativar retoma
   if (!automation.active) return { processed: 0 }
 
-  // Passo 1: avança delays/tags de cada inscrição até esbarrar num passo de
-  // mensagem (que é disparado em lote no passo 2) ou concluir.
   const messageBatches = new Map<number, Enrollment[]>()
   for (const enrollment of enrollments) {
     const messageIndex = await advanceToMessageStep(automation, steps, enrollment, now)
@@ -70,7 +54,6 @@ export async function executeDueEnrollments(automationId: string, enrollmentIds:
     }
   }
 
-  // Passo 2: um run por passo de mensagem com todos os contatos devidos
   for (const [stepIndex, group] of messageBatches) {
     await dispatchMessageStep(automation, steps, stepIndex, group, now)
   }
@@ -78,9 +61,6 @@ export async function executeDueEnrollments(automationId: string, enrollmentIds:
   return { processed: enrollments.length }
 }
 
-/** Processa delays e add_tags a partir do índice atual. Retorna o índice do
- * passo de mensagem a disparar agora, ou null se a inscrição foi reagendada,
- * concluída ou cancelada (pelo próprio freio de mão de um add_tag). */
 async function advanceToMessageStep(
   automation: AutomationRow,
   steps: AutomationStep[],
@@ -106,8 +86,6 @@ async function advanceToMessageStep(
         index++
         continue
       }
-      // Delay em currentStepIndex = ainda não aplicado (ao aplicar, o índice
-      // avança junto do reagendamento). Delay no fim da régua não tem efeito.
       const isLast = !steps[index + 1]
       await db
         .update(automationEnrollments)
@@ -120,7 +98,6 @@ async function advanceToMessageStep(
       return null
     }
 
-    // add_tag
     if (step.tag?.trim()) {
       const tag = step.tag.trim()
       await db
@@ -128,7 +105,6 @@ async function advanceToMessageStep(
         .set({ tags: sql`array_append(${contacts.tags}, ${tag})`, updatedAt: now })
         .where(and(eq(contacts.id, enrollment.contactId), sql`NOT (${contacts.tags} @> ARRAY[${tag}]::text[])`))
       await handleTagsAdded(automation.workspaceId, [enrollment.contactId], [tag])
-      // O freio de mão pode ter cancelado esta própria inscrição
       const [fresh] = await db
         .select({ status: automationEnrollments.status })
         .from(automationEnrollments)
@@ -144,9 +120,6 @@ async function advanceToMessageStep(
   }
 }
 
-/** Dispara o passo de mensagem para um grupo de inscrições e avança cada uma
- * além do passo (aplicando o delay seguinte, se houver). Falha de cota ou
- * conexão reagenda o grupo para retry em 1h sem avançar. */
 async function dispatchMessageStep(
   automation: AutomationRow,
   steps: AutomationStep[],
@@ -177,8 +150,6 @@ async function dispatchMessageStep(
   }
 
   const run = await startAdhocRun(ensured.campaignId, group.map((e) => e.contactId))
-  // 'Nenhum contato elegível' (opt-out etc.) conta como processado — a régua
-  // segue; falha operacional (conexão, créditos) segura o grupo para retry.
   if (!run.started && run.runStatus !== 'completed') {
     await retryLater(run.reason)
     return
@@ -202,7 +173,7 @@ async function dispatchMessageStep(
       }
     } else {
       updates.currentStepIndex = nextIndex
-      updates.nextStepAt = now // próximo tick processa o passo seguinte
+      updates.nextStepAt = now
     }
     await db
       .update(automationEnrollments)
@@ -223,10 +194,6 @@ async function dispatchMessageStep(
     .where(eq(automations.id, automation.id))
 }
 
-/** Localiza (ou cria) a campanha persistente do passo e sincroniza conexões
- * e variantes com o estado atual da automação — edições na automação passam
- * a valer no disparo seguinte. Gates de entitlement valem na criação, como
- * no evaluate de aniversário. */
 async function ensureStepCampaign(
   automation: AutomationRow,
   steps: AutomationStep[],

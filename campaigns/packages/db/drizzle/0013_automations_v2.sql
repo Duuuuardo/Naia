@@ -1,7 +1,3 @@
--- Automações 2.0: colunas e tabelas que o schema (aplicado em dev via db:push)
--- ganhou sem migration correspondente. Produção roda `drizzle-kit migrate`, que
--- só aplica estes arquivos — por isso a coluna steps_json não existia lá.
--- Idempotente (IF NOT EXISTS) para ser seguro em bancos onde db:push já rodou.
 
 ALTER TABLE "automations" ADD COLUMN IF NOT EXISTS "steps_json" text DEFAULT '[]' NOT NULL;--> statement-breakpoint
 ALTER TABLE "automations" ADD COLUMN IF NOT EXISTS "stop_on_tags_json" text DEFAULT '[]' NOT NULL;--> statement-breakpoint

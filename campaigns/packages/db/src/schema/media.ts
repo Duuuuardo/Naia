@@ -3,8 +3,6 @@ import { workspaces } from './workspaces'
 import { campaignVariants } from './campaigns'
 import type { MediaKind } from '@naia/schemas'
 
-// Anexos de mídia das campanhas — objetos vivem no MinIO próprio do Campaigns
-// (bucket naia-campaigns); aqui só metadados + chave de storage.
 export const mediaAssets = pgTable('media_assets', {
   id: text('id').primaryKey(),
   workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
@@ -13,7 +11,6 @@ export const mediaAssets = pgTable('media_assets', {
   mimeType: text('mime_type').notNull(),
   sizeBytes: integer('size_bytes').notNull().default(0),
   storageKey: text('storage_key').notNull().unique(), // `${workspaceId}/${assetId}/${filename}`
-  // 'pending' até o confirm verificar que o PUT pré-assinado aconteceu
   status: text('status').$type<'pending' | 'ready'>().notNull().default('pending'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })

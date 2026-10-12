@@ -73,18 +73,10 @@ export function canActivateAutomation(e: Entitlements, activeCount: number): Ent
   return { allowed: false, reason: automationNotAllowedReason(e) }
 }
 
-// ─── Velocidade de envio por plano ───────────────────────────────────────────
-// Mapeamento tier→features é regra de produto em código (como as funções
-// acima) — a row de entitlements continua sendo escrita só pelo sync do
-// Vianova; nenhuma coluna nova é necessária.
-
 export type SpeedPolicy = {
   allowedPresets: SpeedPreset[]
-  /** Piso do intervalo mínimo no preset manual (segundos), por canal. */
   manualFloorSeconds: Record<SpeedChannel, number> | null
-  /** Pausa de rajada (pauseEveryN) disponível a partir do Médio. */
   burstPauseAllowed: boolean
-  /** Ranges dos presets, para a UI exibir os intervalos por canal. */
   presetRanges: typeof SPEED_PRESET_RANGES
 }
 
@@ -108,22 +100,11 @@ export function getSpeedPolicy(tier: string): SpeedPolicy {
   return { ...base, presetRanges: SPEED_PRESET_RANGES }
 }
 
-/**
- * Preset padrão do plano: 'medio' quando o plano permite, senão o melhor
- * permitido (free → 'lento'). Usado como default do wizard e das rotas quando
- * o cliente não envia velocidade.
- */
 export function defaultSpeedPreset(tier: string): SpeedPreset {
   const { allowedPresets } = getSpeedPolicy(tier)
   return allowedPresets.includes('medio') ? 'medio' : (allowedPresets[0] ?? 'lento')
 }
 
-/**
- * Coage uma velocidade salva ao que o plano atual permite — enforcement em
- * tempo de envio (pacer). Cobre downgrade com campanha já criada: preset fora
- * do plano volta ao padrão, piso manual é clampado por canal e a pausa de
- * rajada some se o plano não a tiver.
- */
 export function coerceSpeedToPolicy(speed: Speed, tier: string, channels: SpeedChannel[]): Speed {
   const policy = getSpeedPolicy(tier)
   let result: Speed = speed
@@ -153,11 +134,6 @@ export function coerceSpeedToPolicy(speed: Speed, tier: string, channels: SpeedC
   return result
 }
 
-/**
- * Valida a configuração de velocidade da campanha contra o plano. `channels`
- * são os canais das conexões selecionadas (campanha mista valida o piso de
- * cada canal).
- */
 export function canUseSpeed(
   e: Entitlements,
   speed: Speed,

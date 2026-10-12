@@ -205,8 +205,8 @@ beforeEach(async () => {
   }
 })
 
-describe('handler de envio (WhatsApp, provider mockado)', () => {
-  it('envia mensagem em sending e marca sent com contadores', async () => {
+describe('send handler (WhatsApp, mocked provider)', () => {
+  it('sends a 'sending' message and marks it sent with counters', async () => {
     const fx = await provisionCampaign()
     const { eq } = await import('drizzle-orm')
     await dbmod.db.update(dbmod.campaignMessages).set({ status: 'sending' })
@@ -232,7 +232,7 @@ describe('handler de envio (WhatsApp, provider mockado)', () => {
     expect((await getRun(fx.runId))?.sentCount).toBe(1)
   })
 
-  it('job duplicado não reenvia nem reconta (status != sending → no-op)', async () => {
+  it('duplicate job does not resend or recount (status != sending → no-op)', async () => {
     const fx = await provisionCampaign()
     const { eq } = await import('drizzle-orm')
     await dbmod.db.update(dbmod.campaignMessages).set({ status: 'sending' })
@@ -256,7 +256,7 @@ describe('handler de envio (WhatsApp, provider mockado)', () => {
     expect((await getRun(fx.runId))?.sentCount).toBe(1)
   })
 
-  it('falha transitória relança pro BullMQ e NÃO marca failed', async () => {
+  it('transient failure rethrows to BullMQ and does NOT mark failed', async () => {
     const fx = await provisionCampaign()
     const { eq } = await import('drizzle-orm')
     await dbmod.db.update(dbmod.campaignMessages).set({ status: 'sending' })
@@ -281,7 +281,7 @@ describe('handler de envio (WhatsApp, provider mockado)', () => {
     expect((await getRun(fx.runId))?.failedCount).toBe(0)
   })
 
-  it('falha permanente marca failed na hora, sem retry', async () => {
+  it('permanent failure marks failed immediately, no retry', async () => {
     const fx = await provisionCampaign()
     const { eq } = await import('drizzle-orm')
     await dbmod.db.update(dbmod.campaignMessages).set({ status: 'sending' })
@@ -304,7 +304,7 @@ describe('handler de envio (WhatsApp, provider mockado)', () => {
     expect((await getRun(fx.runId))?.failedCount).toBe(1)
   })
 
-  it('contato opt-out: falha permanente sem chamar o provider', async () => {
+  it('opt-out contact: permanent failure without calling the provider', async () => {
     const fx = await provisionCampaign()
     const { eq } = await import('drizzle-orm')
     await dbmod.db.update(dbmod.contacts).set({ optInStatus: false }).where(eq(dbmod.contacts.id, fx.contactId))
@@ -328,7 +328,7 @@ describe('handler de envio (WhatsApp, provider mockado)', () => {
     expect(msg?.failureReason).toContain('Opt-out')
   })
 
-  it('conexão inativa: re-fila com estorno em vez de mandar ou falhar', async () => {
+  it('inactive connection: requeue with refund instead of sending or failing', async () => {
     const fx = await provisionCampaign()
     const { eq } = await import('drizzle-orm')
     await dbmod.db.update(dbmod.connections).set({ status: 'disconnected' }).where(eq(dbmod.connections.id, fx.connectionId))
@@ -351,7 +351,7 @@ describe('handler de envio (WhatsApp, provider mockado)', () => {
     expect(await getCredits(fx.workspaceId)).toBe(10_001)
   })
 
-  it('campanha pausada no meio do run: re-fila com estorno em vez de mandar', async () => {
+  it('campaign paused mid-run: requeue with refund instead of sending', async () => {
     const fx = await provisionCampaign({ status: 'paused' })
     const { eq } = await import('drizzle-orm')
     await dbmod.db.update(dbmod.campaignMessages).set({ status: 'sending' })
@@ -373,7 +373,7 @@ describe('handler de envio (WhatsApp, provider mockado)', () => {
     expect(await getCredits(fx.workspaceId)).toBe(10_001)
   })
 
-  it('campanha pausada: envio já persistido (sent) não é revertido', async () => {
+  it('campaign paused: an already persisted send (sent) is not reverted', async () => {
     const fx = await provisionCampaign({ status: 'paused' })
     const { eq } = await import('drizzle-orm')
     await dbmod.db.update(dbmod.campaignMessages)
@@ -395,7 +395,7 @@ describe('handler de envio (WhatsApp, provider mockado)', () => {
     expect(await getCredits(fx.workspaceId)).toBe(10_000)
   })
 
-  it('markFailed condicional não rebaixa mensagem já sent', async () => {
+  it('conditional markFailed never downgrades an already sent message', async () => {
     const fx = await provisionCampaign()
     const { eq } = await import('drizzle-orm')
     await dbmod.db.update(dbmod.campaignMessages).set({ status: 'sent', sentAt: new Date() })
@@ -410,7 +410,7 @@ describe('handler de envio (WhatsApp, provider mockado)', () => {
 })
 
 describe('pacer', () => {
-  it('claim atômico do token: dois pacers paralelos → um só envio enfileirado', async () => {
+  it('atomic token claim: two parallel pacers → only one send enqueued', async () => {
     const fx = await provisionCampaign()
     const { eq } = await import('drizzle-orm')
     await dbmod.db.update(dbmod.campaignRuns).set({ nextPacerAt: new Date() })
@@ -434,7 +434,7 @@ describe('pacer', () => {
     void sendingCount
   })
 
-  it('job sem token (next_pacer_at NULL) é descartado', async () => {
+  it('job without a token (next_pacer_at NULL) is discarded', async () => {
     const fx = await provisionCampaign()
     await pacer.handlePacerStep({ runId: fx.runId, campaignId: fx.campaignId, sentInBurst: 0 })
 
@@ -445,7 +445,7 @@ describe('pacer', () => {
     expect(counts.waiting + counts.delayed).toBe(0)
   })
 
-  it('run paused: token consumido, sem reagendamento', async () => {
+  it('paused run: token consumed, no rescheduling', async () => {
     const fx = await provisionCampaign()
     const { eq } = await import('drizzle-orm')
     await dbmod.db.update(dbmod.campaignRuns).set({ status: 'paused', nextPacerAt: new Date() })
@@ -459,7 +459,7 @@ describe('pacer', () => {
     expect(run?.nextPacerAt).toBeNull()
   })
 
-  it('dedup por jobId: re-add enquanto job vivo não duplica', async () => {
+  it('jobId dedup: re-add while the job is alive does not duplicate', async () => {
     const queue = queuepkg.getQueue(queuepkg.QUEUES.WHATSAPP_OUTBOUND_BASE)
     const payload = {
       campaignId: 'c1', campaignMessageId: 'm1', contactId: 'ct1',
@@ -474,7 +474,7 @@ describe('pacer', () => {
 })
 
 describe('status-webhook', () => {
-  it('delivered duplicado conta uma vez só', async () => {
+  it('duplicate delivered counts only once', async () => {
     const fx = await provisionCampaign()
     const { eq } = await import('drizzle-orm')
     const extId = `ext-${id()}` // único por teste — o lookup por external_message_id não pode colidir com restos de runs anteriores
@@ -493,7 +493,7 @@ describe('status-webhook', () => {
     expect((await getRun(fx.runId))?.deliveredCount).toBe(1)
   })
 
-  it('read sem delivered anterior conta os dois marcos', async () => {
+  it('read without a prior delivered counts both milestones', async () => {
     const fx = await provisionCampaign()
     const { eq } = await import('drizzle-orm')
     const extId = `ext-${id()}`
@@ -512,7 +512,7 @@ describe('status-webhook', () => {
     expect((await getMessage(fx.messageId))?.status).toBe('read')
   })
 
-  it('failed webhook: transição única mesmo com eventos concorrentes', async () => {
+  it('failed webhook: single transition even with concurrent events', async () => {
     const fx = await provisionCampaign()
     const { eq } = await import('drizzle-orm')
     const extId = `ext-${id()}`
@@ -527,7 +527,7 @@ describe('status-webhook', () => {
     expect((await getRun(fx.runId))?.failedCount).toBe(1)
   })
 
-  it('failed é terminal: delivered/read tardio não ressuscita a mensagem', async () => {
+  it('failed is terminal: a late delivered/read does not revive the message', async () => {
     const fx = await provisionCampaign()
     const { eq } = await import('drizzle-orm')
     const extId = `ext-${id()}`
@@ -550,7 +550,7 @@ describe('status-webhook', () => {
     expect(camp?.readCount).toBe(0)
   })
 
-  it('failed tardio não rebaixa delivered nem read', async () => {
+  it('a late failed does not downgrade delivered or read', async () => {
     const fx = await provisionCampaign()
     const { eq } = await import('drizzle-orm')
     const extId = `ext-${id()}`
@@ -569,7 +569,7 @@ describe('status-webhook', () => {
 })
 
 describe('recovery', () => {
-  it('sending preso há >10min volta pra queued e estorna crédito', async () => {
+  it(''sending' stuck >10min returns to queued and refunds the credit', async () => {
     const fx = await provisionCampaign()
     const { eq } = await import('drizzle-orm')
     const stale = new Date(Date.now() - 20 * 60_000)
@@ -584,7 +584,7 @@ describe('recovery', () => {
     expect((await getEntitlements(fx.workspaceId))!.creditsBalance).toBe(before + 1)
   })
 
-  it('sending recente não é resetado (envio legítimo em andamento)', async () => {
+  it('recent 'sending' is not reset (a legitimate send is in progress)', async () => {
     const fx = await provisionCampaign()
     const { eq } = await import('drizzle-orm')
     await dbmod.db.update(dbmod.campaignMessages).set({ status: 'sending', updatedAt: new Date() })
@@ -594,7 +594,7 @@ describe('recovery', () => {
     expect((await getMessage(fx.messageId))?.status).toBe('sending')
   })
 
-  it('run running com pacer vencido há >3min é re-enfileirado', async () => {
+  it('a running run whose pacer expired >3min ago is re-enqueued', async () => {
     const fx = await provisionCampaign()
     const { eq } = await import('drizzle-orm')
     const past = new Date(Date.now() - 5 * 60_000)
@@ -610,7 +610,7 @@ describe('recovery', () => {
     expect(run?.nextPacerAt).toBeTruthy()
   })
 
-  it('run running com token NULL e updated_at parado também é ressuscitado', async () => {
+  it('a running run with NULL token and stale updated_at is also resurrected', async () => {
     const fx = await provisionCampaign()
     const { eq } = await import('drizzle-orm')
     const stale = new Date(Date.now() - 10 * 60_000)
@@ -622,7 +622,7 @@ describe('recovery', () => {
     expect(run?.nextPacerAt).toBeTruthy()
   })
 
-  it('run running com token NULL recente (pacer em voo) NÃO é ressuscitado', async () => {
+  it('a running run with a fresh NULL token (pacer in flight) is NOT resurrected', async () => {
     const fx = await provisionCampaign()
     const { eq } = await import('drizzle-orm')
     await dbmod.db.update(dbmod.campaignRuns).set({ nextPacerAt: null, updatedAt: new Date() })
@@ -635,7 +635,7 @@ describe('recovery', () => {
 })
 
 describe('scheduler', () => {
-  it('dois ticks concorrentes não iniciam o mesmo run duas vezes', async () => {
+  it('two concurrent ticks do not start the same run twice', async () => {
     const fx = await provisionCampaign()
     const { eq } = await import('drizzle-orm')
     await dbmod.db.update(dbmod.campaigns)
@@ -664,7 +664,7 @@ describe('scheduler', () => {
     expect((await getCampaign(fx.campaignId))?.nextRunAt).toBeNull()
   })
 
-  it('falha na API restaura next_run_at pro próximo tick', async () => {
+  it('API failure restores next_run_at for the next tick', async () => {
     const fx = await provisionCampaign()
     const { eq } = await import('drizzle-orm')
     await dbmod.db.update(dbmod.campaigns)
@@ -687,7 +687,7 @@ describe('scheduler', () => {
 })
 
 describe('worker BullMQ end-to-end', () => {
-  it('retry transitório: falha 2x, esgota tentativas e marca failed 1x', async () => {
+  it('transient retry: fails 2x, exhausts attempts and marks failed once', async () => {
     const fx = await provisionCampaign()
     const { eq } = await import('drizzle-orm')
     await dbmod.db.update(dbmod.campaignMessages).set({ status: 'sending' })
@@ -721,7 +721,7 @@ describe('worker BullMQ end-to-end', () => {
     }
   }, 15_000)
 
-  it('jobId dedup: re-add com mesmo id durante processamento não duplica envio', async () => {
+  it('jobId dedup: re-add with the same id during processing does not duplicate the send', async () => {
     const fx = await provisionCampaign()
     const { eq } = await import('drizzle-orm')
     await dbmod.db.update(dbmod.campaignMessages).set({ status: 'sending' })

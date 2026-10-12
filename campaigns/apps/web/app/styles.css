@@ -167,7 +167,7 @@
       scroll-behavior: auto !important;
     }
 
-    /* spinners são feedback funcional, não decoração: mantêm giro (mais lento) */
+    
     .animate-spin {
       animation-duration: 1.5s !important;
       animation-iteration-count: infinite !important;

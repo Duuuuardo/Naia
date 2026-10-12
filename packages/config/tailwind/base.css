@@ -1,18 +1,18 @@
 @theme {
-  /* ─── Brand ────────────────────────────────────────────────────────────── */
+  
   --color-brand-50:  #fff0f3;
   --color-brand-100: #ffe0e6;
   --color-brand-200: #ffc6d1;
   --color-brand-300: #ff9db2;
   --color-brand-400: #f76a8c;
-  --color-brand-500: #DD5973; /* primary — use for CTAs, active states, links */
+  --color-brand-500: #DD5973; 
   --color-brand-600: #c9415d;
   --color-brand-700: #a93050;
   --color-brand-800: #8d2947;
   --color-brand-900: #782742;
   --color-brand-950: #430f22;
 
-  /* ─── Dark (wordmark navy) ────────────────────────────────────────────── */
+  
   --color-dark-50:  #f5f6f9;
   --color-dark-100: #ebecf2;
   --color-dark-200: #d3d6e2;
@@ -21,11 +21,11 @@
   --color-dark-500: #636b90;
   --color-dark-600: #4f5677;
   --color-dark-700: #424763;
-  --color-dark-800: #3D4355; /* wordmark color */
+  --color-dark-800: #3D4355; 
   --color-dark-900: #2e3241;
   --color-dark-950: #1c1f29;
 
-  /* ─── Neutral ─────────────────────────────────────────────────────────── */
+  
   --color-neutral-0:   #ffffff;
   --color-neutral-50:  #f9fafb;
   --color-neutral-100: #f3f4f6;
@@ -39,36 +39,36 @@
   --color-neutral-900: #111827;
   --color-neutral-950: #030712;
 
-  /* ─── Semantic ────────────────────────────────────────────────────────── */
+  
   --color-success-500: #22c55e;
   --color-warning-500: #f59e0b;
   --color-error-500:   #ef4444;
 
-  /* ─── Typography ──────────────────────────────────────────────────────── */
+  
   --font-sans:    'Plus Jakarta Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
   --font-display: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
   --font-mono:    'Geist Mono', ui-monospace, 'Cascadia Code', monospace;
 
-  /* ─── Type scale ──────────────────────────────────────────────────────── */
-  --text-xs:   0.75rem;   /* 12px — labels, captions */
-  --text-sm:   0.875rem;  /* 14px — body small, table rows */
-  --text-base: 1rem;      /* 16px — body default */
-  --text-lg:   1.125rem;  /* 18px — body large */
-  --text-xl:   1.25rem;   /* 20px — section headings */
-  --text-2xl:  1.5rem;    /* 24px */
-  --text-3xl:  1.875rem;  /* 30px */
-  --text-4xl:  2.25rem;   /* 36px — page titles */
-  --text-5xl:  3rem;      /* 48px — hero */
-  --text-6xl:  3.75rem;   /* 60px — marketing hero */
+  
+  --text-xs:   0.75rem;   
+  --text-sm:   0.875rem;  
+  --text-base: 1rem;      
+  --text-lg:   1.125rem;  
+  --text-xl:   1.25rem;   
+  --text-2xl:  1.5rem;    
+  --text-3xl:  1.875rem;  
+  --text-4xl:  2.25rem;   
+  --text-5xl:  3rem;      
+  --text-6xl:  3.75rem;   
 
-  /* ─── Radius ──────────────────────────────────────────────────────────── */
-  --radius-sm:   0.375rem; /* 6px  — inputs, badges */
-  --radius-md:   0.625rem; /* 10px — cards, dropdowns */
-  --radius-lg:   0.875rem; /* 14px — modals, panels */
-  --radius-xl:   1.25rem;  /* 20px — large cards */
-  --radius-full: 9999px;   /* pills, avatars */
+  
+  --radius-sm:   0.375rem; 
+  --radius-md:   0.625rem; 
+  --radius-lg:   0.875rem; 
+  --radius-xl:   1.25rem;  
+  --radius-full: 9999px;   
 
-  /* ─── Shadow ──────────────────────────────────────────────────────────── */
+  
   --shadow-sm:  0 1px 2px 0 rgb(61 67 85 / 0.06);
   --shadow-md:  0 4px 12px 0 rgb(61 67 85 / 0.10);
   --shadow-lg:  0 8px 24px 0 rgb(61 67 85 / 0.12);

@@ -1,6 +1,3 @@
-// Cliente para a central de notificações do Vianova. O Naia Campanhas envia
-// notificações na conta do usuário via endpoint service-to-service, autenticado
-// pelo segredo interno compartilhado (x-internal-secret).
 
 function requireEnv(name: string): string {
   const value = process.env[name]

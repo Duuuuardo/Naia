@@ -23,7 +23,6 @@ const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 export const inviteRoutes = new Elysia()
   .use(authPlugin)
 
-  // GET /workspaces/:workspaceId/invites
   .get('/workspaces/:workspaceId/invites', async ({ session, params, set }) => {
     const ctx = await resolveWorkspaceAccess(session, params.workspaceId)
     if (!ctx) { set.status = 401; return { message: 'Não autenticado.' } }
@@ -38,9 +37,6 @@ export const inviteRoutes = new Elysia()
     return { invites: rows }
   })
 
-  // POST /workspaces/:workspaceId/invites — Owner/Admin convida por email.
-  // Convidado precisa ter (ou criar) conta no Vianova antes de aceitar — o
-  // aceite (POST /invites/:token/accept) exige sessão Vianova válida.
   .post(
     '/workspaces/:workspaceId/invites',
     async ({ session, params, body, set }) => {
@@ -111,7 +107,6 @@ export const inviteRoutes = new Elysia()
     },
   )
 
-  // DELETE /workspaces/:workspaceId/invites/:inviteId
   .delete('/workspaces/:workspaceId/invites/:inviteId', async ({ session, params, set }) => {
     const ctx = await resolveWorkspaceAccess(session, params.workspaceId)
     if (!ctx) { set.status = 401; return { message: 'Não autenticado.' } }
@@ -122,8 +117,6 @@ export const inviteRoutes = new Elysia()
     return { message: 'Convite revogado.' }
   })
 
-  // POST /invites/:token/accept — exige sessão Vianova ativa; email do token
-  // precisa bater com o email da sessão (não dá pra aceitar convite alheio).
   .post('/invites/:token/accept', async ({ session, params, set }) => {
     if (!session) { set.status = 401; return { message: 'Não autenticado.' } }
 

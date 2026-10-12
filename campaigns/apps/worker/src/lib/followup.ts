@@ -1,6 +1,3 @@
-// Aviso de opt-out como mensagem separada, enviada alguns segundos depois da
-// mensagem da campanha. Job próprio (attempts 1, erro engolido) para nunca
-// interferir no job primário; sem linha em campaign_messages → fora da cota.
 
 import type { Queue } from '@naia/queue'
 import type { SendMessageJob } from '@naia/schemas'
@@ -18,7 +15,6 @@ export async function enqueueOptOutFollowup(
       `followup:${job.campaignMessageId}`,
       { ...job, kind: 'followup', content },
       {
-        // BullMQ 5 não aceita ':' em jobId customizado
         jobId: `followup-${job.campaignMessageId}`,
         delay: 3000 + Math.floor(Math.random() * 3000),
         attempts: 1,

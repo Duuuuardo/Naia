@@ -1,4 +1,3 @@
-// Validação client-side dos forms — mensagens em pt-BR, mesmas regras que a API espera.
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
@@ -9,7 +8,6 @@ export function validateEmail(email: string): string | null {
   return null
 }
 
-/** Email não obrigatório: vazio é válido, preenchido precisa ser um email. */
 export function validateOptionalEmail(email: string): string | null {
   if (!email.trim()) return null
   return validateEmail(email)
@@ -32,14 +30,12 @@ export function validateContactIdentifier(
       : 'Informe o ID do chat do Telegram.'
   }
   if (platform === 'whatsapp') {
-    // 10–20 dígitos: cobre telefones com DDI (12–13 no Brasil) e IDs de grupo do WhatsApp.
     const digits = trimmed.replace(/[\s()+.-]/g, '')
     if (!/^[0-9]{10,20}$/.test(digits)) {
       return 'Número inválido. Use só dígitos com DDI e DDD (ex: 5511999999999).'
     }
     return null
   }
-  // Telegram: IDs de usuário são numéricos; grupos/canais podem ser negativos.
   if (!/^-?[0-9]{4,20}$/.test(trimmed)) {
     return 'ID inválido. Use o ID numérico do chat (ex: 123456789).'
   }

@@ -99,7 +99,6 @@ function ConnectionsPage() {
   const [acceptTerms, setAcceptTerms] = useState(false)
   const [acceptResponsibleUse, setAcceptResponsibleUse] = useState(false)
 
-  // Modals de importação
   const [activeImportContactsConn, setActiveImportContactsConn] = useState<{ id: string; name: string; channel: string } | null>(null)
   const [activeImportGroupsConn, setActiveImportGroupsConn] = useState<{ id: string; name: string; channel: string } | null>(null)
 
@@ -145,7 +144,7 @@ function ConnectionsPage() {
 
     const validNameError = validateConnectionName(name)
     setNameError(validNameError)
-    
+
     let validPhoneError = null
     if (selectedChannel === 'telegram_user') {
       validPhoneError = validatePhone(phone)
@@ -493,8 +492,6 @@ function ConnectionsPage() {
   )
 }
 
-// ─── Caixa de Login da Conta do Telegram (código + senha 2FA) ────────────────
-
 function TelegramLoginBox({
   workspaceId,
   connectionId,
@@ -644,8 +641,6 @@ function TelegramLoginBox({
     </div>
   )
 }
-
-// ─── Modal de Importar Contatos da Conexão ───────────────────────────────────
 
 function ImportContactsModal({
   workspaceId,
@@ -885,8 +880,6 @@ function ImportContactsModal({
     </div>
   )
 }
-
-// ─── Modal de Importar Grupos da Conexão ─────────────────────────────────────
 
 function ImportGroupsModal({
   workspaceId,

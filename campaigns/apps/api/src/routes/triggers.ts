@@ -1,9 +1,3 @@
-// Gatilho externo público — e-commerce, checkout, sistemas de terceiros
-// (carrinho abandonado, boleto gerado etc). Sem JWT: a URL carrega um segredo
-// por automação (?key=...) gerado na criação; quem tem a URL dispara. O
-// payload localiza (ou cria) o contato no workspace e inscreve na régua da
-// automação; `variables` fica no contexto da inscrição e vira placeholder na
-// mensagem (ex: {{cart_url}}).
 
 import { Elysia, t } from 'elysia'
 import { timingSafeEqual } from 'node:crypto'
@@ -13,8 +7,6 @@ import { enrollContact, handleContactCreated, parseTriggerConfig } from '../lib/
 import { executeDueEnrollments } from '../lib/automation-engine'
 import { generateId } from '../lib/crypto'
 
-/** Variantes de um telefone BR: números registrados no WhatsApp antes do
- * nono dígito vivem na base sem ele — busca precisa casar as duas formas. */
 function phoneCandidates(digits: string): string[] {
   const set = new Set([digits])
   if (/^55\d{11}$/.test(digits) && digits[4] === '9') set.add(digits.slice(0, 4) + digits.slice(5))
@@ -22,7 +14,6 @@ function phoneCandidates(digits: string): string[] {
   return [...set]
 }
 
-/** Comparação em tempo constante — não vaza o secret por timing. */
 function secretMatches(provided: string | undefined, expected: string | undefined): boolean {
   if (!provided || !expected) return false
   const a = Buffer.from(provided)
@@ -37,9 +28,6 @@ export const triggerRoutes = new Elysia()
     async ({ params, query, body, headers, set }) => {
       const [automation] = await db.select().from(automations).where(eq(automations.id, params.automationId)).limit(1)
       const config = automation ? parseTriggerConfig(automation.triggerJson) : {}
-      // Chave no header (preferido — não aparece em logs de URL) ou na query
-      // (para plataformas que só aceitam uma URL). Chave errada responde o
-      // mesmo 404 de automação inexistente: sem oráculo de IDs válidos.
       const providedKey = headers['x-webhook-key'] ?? query.key
       if (!automation || automation.type !== 'webhook' || !secretMatches(providedKey, config.secret)) {
         set.status = 404
@@ -57,8 +45,6 @@ export const triggerRoutes = new Elysia()
         return { message: 'Informe phone ou email do contato.' }
       }
 
-      // Localiza por telefone, depois por e-mail; senão cria com opt-in (o
-      // consentimento veio do sistema chamador — checkout/cadastro próprio)
       let contact =
         (phone
           ? (
@@ -105,7 +91,6 @@ export const triggerRoutes = new Elysia()
             .onConflictDoNothing()
         }
         ;[contact] = await db.select().from(contacts).where(eq(contacts.id, id)).limit(1)
-        // Contato novo no workspace também conta para automações de boas-vindas
         await handleContactCreated(automation.workspaceId, id)
       } else if (body.contact.name?.trim() && contact.name.startsWith('Contato ')) {
         await db
@@ -119,8 +104,6 @@ export const triggerRoutes = new Elysia()
         return { message: 'Falha ao registrar o contato.' }
       }
 
-      // Lease de 5min no primeiro passo: executamos inline logo abaixo, sem
-      // corrida com o tick do scheduler (que só enxerga next_step_at vencido)
       const enrollmentId = await enrollContact(automation, contact.id, body.variables ?? {}, {
         nextStepAt: new Date(Date.now() + 5 * 60 * 1000),
       })

@@ -24,9 +24,6 @@ export const FREE_ENTITLEMENTS: Entitlements = {
   maxFileSizeBytes: 5_242_880,
 }
 
-// Resolução local de acesso a workspace — antes era uma chamada cross-service
-// pro core-api; agora Naia é dono completo do seu tenant model (workspace,
-// membros, entitlement sincronizado), só a identidade da pessoa vem de fora.
 export async function resolveWorkspaceAccess(
   session: VianovaUser | null,
   workspaceId: string,
@@ -50,10 +47,6 @@ export async function resolveWorkspaceAccess(
     .where(eq(entitlements.workspaceId, workspaceId))
     .limit(1)
 
-  // Sem row (workspace anterior ao sync) → defaults do free. Com row, os
-  // valores do banco valem SEMPRE — o segundo workspace free nasce
-  // 'inactive' com limites zerados de propósito, e um fallback hardcoded
-  // aqui reabriria os gates de conexão/campanha que o produto fecha.
   if (!ent) {
     return {
       userId: session.userId,

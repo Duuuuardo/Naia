@@ -1,7 +1,3 @@
-// Gatilhos de automação (contact_created / tag_added) e o freio de mão
-// (stop tags). Este módulo fica na base da cadeia de imports — é usado pelo
-// campaign-runner e pelo automation-engine, então não pode importar nenhum
-// dos dois.
 
 import { db, automations, automationEnrollments } from '@naia/db'
 import { eq, and, sql } from 'drizzle-orm'
@@ -25,8 +21,6 @@ export function parseTriggerConfig(json: string): AutomationTriggerConfig {
   }
 }
 
-/** Passos efetivos da automação: stepsJson, ou contentJson como passo único
- * implícito de mensagem (o caso "dispara e pronto", sem régua). */
 export function parseSteps(automation: { stepsJson: string; contentJson: string }): AutomationStep[] {
   const steps = parseJsonArray<AutomationStep>(automation.stepsJson)
   if (steps.length > 0) return steps
@@ -35,10 +29,6 @@ export function parseSteps(automation: { stepsJson: string; contentJson: string 
   return [{ id: 'single', action: 'message', content }]
 }
 
-/** Inscreve o contato na cadência — ou reinicia a inscrição ativa existente
- * (novo evento do mesmo gatilho recomeça a régua com o contexto novo, em vez
- * de duplicar mensagens). `nextStepAt` customizado serve de lease quando o
- * chamador vai executar o primeiro passo inline (evita corrida com o tick). */
 export async function enrollContact(
   automation: { id: string; workspaceId: string },
   contactId: string,
@@ -79,8 +69,6 @@ export async function enrollContact(
   return id
 }
 
-/** Contato novo no workspace (cadastro manual ou importação) → inscreve nas
- * automações contact_created ativas. */
 export async function handleContactCreated(workspaceId: string, contactId: string): Promise<void> {
   const rows = await db
     .select()
@@ -92,13 +80,6 @@ export async function handleContactCreated(workspaceId: string, contactId: strin
   }
 }
 
-/** Tags adicionadas a contatos. Chamar em TODO ponto que aplica tag (rota de
- * contato, importação, tag de audiência de campanha, passo add_tag).
- * Faz duas coisas, nesta ordem:
- * 1. Freio de mão — cancela inscrições ativas cuja automação lista alguma
- *    das tags em stopOnTagsJson (ex: "comprou" derruba a régua de carrinho).
- * 2. Gatilho tag_added — inscreve o contato nas automações ativas disparadas
- *    por alguma das tags. */
 export async function handleTagsAdded(workspaceId: string, contactIds: string[], tags: string[]): Promise<void> {
   const cleanTags = [...new Set(tags.map((t) => t.trim()).filter(Boolean))]
   if (contactIds.length === 0 || cleanTags.length === 0) return

@@ -7,7 +7,6 @@ import { resolveWorkspaceAccess } from '../lib/workspace-auth'
 export const memberRoutes = new Elysia()
   .use(authPlugin)
 
-  // GET /workspaces/:workspaceId/members
   .get('/workspaces/:workspaceId/members', async ({ session, params, set }) => {
     const ctx = await resolveWorkspaceAccess(session, params.workspaceId)
     if (!ctx) { set.status = 401; return { message: 'Não autenticado.' } }
@@ -40,7 +39,6 @@ export const memberRoutes = new Elysia()
     }
   })
 
-  // PATCH /workspaces/:workspaceId/members/:memberId — trocar role (Owner apenas).
   .patch(
     '/workspaces/:workspaceId/members/:memberId',
     async ({ session, params, body, set }) => {
@@ -64,7 +62,6 @@ export const memberRoutes = new Elysia()
     { body: t.Object({ role: t.Union([t.Literal('admin'), t.Literal('member')]) }) },
   )
 
-  // DELETE /workspaces/:workspaceId/members/:memberId — Owner pode remover qualquer membro.
   .delete(
     '/workspaces/:workspaceId/members/:memberId',
     async ({ session, params, set }) => {

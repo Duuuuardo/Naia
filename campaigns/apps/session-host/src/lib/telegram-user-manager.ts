@@ -3,10 +3,6 @@ import { eq, and } from 'drizzle-orm'
 import { generateId } from './crypto'
 import { notifyWorkspaceOwner, NAIA_WEB_URL } from './vianova-notifications'
 
-// Cliente MTProto (teleproto) por conexão — vive exclusivamente neste processo,
-// igual ao socket Baileys do whatsapp-manager. O worker nunca abre sessão
-// própria: envia via POST /internal/telegram-user-send.
-
 type ClientEntry = { status: 'connecting' | 'connected' | 'disconnected'; client: any }
 
 export type TelegramAuthPhase = 'connecting' | 'awaiting_code' | 'awaiting_password' | 'error'
@@ -48,8 +44,6 @@ function loadTeleproto() {
   return { TelegramClient, Api, StringSession, NewMessage, CustomFile }
 }
 
-// Credenciais do app (não do usuário): um único app "Naia" registrado em
-// my.telegram.org, compartilhado por todas as contas. Vive só em env.
 export function resolveApiCredentials(): { apiId: number; apiHash: string } | null {
   const apiId = process.env.TELEGRAM_API_ID ? Number(process.env.TELEGRAM_API_ID) : undefined
   const apiHash = process.env.TELEGRAM_API_HASH
@@ -120,7 +114,6 @@ export async function initAllTelegramUserSessions(): Promise<void> {
   }
 }
 
-/** Reconecta uma sessão já autenticada (session string salva no config). */
 export async function connectExistingTelegramUser(connectionId: string): Promise<boolean> {
   const existing = telegramClientMap.get(connectionId)
   if (existing?.status === 'connected' || existing?.status === 'connecting') return true
@@ -202,12 +195,6 @@ export async function connectExistingTelegramUser(connectionId: string): Promise
   }
 }
 
-/**
- * Inicia o fluxo de login interativo (telefone → código → senha 2FA).
- * O client.start() fica bloqueado nos callbacks até o usuário submeter o
- * código/senha via submitTelegramCode/submitTelegramPassword — mesmo padrão
- * do QR do WhatsApp, só que com duas etapas digitadas em vez de escaneadas.
- */
 export async function startTelegramUserLogin(connectionId: string): Promise<void> {
   const current = telegramClientMap.get(connectionId)
   if (current?.status === 'connected' || current?.status === 'connecting') return
@@ -235,7 +222,6 @@ export async function startTelegramUserLogin(connectionId: string): Promise<void
   const client = buildClient({ ...config, session: '' }, creds)
   telegramClientMap.set(connectionId, { status: 'connecting', client })
 
-  // Login abandonado não pode segurar o client.start() para sempre
   const timeout = setTimeout(() => {
     const p = pendingLoginMap.get(connectionId)
     if (p?.codeReject) p.codeReject(new Error('Tempo esgotado aguardando o código de login.'))
@@ -254,8 +240,6 @@ export async function startTelegramUserLogin(connectionId: string): Promise<void
     new Promise<string>((resolve, reject) => {
       const pending = pendingLoginMap.get(connectionId)
       if (!pending) return reject(new Error('Login cancelado.'))
-      // mantém pending.error: código inválido volta para esta fase e o
-      // usuário precisa ver o motivo até resubmeter
       pending.phase = phase
       if (phase === 'awaiting_code') {
         pending.codeResolve = resolve
@@ -274,8 +258,6 @@ export async function startTelegramUserLogin(connectionId: string): Promise<void
         const pending = pendingLoginMap.get(connectionId)
         if (pending) {
           pending.error = translateLoginError(err)
-          // volta para a fase de código: erro típico é código/senha inválidos
-          // e o teleproto chama o callback de novo na sequência
         }
         console.error(`[telegram-user] Erro durante login ${connectionId}:`, err.message)
         return false
@@ -369,8 +351,6 @@ export async function disconnectTelegramUser(connectionId: string, opts?: { logo
   telegramClientMap.delete(connectionId)
 }
 
-// ─── Comandos de opt-in/out (#sair / #voltar) — paridade com o bot e o WA ────
-
 function registerOptCommandHandler(connectionId: string, client: any): void {
   const { NewMessage } = loadTeleproto()
   client.addEventHandler(async (event: any) => {
@@ -426,8 +406,6 @@ function registerOptCommandHandler(connectionId: string, client: any): void {
   }, new NewMessage({ incoming: true }))
 }
 
-// ─── Envio ───────────────────────────────────────────────────────────────────
-
 function getConnectedClient(connectionId: string): any {
   const entry = telegramClientMap.get(connectionId)
   if (!entry?.client || entry.status !== 'connected') {
@@ -436,19 +414,12 @@ function getConnectedClient(connectionId: string): any {
   return entry.client
 }
 
-/**
- * Resolve o destino para uma entidade MTProto. IDs numéricos só funcionam se
- * a entidade estiver no cache da sessão — por isso os syncs de contatos/grupos
- * puxam os dialogs antes (o que também garante a "interação prévia" exigida
- * pela regra de negócio do Telegram).
- */
 async function resolveEntity(client: any, target: string): Promise<any> {
   const t = target.trim()
   if (/^-?\d+$/.test(t)) {
     try {
       return await client.getInputEntity(Number(t))
     } catch {
-      // último recurso: força o cache de entidades via dialogs e tenta de novo
       await client.getDialogs({ limit: 300 }).catch(() => {})
       return await client.getInputEntity(Number(t))
     }
@@ -477,7 +448,6 @@ export async function sendTelegramUserMessage(
   const captionFits = content.length <= 1024
   let firstId = ''
 
-  // Texto acima do limite de caption vai como mensagem separada antes
   if (content && !captionFits) {
     const msg = await client.sendMessage(entity, { message: content })
     firstId = String(msg?.id ?? '')
@@ -498,8 +468,6 @@ export async function sendTelegramUserMessage(
 
   return { externalMessageId: firstId }
 }
-
-// ─── Sync de contatos e grupos (dialogs) ─────────────────────────────────────
 
 export async function fetchTelegramUserContacts(connectionId: string): Promise<Array<{ id: string; name: string; phone: string; avatarUrl?: string | null }>> {
   const client = getConnectedClient(connectionId)

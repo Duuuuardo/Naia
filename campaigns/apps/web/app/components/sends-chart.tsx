@@ -1,4 +1,3 @@
-// Carregado só no cliente via lazy() em charts.tsx — não importar direto.
 
 import {
   Area,

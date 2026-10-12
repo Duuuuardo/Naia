@@ -1,4 +1,3 @@
-// Cliente para a central de notificações do Vianova — usado pelo session-host.
 
 import { db, workspaces } from '@naia/db'
 import { eq } from 'drizzle-orm'

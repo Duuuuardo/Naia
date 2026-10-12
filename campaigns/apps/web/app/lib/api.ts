@@ -9,8 +9,6 @@ function requireEnv(name: string): string {
   return value
 }
 
-// Browser: URL pública (baked in no bundle pelo Vite).
-// Server: URL interna Docker preferida (evita hairpin NAT); cai para NAIA_API_URL se não definida.
 export const API_URL =
   typeof window !== 'undefined'
     ? requireEnv('VITE_NAIA_API_URL')

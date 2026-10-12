@@ -1,5 +1,3 @@
-// Gráficos do dashboard — recharts não sobrevive ao SSR, então o AreaChart em
-// si vive em sends-chart.tsx e só é carregado (lazy) depois do mount no cliente.
 
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { TrendingUp, Send } from 'lucide-react'
@@ -23,7 +21,6 @@ function fillPerDay(perDay: TimeseriesData['perDay']): Array<{ label: string; se
   for (let i = 29; i >= 0; i--) {
     const day = new Date(today)
     day.setDate(today.getDate() - i)
-    // chave em data local — toISOString (UTC) deslocaria o dia à noite em fusos negativos
     const key = `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`
     const row = byDate.get(key)
     out.push({

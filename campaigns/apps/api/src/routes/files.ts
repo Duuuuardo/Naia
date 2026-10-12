@@ -21,8 +21,6 @@ async function vianovaFetch(path: string, init: RequestInit): Promise<Response> 
 export const filesRoutes = new Elysia()
   .use(authPlugin)
 
-  // Upload de arquivo para o Vianova Storage.
-  // O Naia não armazena o binário; só repassa e devolve a referência ao produto.
   .post(
     '/workspaces/:workspaceId/files/upload',
     async ({ session, params, body, set }) => {
@@ -69,7 +67,6 @@ export const filesRoutes = new Elysia()
     },
   )
 
-  // Lista arquivos do workspace (ativos ou na lixeira).
   .get(
     '/workspaces/:workspaceId/files',
     async ({ session, params, query, set }) => {
@@ -109,7 +106,6 @@ export const filesRoutes = new Elysia()
     },
   )
 
-  // Uso de storage do workspace.
   .get(
     '/workspaces/:workspaceId/files/usage',
     async ({ session, params, set }) => {
@@ -135,7 +131,6 @@ export const filesRoutes = new Elysia()
     },
   )
 
-  // Move arquivo para a lixeira.
   .delete(
     '/workspaces/:workspaceId/files/:fileId',
     async ({ session, params, set }) => {
@@ -167,7 +162,6 @@ export const filesRoutes = new Elysia()
     },
   )
 
-  // Restaura arquivo da lixeira.
   .post(
     '/workspaces/:workspaceId/files/:fileId/restore',
     async ({ session, params, set }) => {

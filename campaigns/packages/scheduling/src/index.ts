@@ -1,7 +1,3 @@
-// Funções puras de agendamento, pacing e templating — zero I/O, cobertas por
-// `bun test`. Toda aritmética de calendário é wall-clock no fuso da campanha
-// via TZDate (DST-correta); os instantes retornados são Date UTC prontos para
-// persistir em `campaigns.next_run_at`.
 
 import { TZDate } from '@date-fns/tz'
 import type { Schedule, Speed, SpeedChannel, WorkingHours } from '@naia/schemas'
@@ -9,7 +5,6 @@ import { SPEED_PRESET_RANGES } from '@naia/schemas'
 
 export const DEFAULT_TIMEZONE = 'America/Sao_Paulo'
 const DEFAULT_TIME = '09:00'
-// Janela usada por times_per_day quando a campanha não define workingHours
 const FALLBACK_WINDOW = { start: '08:00', end: '20:00' }
 const MAX_LOOKAHEAD_DAYS = 400
 
@@ -22,13 +17,11 @@ function tzView(instant: Date, tz: string): TZDate {
   return new TZDate(instant.getTime(), tz)
 }
 
-/** Dia (wall-clock em tz) deslocado `offsetDays` a partir de `instant`, no horário h:m. */
 function dayAt(instant: Date, tz: string, offsetDays: number, h: number, m: number): TZDate {
   const view = tzView(instant, tz)
   return new TZDate(view.getFullYear(), view.getMonth(), view.getDate() + offsetDays, h, m, 0, 0, tz)
 }
 
-/** TZDate serializa com offset; persistência e testes esperam Date UTC puro. */
 function toUtc(d: Date): Date {
   return new Date(d.getTime())
 }
@@ -49,13 +42,6 @@ function pastEndDate(key: string, endDate?: string): boolean {
   return Boolean(endDate && key > endDate)
 }
 
-// ─── Próxima execução ────────────────────────────────────────────────────────
-
-/**
- * Próximo instante de execução estritamente depois de `from`, ou null quando a
- * campanha não tem mais execuções (immediate, once já executado, recorrência
- * esgotada por endDate/maxOccurrences).
- */
 export function computeNextRunAt(
   schedule: Schedule,
   from: Date,
@@ -67,7 +53,6 @@ export function computeNextRunAt(
   if (schedule.type === 'once') {
     if (occurrenceCount >= 1 || !schedule.onceAt) return null
     const at = new Date(schedule.onceAt)
-    // Agendamento no passado dispara no próximo tick
     return at > from ? at : from
   }
 
@@ -110,7 +95,6 @@ export function computeNextRunAt(
     return null
   }
 
-  // daily / weekly
   const { h, m } = parseHM(rec.time ?? DEFAULT_TIME)
   const weekdays = rec.kind === 'weekly' ? (rec.weekdays ?? []) : null
   if (weekdays && weekdays.length === 0) return null
@@ -126,8 +110,6 @@ export function computeNextRunAt(
   return null
 }
 
-// ─── Janela de funcionamento ─────────────────────────────────────────────────
-
 function windowContains(wh: WorkingHours, view: TZDate): boolean {
   if (wh.weekdays.length > 0 && !wh.weekdays.includes(view.getDay())) return false
   const { h: sh, m: sm } = parseHM(wh.start)
@@ -136,7 +118,6 @@ function windowContains(wh: WorkingHours, view: TZDate): boolean {
   const endMin = eh * 60 + em
   const nowMin = view.getHours() * 60 + view.getMinutes()
   if (endMin <= startMin) {
-    // Janela atravessa a meia-noite (ex.: 20:00–06:00)
     return nowMin >= startMin || nowMin < endMin
   }
   return nowMin >= startMin && nowMin < endMin
@@ -147,7 +128,6 @@ export function isWithinWorkingHours(schedule: Schedule, now: Date, tz: string):
   return windowContains(schedule.workingHours, tzView(now, tz))
 }
 
-/** Próximo instante em que a janela abre (o próprio `now` se já estiver aberta). */
 export function nextWindowStart(schedule: Schedule, now: Date, tz: string): Date {
   const wh = schedule.workingHours
   if (!wh) return now
@@ -162,24 +142,19 @@ export function nextWindowStart(schedule: Schedule, now: Date, tz: string): Date
   return now
 }
 
-/** Meia-noite do dia seguinte no fuso — base do rollover do teto diário. */
 export function startOfNextDay(now: Date, tz: string): Date {
   return toUtc(dayAt(now, tz, 1, 0, 0))
 }
 
-/** Chave 'YYYY-MM-DD' do dia corrente no fuso — para contar envios do dia. */
 export function dayKeyInTz(now: Date, tz: string): string {
   return dayKey(tzView(now, tz))
 }
 
-/** O horário 'HH:mm' de hoje (no fuso) já passou? Usado pelo tick diário de automações. */
 export function isPastTimeOfDay(now: Date, tz: string, hm: string): boolean {
   const view = tzView(now, tz)
   const { h, m } = parseHM(hm)
   return view.getHours() * 60 + view.getMinutes() >= h * 60 + m
 }
-
-// ─── Velocidade ──────────────────────────────────────────────────────────────
 
 export function speedRangeSeconds(speed: Speed, channel: SpeedChannel): { min: number; max: number } {
   if (speed.preset === 'manual') {
@@ -189,31 +164,22 @@ export function speedRangeSeconds(speed: Speed, channel: SpeedChannel): { min: n
   return SPEED_PRESET_RANGES[speed.preset][channel]
 }
 
-/** Intervalo aleatório (ms) entre mensagens consecutivas, conforme preset/canal. */
 export function randomIntervalMs(speed: Speed, channel: SpeedChannel): number {
   const { min, max } = speedRangeSeconds(speed, channel)
   return Math.round((min + Math.random() * (max - min)) * 1000)
 }
 
-/** Pausa de rajada (ms): aleatória entre pauseMin e pauseMax minutos (padrão 1–15). */
 export function burstPauseMs(speed: Speed): number {
   const min = speed.pauseMinMinutes ?? 1
   const max = Math.max(speed.pauseMaxMinutes ?? 15, min)
   return Math.round((min + Math.random() * (max - min)) * 60_000)
 }
 
-// ─── Aniversário ─────────────────────────────────────────────────────────────
-
-/** Mês-dia corrente ('MM-DD') no fuso informado. */
 export function todayMonthDay(now: Date, tz: string): string {
   const view = tzView(now, tz)
   return `${String(view.getMonth() + 1).padStart(2, '0')}-${String(view.getDate()).padStart(2, '0')}`
 }
 
-/**
- * Compara birthDate do contato ('YYYY-MM-DD', 'DD/MM' ou 'DD/MM/YYYY') com um
- * mês-dia 'MM-DD'. Formato irreconhecível → false.
- */
 export function matchesBirthdayToday(birthDate: string | null | undefined, monthDay: string): boolean {
   if (!birthDate) return false
   const value = birthDate.trim()
@@ -229,10 +195,6 @@ export function matchesBirthdayToday(birthDate: string | null | undefined, month
   }
   return false
 }
-
-// ─── Templating ──────────────────────────────────────────────────────────────
-// Tipagem estrutural (sem dep de @naia/db) para o worker e a API renderizarem
-// variantes com o mesmo código.
 
 export type TemplateContact = {
   name: string | null

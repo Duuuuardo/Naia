@@ -1,6 +1,3 @@
-// Object storage de mídia do Campaigns (MinIO próprio — o do Vianova é
-// exclusivo de avatares). Wrapper fino sobre o S3Client nativo do Bun; usado
-// pela API (presign/validação) e pelo worker (bytes pra envio multipart).
 
 function requireEnv(name: string): string {
   const value = process.env[name]
@@ -10,8 +7,6 @@ function requireEnv(name: string): string {
   return value
 }
 
-// Tipo estrutural do Bun.S3Client — evita `import from 'bun'`, que quebraria o
-// typecheck do web quando os tipos deste package vazam pela cadeia do Eden.
 type S3ClientLike = {
   presign(key: string, options: { method: 'PUT' | 'GET'; type?: string; expiresIn?: number }): string
   exists(key: string): Promise<boolean>
@@ -43,12 +38,10 @@ function getClient(): S3ClientLike {
   return client
 }
 
-/** URL pré-assinada para o browser fazer PUT direto no MinIO. */
 export function presignUpload(key: string, mimeType: string, expiresInSeconds = 900): string {
   return getClient().presign(key, { method: 'PUT', type: mimeType, expiresIn: expiresInSeconds })
 }
 
-/** URL pré-assinada de leitura (previews no wizard). */
 export function presignDownload(key: string, expiresInSeconds = 3600): string {
   return getClient().presign(key, { method: 'GET', expiresIn: expiresInSeconds })
 }
@@ -62,7 +55,6 @@ export async function objectSize(key: string): Promise<number> {
   return stat.size
 }
 
-/** Bytes do objeto — para envio multipart (Baileys/Telegram). */
 export async function getObjectBytes(key: string): Promise<Uint8Array> {
   const buffer = await getClient().file(key).arrayBuffer()
   return new Uint8Array(buffer)

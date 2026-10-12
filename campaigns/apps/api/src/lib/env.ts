@@ -1,12 +1,5 @@
 import { timingSafeEqual } from 'node:crypto'
 
-// Helpers para leitura defensiva de variáveis de ambiente.
-//
-// - `getRequiredEnv`: falha fatal sempre que a variável não estiver definida.
-//   Use para secrets e endpoints obrigatórios.
-// - `requireInProd`: obrigatória em produção; em dev pode cair em fallback
-//   controlado (localhost) para não quebrar o ambiente local.
-
 export function getRequiredEnv(name: string): string {
   const value = process.env[name]
   if (!value || value.trim().length === 0) {
@@ -31,10 +24,6 @@ export function requireInProd(name: string, devFallback?: string): string {
   process.exit(1)
 }
 
-/**
- * Comparação constant-time de segredos.
- * Retorna false imediatamente se o valor fornecido for vazio.
- */
 export function verifySecret(provided: string | undefined, expected: string): boolean {
   if (!provided) return false
   const providedBuf = Buffer.from(provided)
