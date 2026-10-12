@@ -173,6 +173,6 @@ The send pipeline is **at-least-once**:
 
 ## License and contribution
 
-Licensed under the [Apache License 2.0](LICENSE). Contributions: see
-[CONTRIBUTING.md](CONTRIBUTING.md) (branch flow: `feature/*` → `develop`,
-`develop` → `main` for releases).
+Licensed under the [MIT License](LICENSE). Contributions: see
+[CONTRIBUTING.md](CONTRIBUTING.md). Note the repository is published as-is
+after shutdown — issues and PRs are not actively monitored.
