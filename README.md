@@ -165,10 +165,9 @@ The send pipeline is **at-least-once**:
 - Telegram has no delivered/read receipts (MTProto limitation), so `sent` is
   terminal there.
 - WhatsApp runs on Baileys (unofficial), subject to provider-side breakage.
-- No LICENSE file yet (see below).
 
 ## License and contribution
 
-No `LICENSE` file is currently present; the code defaults to all-rights-reserved
-until the owner adds one. Contributions: see [CONTRIBUTING.md](CONTRIBUTING.md)
-(branch flow: `feature/*` → `develop`, `develop` → `main` for releases).
+Licensed under the [Apache License 2.0](LICENSE). Contributions: see
+[CONTRIBUTING.md](CONTRIBUTING.md) (branch flow: `feature/*` → `develop`,
+`develop` → `main` for releases).
