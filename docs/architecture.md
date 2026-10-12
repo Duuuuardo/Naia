@@ -1,7 +1,7 @@
 # Architecture
 
 Naia is a Turborepo monorepo containing the Naia brand landing site and the
-**Naia Campaigns** product — a multi-tenant bulk-messaging tool for WhatsApp
+**Naia Campaigns** product, a multi-tenant bulk-messaging tool for WhatsApp
 (Baileys) and Telegram (GramJS/MTProto user accounts).
 
 ## Services
@@ -68,10 +68,10 @@ jobs, but never state: the recovery pass resurrects lost pacer jobs and stale
 ## Why BullMQ + Redis + PostgreSQL
 
 - The send pipeline needs per-connection pacing, retries with backoff, and
-  crash recovery — BullMQ provides all three on Redis 7 with negligible ops
+  crash recovery. BullMQ provides all three on Redis 7 with negligible ops
   cost (the product already needed Redis for sessions).
 - Scheduling lives in Postgres (`next_run_at`, `next_pacer_at`) rather than
-  BullMQ repeatables so pause/edit/cancel can never desync from the schedule —
+  BullMQ repeatables so pause/edit/cancel can never desync from the schedule;
   a missed tick self-heals on the next one.
 - Delivery status is reconciled from the database, not inferred from queue
   state.
@@ -79,7 +79,7 @@ jobs, but never state: the recovery pass resurrects lost pacer jobs and stale
 ## Identity and authorization
 
 - **User auth**: OIDC via Vianova (the shared identity provider). Login,
-  registration, 2FA and Stripe all live in Vianova — this repo never
+  registration, 2FA and Stripe all live in Vianova; this repo never
   implements them.
 - **Service-to-service**: Vianova calls the API's `/internal/*` routes with
   JWT service tokens verified against Vianova's JWKS plus explicit scopes.

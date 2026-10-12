@@ -1,11 +1,11 @@
 # Naia
 
-Monorepo for the **Naia** communication brand — the `naia.website` landing
+Monorepo for the **Naia** communication brand: the `naia.website` landing
 site and **Naia Campaigns** (`campaigns.naia.website`), a multi-tenant
 bulk-messaging product for WhatsApp and Telegram.
 
 **Status**: active product development on the `develop` branch. The pipeline
-is at-least-once by design — see [Queue guarantees](#queue-guarantees) for the
+is at-least-once by design. See [Queue guarantees](#queue-guarantees) for the
 honest delivery semantics.
 
 ## What it does
@@ -21,7 +21,7 @@ honest delivery semantics.
   enforced server-side and refunded on cancellation/failure paths.
 
 Identity, billing, and email live in **Vianova** (a sister service, not in
-this repo) — the API validates Vianova OIDC/JWKS tokens and receives
+this repo). The API validates Vianova OIDC/JWKS tokens and receives
 entitlement updates over service-to-service calls.
 
 ## Stack
@@ -57,7 +57,7 @@ flowchart LR
 
 **PostgreSQL is the source of truth for all campaign state.** Redis holds only
 BullMQ jobs and transient session data; a flushed Redis loses jobs, never
-state — the recovery pass rebuilds from Postgres. Details:
+state; the recovery pass rebuilds from Postgres. Details:
 [docs/architecture.md](docs/architecture.md),
 [docs/message-processing.md](docs/message-processing.md).
 
@@ -73,7 +73,7 @@ packages/
   vianova-config      # config-server client
 campaigns/
   apps/
-    api               # Elysia API :4001 — auth, campaigns, media, webhooks
+    api               # Elysia API :4001: auth, campaigns, media, webhooks
     web               # product frontend :3001
     worker            # BullMQ consumers: pacer, outbound, webhooks, recovery
     session-host      # WhatsApp/Telegram socket host :4010/:4011
@@ -100,7 +100,7 @@ docs/                 # architecture, pipeline, security, testing, ops
 
 ```bash
 bun install --frozen-lockfile
-cp .env.example .env          # fill in secrets — see comments inside
+cp .env.example .env          # fill in secrets; see comments inside
 docker compose up -d          # postgres :5435, redis :6381, minio :9102,
                               # session-host :4010/:4011
 cd campaigns/packages/db && bun run db:migrate   # apply schema
@@ -122,7 +122,7 @@ cd campaigns && bun test apps/worker/test/pipeline.test.ts
 The worker suite covers conditional status transitions, retry exhaustion,
 job dedup, webhook idempotency and ordering gates, pause/cancel refunds,
 stale-send recovery, and scheduler races. **No real provider messages are
-sent** — dispatch is intercepted by test senders. See
+sent** because dispatch is intercepted by test senders. See
 [docs/testing.md](docs/testing.md) for coverage notes and the manual provider
 sandbox procedure.
 
@@ -143,10 +143,10 @@ The send pipeline is **at-least-once**:
   `RETURNING`); counters move only when a row actually changes.
 - `failed` is terminal; `delivered`/`read` can never regress.
 - Sends carry an idempotency key (`campaignMessageId`) that session-host
-  deduplicates in Redis — closing most of the crash-after-delivery window.
+  deduplicates in Redis, closing most of the crash-after-delivery window.
 - Residual risk: if Redis is flushed between provider acceptance and DB
   persistence, a retry can still re-deliver. This is documented rather than
-  hidden — see [docs/message-processing.md](docs/message-processing.md).
+  hidden. See [docs/message-processing.md](docs/message-processing.md).
 
 ## Security notes
 
@@ -160,12 +160,12 @@ The send pipeline is **at-least-once**:
 
 ## Known limitations
 
-- Containers currently run as root (no `USER` in Dockerfile) — hardening
+- Containers currently run as root (no `USER` in Dockerfile); hardening
   follow-up.
-- Telegram has no delivered/read receipts (MTProto limitation) — `sent` is
+- Telegram has no delivered/read receipts (MTProto limitation), so `sent` is
   terminal there.
-- WhatsApp runs on Baileys (unofficial) — subject to provider-side breakage.
-- No LICENSE file yet — see below.
+- WhatsApp runs on Baileys (unofficial), subject to provider-side breakage.
+- No LICENSE file yet (see below).
 
 ## License and contribution
 

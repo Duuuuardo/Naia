@@ -16,7 +16,7 @@
 # Everything (unit tests need no services)
 bun test
 
-# Worker pipeline — needs Postgres + Redis from docker-compose
+# Worker pipeline tests need Postgres + Redis from docker-compose
 docker compose up -d postgres redis
 docker exec naia-postgres-1 psql -U naia -c "CREATE DATABASE naia_test"  # once
 cd campaigns && bun test apps/worker/test/pipeline.test.ts
@@ -24,14 +24,14 @@ cd campaigns && bun test apps/worker/test/pipeline.test.ts
 
 The pipeline suite reads `NAIA_TEST_DATABASE_URL` / `NAIA_TEST_REDIS_URL`
 (defaults: `naia_test` on :5435, Redis :6381 db 7). It recreates the test
-database schema and truncates all tables between tests — safe to run against
+database schema and truncates all tables between tests, so it's safe to run against
 the dev compose stack without touching dev data.
 
 ## Provider mocking
 
 `pipeline.test.ts` registers test senders on the session-host client, so
 WhatsApp/Telegram dispatch is intercepted in-process. **No real provider
-traffic leaves the test run** — asserts run against a call log.
+traffic leaves the test run**. Assertions run against a call log.
 
 ## What the pipeline suite covers
 

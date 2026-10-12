@@ -24,7 +24,7 @@ bun run db:generate   # schema → new migration SQL (requires snapshot meta)
 bun run db:migrate    # apply pending migrations (also runs at API boot)
 ```
 
-Every migration needs a matching `drizzle/meta/NNNN_snapshot.json` — `generate`
+Every migration needs a matching `drizzle/meta/NNNN_snapshot.json`; `generate`
 diffs the latest snapshot against the schema. If snapshots ever go missing
 again (they did once: migrations 0008–0015 had been hand-written), regenerate
 a baseline with `drizzle-kit pull` against a migrated database and place it as
@@ -34,13 +34,13 @@ the latest snapshot, or `generate` will produce spurious diffs.
 
 One process runs four logical loops:
 
-- **Outbound workers** — consume `whatsapp-outbound-*` / `telegram-outbound-*`
+- **Outbound workers**: consume `whatsapp-outbound-*` / `telegram-outbound-*`
   queues (base + per-workspace scale queues discovered from Redis metadata).
-- **Pacer worker** — advances campaign runs (`campaign-pacer`), one step per
+- **Pacer worker**: advances campaign runs (`campaign-pacer`), one step per
   burst with DB-token dedup.
-- **Status-webhook worker** — applies provider delivery/read/failed events
+- **Status-webhook worker**: applies provider delivery/read/failed events
   (concurrency 20).
-- **Scheduler + recovery tick** — every 30s claims due campaigns/automations;
+- **Scheduler + recovery tick**: every 30s claims due campaigns/automations;
   every 60s reconciles counters, resets stale `sending`, resurrects lost
   pacers, closes orphan runs.
 
@@ -60,11 +60,11 @@ Queue discovery uses `SCAN` (never `KEYS`).
 ## Deployment
 
 All five services build from the root `Dockerfile` with `--build-arg
-APP=<path>` (see `docker-compose.prod.yml` and `.github/workflows/deploy.yml`).
-The API container entrypoint runs `migrate.js` before `index.js`, so schema
-changes roll out with the deploy. Production env requires the variables
-listed in `.env.example`. Rollback = redeploy the previous image tag; for a
-schema-breaking migration, apply the reverse SQL manually.
+APP=<path>` (see `docker-compose.prod.yml` for a self-hostable compose
+topology). The API container entrypoint runs `migrate.js` before `index.js`,
+so schema changes roll out with the deploy. Production env requires the
+variables listed in `.env.example`. Rollback = redeploy the previous image
+tag; for a schema-breaking migration, apply the reverse SQL manually.
 
-Known gap: the `Dockerfile` has no `USER` directive — containers currently
+Known gap: the `Dockerfile` has no `USER` directive, so containers currently
 run as root. Adding a non-root user is a worthwhile hardening follow-up.

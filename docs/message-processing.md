@@ -33,7 +33,7 @@ flowchart TD
   is ignored, and a late `failed` never downgrades `delivered`/`read`.
 - **Job dedup.** Outbound jobs use `jobId = send-<campaignMessageId>`; BullMQ
   ignores re-adds while the job exists.
-- **Pacer token.** `next_pacer_at` acts as a single-writer token — a pacer
+- **Pacer token.** `next_pacer_at` acts as a single-writer token. A pacer
   step must consume it before enqueueing the next step, so two pacer chains
   can't coexist for one run.
 
@@ -46,10 +46,10 @@ window is: the provider accepts a message, then the process crashes before
 1. **Session-host idempotency keys.** Every send carries
    `idempotencyKey = campaignMessageId`. Session-host caches the result in
    Redis (bounded TTL) and returns the recorded response instead of
-   re-dispatching to the provider — closing most of the crash window.
+   re-dispatching to the provider, closing most of the crash window.
 2. **Provider acknowledgement ambiguity.** If the key has expired or Redis was
    flushed, a retry may still re-send. This is the honest residual duplicate
-   window — documented rather than hidden.
+   window, documented rather than hidden.
 3. **Provider-supported IDs.** Baileys message IDs are stored as
    `external_message_id` (indexed) and used for webhook correlation.
 
@@ -80,11 +80,11 @@ window is: the provider accepts a message, then the process crashes before
 
 - **Memory**: audiences are materialized per run; very large segments are
   chunked at insert (500 rows/batch) but the resolution itself is in-memory.
-- **Telegram status**: GramJS/MTProto offers no delivered/read receipts —
+- **Telegram status**: GramJS/MTProto offers no delivered/read receipts;
   `sent` is the terminal reliable state for Telegram.
 - **Backpressure**: per-workspace scale queues (`*-outbound-<workspaceId>`) are
   discovered from Redis metadata by the worker; base queues have fixed
   concurrency (WhatsApp 1, Telegram 5, pacer 10, webhooks 20).
 - **Recovery interval**: stale `sending` detection runs every 60s with a
-  10-minute staleness cutoff — a crashed send may hold its credit for up to
+  10-minute staleness cutoff, so a crashed send may hold its credit for up to
   ~11 minutes before refund.

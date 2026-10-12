@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Versão SemVer sem prefixo v (ex.: 1.2.3)"
+        description: "SemVer version without the v prefix (e.g. 1.2.3)"
         required: true
         type: string
 

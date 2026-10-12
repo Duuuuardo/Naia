@@ -1,39 +1,31 @@
-# Naia — Instruções para o Agente
+# Naia - Agent Instructions
 
-> Repo da marca Naia (comunicação). Contém a landing da marca e o produto
-> **Campaigns** (`campaigns.naia.website`).
-> Leia `docs/naia-business-rules.md`, `docs/naia-stack.md` e `docs/design.md`
-> antes de qualquer decisão de produto, código ou UI.
+Naia brand repo (communication). Contains the brand landing page and the
+**Campaigns** product (`campaigns.naia.website`).
 
-## Estrutura
+## Structure
 
-- `apps/landing` — landing da marca `naia.website`.
-- `packages/config` — tema Tailwind rosa (`brand-500 #DD5973`).
-- `packages/ui` — logos/componentes compartilhados de marca.
-- `packages/vianova-auth` — cliente OIDC + JWKS do Vianova.
-- `packages/vianova-email` — client para enfileirar emails no Vianova.
-- `packages/vianova-config` — client para o config server do Vianova.
-- `campaigns/` — produto Naia Campaigns (`apps/{api,web,worker,session-host}` + `packages/{client,db,entitlements,queue,schemas,scheduling,session-host-client,storage}`).
+- `apps/landing`: brand landing page for `naia.website`.
+- `packages/config`: pink Tailwind theme (`brand-500 #DD5973`).
+- `packages/ui`: shared brand logos/components.
+- `packages/vianova-auth`: Vianova OIDC + JWKS client.
+- `packages/vianova-email`: client for queueing emails in Vianova.
+- `packages/vianova-config`: client for the Vianova config server.
+- `campaigns/`: Naia Campaigns product (`apps/{api,web,worker,session-host}` + `packages/{client,db,entitlements,queue,schemas,scheduling,session-host-client,storage}`).
 
-## Regras de ouro
+## Golden rules
 
-1. **Campaigns → invocar `naia-rules` e `naia-stack`.**
-2. **Antes de tocar em UI**: invocar `frontend-design` + ler `docs/design.md`.
-3. **Toda entrega de UI**: passar por `emil-design-eng`.
-4. **Nunca usar `fetch` manual no frontend** — sempre Eden Treaty.
-5. **Nunca implementar cadastro/login/2FA/Stripe aqui** — tudo vive no Vianova.
-6. **Opt-in bloqueia disparo para WhatsApp** — não avisa, bloqueia.
-7. **Disparo de campanha é sempre assíncrono** (BullMQ).
-8. **Entitlements só são escritos via chamada service-to-service do Vianova** (`POST /internal/entitlements`).
-9. **Landing/marketing nunca expõe implementação interna** (OIDC, JWT, stack, "inspirado em X").
+1. **Never use manual `fetch` in the frontend** - always Eden Treaty.
+2. **Never implement signup/login/2FA/Stripe here** - all of that lives in Vianova.
+3. **Opt-in blocks WhatsApp dispatch**. It doesn't warn, it blocks.
+4. **Campaign dispatch is always asynchronous** (BullMQ).
+5. **Entitlements are only written via Vianova service-to-service calls** (`POST /internal/entitlements`).
+6. **Landing/marketing never exposes internal implementation** (OIDC, JWT, stack, "inspired by X").
 
-## Docs relacionadas
+## Docs
 
-- `../docs/architecture.md`
-- `../docs/naia-business-rules.md`
-- `../docs/naia-stack.md`
-- `../docs/design.md`
-- `../docs/decisions/001-monorepos-vs-microrepos.md`
-- `../docs/decisions/002-centralized-email.md`
-- `../docs/decisions/003-centralized-config-server.md`
-- `../docs/decisions/004-design-systems-per-brand.md`
+- `docs/architecture.md`
+- `docs/message-processing.md`
+- `docs/security.md`
+- `docs/testing.md`
+- `docs/operations.md`

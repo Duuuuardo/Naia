@@ -1,25 +1,25 @@
-## Objetivo
+## Goal
 
-<!-- Qual problema este PR resolve? -->
+What problem does this PR solve?
 
-## Mudanças
+## Changes
 
-<!-- Liste as mudanças relevantes. -->
+List the relevant changes.
 
-## Validação
+## Validation
 
 - [ ] Typecheck
-- [ ] Testes
+- [ ] Tests
 - [ ] Build
-- [ ] Fluxo afetado validado manualmente
+- [ ] Affected flow validated manually
 
-## Impacto operacional
+## Operational impact
 
-- [ ] Sem migration
-- [ ] Sem nova variável de ambiente ou secret
-- [ ] Sem mudança em entitlement, auth ou integração com Vianova
-- [ ] Rollback documentado quando necessário
+- [ ] No migration
+- [ ] No new environment variable or secret
+- [ ] No change to entitlement, auth or Vianova integration
+- [ ] Rollback documented when needed
 
-## Evidências
+## Evidence
 
-<!-- Screenshots para UI; logs ou exemplos para backend/infra. -->
+Screenshots for UI; logs or examples for backend/infra.
