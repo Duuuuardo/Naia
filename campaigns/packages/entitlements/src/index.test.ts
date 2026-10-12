@@ -2,11 +2,11 @@ import { describe, expect, it } from 'bun:test'
 import { coerceSpeedToPolicy, defaultSpeedPreset, getSpeedPolicy } from './index'
 
 describe('defaultSpeedPreset', () => {
-  it('free only has 'lento' — the default is 'lento'', () => {
+  it('free only has lento, so the default is lento', () => {
     expect(defaultSpeedPreset('free')).toBe('lento')
   })
 
-  it('plans with 'medio' available use 'medio' as default', () => {
+  it('plans with medio available use medio as default', () => {
     expect(defaultSpeedPreset('starter')).toBe('medio')
     expect(defaultSpeedPreset('pro')).toBe('medio')
     expect(defaultSpeedPreset('scale')).toBe('medio')

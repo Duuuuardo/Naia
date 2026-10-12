@@ -206,7 +206,7 @@ beforeEach(async () => {
 })
 
 describe('send handler (WhatsApp, mocked provider)', () => {
-  it('sends a 'sending' message and marks it sent with counters', async () => {
+  it('marks a queued message as sent and updates counters', async () => {
     const fx = await provisionCampaign()
     const { eq } = await import('drizzle-orm')
     await dbmod.db.update(dbmod.campaignMessages).set({ status: 'sending' })
@@ -569,7 +569,7 @@ describe('status-webhook', () => {
 })
 
 describe('recovery', () => {
-  it(''sending' stuck >10min returns to queued and refunds the credit', async () => {
+  it('a stuck sending message (>10min) returns to queued and refunds the credit', async () => {
     const fx = await provisionCampaign()
     const { eq } = await import('drizzle-orm')
     const stale = new Date(Date.now() - 20 * 60_000)
@@ -584,7 +584,7 @@ describe('recovery', () => {
     expect((await getEntitlements(fx.workspaceId))!.creditsBalance).toBe(before + 1)
   })
 
-  it('recent 'sending' is not reset (a legitimate send is in progress)', async () => {
+  it('a recent sending message is not reset (a legitimate send is in progress)', async () => {
     const fx = await provisionCampaign()
     const { eq } = await import('drizzle-orm')
     await dbmod.db.update(dbmod.campaignMessages).set({ status: 'sending', updatedAt: new Date() })

@@ -24,7 +24,7 @@ describe('computeNextRunAt', () => {
     expect(computeNextRunAt({ type: 'immediate' }, at('2026-07-16T12:00:00Z'), SP, 0)).toBeNull()
   })
 
-  test('a future 'once' returns the instant; already executed returns null', () => {
+  test('a future once returns the instant; already executed returns null', () => {
     const s: Schedule = { type: 'once', onceAt: '2026-07-20T14:00:00.000Z' }
     expect(computeNextRunAt(s, at('2026-07-16T12:00:00Z'), SP, 0)?.toISOString()).toBe(
       '2026-07-20T14:00:00.000Z',
@@ -32,7 +32,7 @@ describe('computeNextRunAt', () => {
     expect(computeNextRunAt(s, at('2026-07-16T12:00:00Z'), SP, 1)).toBeNull()
   })
 
-  test('a past 'once' fires on the next tick (returns from)', () => {
+  test('a past once fires on the next tick (returns from)', () => {
     const s: Schedule = { type: 'once', onceAt: '2026-07-01T14:00:00.000Z' }
     const from = at('2026-07-16T12:00:00Z')
     expect(computeNextRunAt(s, from, SP, 0)?.getTime()).toBe(from.getTime())
@@ -165,7 +165,7 @@ describe('speed', () => {
     expect(speedRangeSeconds({ preset: 'rapido' }, 'telegram')).toEqual({ min: 1, max: 3 })
   })
 
-  test('manual uses the user's min/max', () => {
+  test("manual uses the user's min/max", () => {
     expect(speedRangeSeconds({ preset: 'manual', minSeconds: 45, maxSeconds: 90 }, 'whatsapp')).toEqual({
       min: 45,
       max: 90,
